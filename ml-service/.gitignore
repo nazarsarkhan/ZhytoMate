@@ -1,2 +1,11 @@
 # .gitignore — never commit secrets, caches, or local artifacts.
-# TODO: ignore .env*, .venv, __pycache__/, *.pyc, .pytest_cache/, model caches, *.log.
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+CLAUDE.md
