@@ -1,0 +1,6 @@
+{"query": "Коли дадуть воду?", "expected_route": "SIMPLE", "note": "short, single intent"}
+{"query": "Де найближча аптека?", "expected_route": "SIMPLE", "note": "short factual"}
+{"query": "Графік вивозу сміття в Корольовському районі", "expected_route": "SIMPLE", "note": "single intent, district-scoped"}
+{"query": "Коли дадуть воду і світло в Богунському районі, і куди скаржитись якщо ні?", "expected_route": "COMPLEX", "note": "multi-intent + conjunctions -> decompose"}
+{"query": "Порівняй умови субсидії для пенсіонерів та для багатодітних родин", "expected_route": "COMPLEX", "note": "comparison keyword 'порівняй'"}
+{"query": "Які кроки потрібні щоб оформити субсидію, отримати лічильник і подати скаргу на ЖЕК?", "expected_route": "COMPLEX", "note": "enumeration + multiple intents"}

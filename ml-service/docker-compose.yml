@@ -1,0 +1,3 @@
+# docker-compose.yml — local topology (postgres + ml + node) with healthcheck ordering:
+# postgres healthy -> ml ready (/health/ready) -> node starts (docs/SYSTEM_DESIGN.md §9).
+# TODO: services, healthchecks, depends_on conditions, volumes (pgdata, hfcache), env_file.

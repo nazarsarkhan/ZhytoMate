@@ -1,0 +1,2 @@
+# .dockerignore — keeps the build context small and secrets out of the image.
+# TODO: exclude .venv, __pycache__, tests, .git, .env*, *.md, local caches.

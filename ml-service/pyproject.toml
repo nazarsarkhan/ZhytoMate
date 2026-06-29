@@ -1,0 +1,5 @@
+# pyproject.toml — Python project metadata, dependencies, and tooling config
+# (ruff, mypy, pytest) for the ML service.
+# TODO: [project] metadata, runtime deps (fastapi, uvicorn, asyncpg, pgvector,
+# sentence-transformers, google-genai, pydantic-settings, tenacity, ...), dev deps,
+# and tool sections.

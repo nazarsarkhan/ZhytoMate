@@ -1,0 +1,5 @@
+{"query": "Коли дадуть воду в Богунському районі?", "district": "Bohunskyi", "gold_source": "https://zt-rada.gov.ua/news/water-bohun", "note": "fresh news, district-scoped — dense should hit"}
+{"query": "Як подати заявку на встановлення лічильника води?", "district": null, "gold_source": "https://zt-rada.gov.ua/instructions/water-meter", "note": "instruction, city-wide"}
+{"query": "Графік відключення електроенергії на вулиці Київській", "district": "Korolovskyi", "gold_source": "https://zt-rada.gov.ua/news/power-kyivska", "note": "street name — LEXICAL leg recovers what dense misses"}
+{"query": "Які документи потрібні для оформлення субсидії?", "district": null, "gold_source": "https://zt-rada.gov.ua/instructions/subsidy-docs", "note": "instruction"}
+{"query": "Куди повідомити про яму на дорозі?", "district": null, "gold_source": "https://zt-rada.gov.ua/instructions/report-pothole", "note": "instruction, links to vision report flow"}
