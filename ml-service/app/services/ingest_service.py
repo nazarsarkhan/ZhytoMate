@@ -18,6 +18,7 @@ from app.config import Settings
 from app.domain.chunker import chunk_text
 from app.domain.districts import canonicalize_district
 from app.domain.text import compute_content_hash, normalize_text
+from app.metrics import district_unmapped
 from app.schemas.common import DocType
 from app.schemas.ingest import IngestRequest, IngestResponse
 
@@ -53,6 +54,7 @@ class IngestService:
             logger.warning(
                 "ingest_unknown_district raw=%r doc=%s", request.district, request.document_id
             )
+            district_unmapped.labels(boundary="ingest").inc()
 
         expires_at = self._expires_at(request)
 

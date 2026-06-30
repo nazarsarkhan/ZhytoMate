@@ -18,6 +18,7 @@ from app.errors import UnauthorizedError
 if TYPE_CHECKING:
     from app.services.ingest_service import IngestService
     from app.services.rag_service import RagService
+    from app.services.vision_service import VisionService
 
 _INTERNAL_TOKEN_HEADER = "X-Internal-Token"
 
@@ -49,3 +50,11 @@ def get_rag_service(request: Request) -> "RagService":
         gemini=state.gemini,
         settings=state.settings,
     )
+
+
+def get_vision_service(request: Request) -> "VisionService":
+    """Build VisionService from app.state. Imported here (not at module top) to dodge import cycles."""
+    from app.services.vision_service import VisionService
+
+    state = request.app.state
+    return VisionService(gemini=state.gemini, settings=state.settings)
