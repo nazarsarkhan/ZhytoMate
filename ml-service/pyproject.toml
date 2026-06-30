@@ -1,5 +1,45 @@
-# pyproject.toml — Python project metadata, dependencies, and tooling config
-# (ruff, mypy, pytest) for the ML service.
-# TODO: [project] metadata, runtime deps (fastapi, uvicorn, asyncpg, pgvector,
-# sentence-transformers, google-genai, pydantic-settings, tenacity, ...), dev deps,
-# and tool sections.
+[project]
+name = "zhytomate-ml"
+version = "0.1.0"
+description = "ZhytoMate ML service — RAG civic Q&A + vision report triage (FastAPI)."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "asyncpg>=0.29",
+    "pgvector>=0.3",
+    "sentence-transformers>=3.0",
+    "torch>=2.2",
+    "google-genai>=0.8",
+    "prometheus-fastapi-instrumentator>=7.0",
+    "prometheus-client>=0.20",
+    "structlog>=24.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "anyio[trio]>=4.0",
+    "httpx>=0.27",
+    "testcontainers[postgres]>=4.0",
+]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+# Flat layout: app/ and db/ are PEP 420 namespace packages at the project root. List them
+# explicitly so editable installs don't trip on "multiple top-level packages" auto-discovery.
+[tool.setuptools.packages.find]
+include = ["app*", "db*"]
+namespaces = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
