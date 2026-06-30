@@ -2,8 +2,8 @@
 Purpose:   FastAPI composition root. Lifespan: set offline env before model load, run idempotent
            migrations, open the asyncpg pool (register_vector), load the e5 model, build the
            repository, create the Gemini client, wire app.state, start the TTL reaper; tear all
-           down gracefully on shutdown. Registers the error-envelope handlers and mounts the health
-           + knowledge-ingest routers.
+           down gracefully on shutdown. Registers the error-envelope handlers and mounts the health,
+           knowledge-ingest, and chat-query routers.
 Layer:     infra (composition root — the only module that wires across layers)
 May import:   app.config, app.components/*, app.background/*, app.api/*, db.migrations.runner,
               google-genai, FastAPI
@@ -19,7 +19,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from google import genai
 
-from app.api.v1 import health, ingest
+from app.api.v1 import health, ingest, query
 from app.background.reaper import ttl_reaper
 from app.components.embedder import Embedder
 from app.components.repository import KnowledgeRepository, create_pool
@@ -87,3 +87,4 @@ app = FastAPI(lifespan=lifespan, title="ZhytoMate ML Service")
 register_error_handlers(app)
 app.include_router(health.router)
 app.include_router(ingest.router)
+app.include_router(query.router)

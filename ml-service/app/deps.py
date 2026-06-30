@@ -17,6 +17,7 @@ from app.errors import UnauthorizedError
 
 if TYPE_CHECKING:
     from app.services.ingest_service import IngestService
+    from app.services.rag_service import RagService
 
 _INTERNAL_TOKEN_HEADER = "X-Internal-Token"
 
@@ -35,3 +36,16 @@ def get_ingest_service(request: Request) -> "IngestService":
 
     state = request.app.state
     return IngestService(repo=state.repo, embedder=state.embedder, settings=state.settings)
+
+
+def get_rag_service(request: Request) -> "RagService":
+    """Build RagService from app.state. Imported here (not at module top) to dodge import cycles."""
+    from app.services.rag_service import RagService
+
+    state = request.app.state
+    return RagService(
+        repo=state.repo,
+        embedder=state.embedder,
+        gemini=state.gemini,
+        settings=state.settings,
+    )

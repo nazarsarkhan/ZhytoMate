@@ -19,6 +19,14 @@ class DocType(str, Enum):
     INSTRUCTION = "instruction"
 
 
+class QueryRoute(str, Enum):
+    """R2RAG routing decision (ADR-010). Lives here so schemas and the domain classifier share it
+    without schemas importing domain (re-exported from app.domain.classifier for callers)."""
+
+    SIMPLE = "SIMPLE"
+    COMPLEX = "COMPLEX"
+
+
 class ErrorDetail(BaseModel):
     code: str  # stable machine code, e.g. "invalid_request" | "unauthorized" | "internal_error"
     message: str
