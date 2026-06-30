@@ -30,6 +30,13 @@ from app.domain.districts import canonicalize_district
 from app.domain.fusion import reciprocal_rank_fusion
 from app.domain.prompts import build_rag_prompt
 from app.errors import RateLimitedError
+from app.metrics import (
+    degraded_responses,
+    district_unmapped,
+    gemini_calls,
+    retrieval_empty,
+    retrieval_top1_sim,
+)
 from app.schemas.query import QueryRequest, QueryResponse, SourceUsed
 
 logger = logging.getLogger(__name__)
@@ -114,6 +121,7 @@ class RagService:
         district_slug = canonicalize_district(request.district)
         if request.district is not None and district_slug is None:
             logger.warning("query_unknown_district raw=%r", request.district)
+            district_unmapped.labels(boundary="query").inc()
 
         # 3. Route. COMPLEX falls back to SIMPLE until the agent pipeline is enabled.
         route = classify_query(request.user_query)
@@ -139,7 +147,9 @@ class RagService:
         # 7. Confidence gate on the DENSE top-1 cosine (never the RRF score). Empty/low -> no-info,
         #    and the LLM is NOT called.
         top1_sim = dense[0].similarity if dense else 0.0
+        retrieval_top1_sim.observe(top1_sim)
         if not fused or top1_sim < self._settings.sim_gate:
+            retrieval_empty.inc()
             logger.info(
                 "query_no_info user=%s district=%s route=%s top1=%.3f took=%.1fms",
                 user_hash, district_slug, route.value, top1_sim, self._elapsed_ms(start),
@@ -152,15 +162,23 @@ class RagService:
         context_chunks = [result.text for result in top_results]
 
         # 8. Generate, or degrade to extractive fallback on ANY LLM error (never 5xx the caller).
+        route_label = route.value.lower()
         gemini_ok = True
         try:
             answer = await self._generate(context_chunks, request.user_query)
             confidence = round(top1_sim, 2)
+            gemini_calls.labels(route=route_label, outcome="ok").inc()
         except Exception as exc:  # noqa: BLE001 — LLM is the least reliable hop; demo must stay alive (ADR-007)
             gemini_ok = False
             answer = _FALLBACK_PREFIX + top_results[0].text
             confidence = min(round(top1_sim, 2), _FALLBACK_CONFIDENCE_CAP)
-            logger.warning("query_gemini_fallback user=%s err=%s", user_hash, type(exc).__name__)
+            reason = self._fallback_reason(exc)
+            gemini_calls.labels(route=route_label, outcome="fallback").inc()
+            degraded_responses.labels(reason=reason).inc()
+            logger.warning(
+                "query_gemini_fallback user=%s err=%s reason=%s",
+                user_hash, type(exc).__name__, reason,
+            )
 
         # 9. Sources from the same chunks shown to the model.
         sources = [
@@ -221,6 +239,15 @@ class RagService:
         delay = _RETRY_BACKOFF_S[attempt] * random.uniform(0.8, 1.2)
         logger.warning("gemini_retry attempt=%d reason=%s delay=%.2fs", attempt + 1, reason, delay)
         await asyncio.sleep(delay)
+
+    @staticmethod
+    def _fallback_reason(exc: Exception) -> str:
+        """Classify a Gemini failure for the degraded_responses metric."""
+        if isinstance(exc, APIError) and getattr(exc, "code", None) == 429:
+            return "gemini_quota"
+        if isinstance(exc, (asyncio.TimeoutError, TimeoutError)):
+            return "gemini_timeout"
+        return "gemini_error"
 
     @staticmethod
     def _hash_user(user_id: str) -> str:
