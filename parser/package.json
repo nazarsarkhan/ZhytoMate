@@ -1,0 +1,24 @@
+{
+  "name": "future-in-action-scraper",
+  "version": "0.1.0",
+  "description": "Node.js scraper/parser service skeleton for web and Telegram sources.",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "session": "node scripts/generate-session.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "gramjs": "npm:telegram@^2.26.22",
+    "mongodb": "^7.4.0",
+    "node-cron": "^3.0.3",
+    "qrcode-terminal": "^0.12.0",
+    "uuid": "^11.0.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
