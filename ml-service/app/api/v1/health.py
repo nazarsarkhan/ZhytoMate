@@ -25,7 +25,7 @@ async def live() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/health/ready")
+@router.get("/health/ready", response_model=None)
 async def ready(request: Request) -> JSONResponse | dict[str, str]:
     """200 only if the embedding model is loaded AND `SELECT 1` succeeds; else 503."""
     embedder = getattr(request.app.state, "embedder", None)
@@ -40,7 +40,7 @@ async def ready(request: Request) -> JSONResponse | dict[str, str]:
     return {"status": "ready"}
 
 
-@router.get("/health/deps")
+@router.get("/health/deps", response_model=None)
 async def health_deps(request: Request) -> dict[str, object]:
     """Dashboard-only dependency view (§7). Always 200 — callers interpret the fields. NOT the
     compose gate (that is /health/ready). Each probe is bounded by a short timeout."""
