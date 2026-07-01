@@ -4,7 +4,7 @@ Purpose:   Pydantic v2 I/O schemas for POST /api/v1/vision/analyze — VisionReq
            derived from CATEGORY_VALUES for the service's manual enum check.
 Layer:     schema
 May import:   stdlib, pydantic
-Must NOT import:  api/*, services/*, components/*, domain/*; any I/O or model lib (asyncpg, google-genai, sentence-transformers, FastAPI routing)
+Must NOT import:  api/*, services/*, components/*, domain/*; any I/O or model lib (asyncpg, FastAPI routing)
 """
 from __future__ import annotations
 

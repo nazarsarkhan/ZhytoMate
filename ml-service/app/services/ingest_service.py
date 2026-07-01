@@ -4,7 +4,7 @@ Purpose:   Ingest orchestration (§2.4): normalize -> hash -> dedup check -> chu
            Pure orchestration over injected components; no HTTP, no SQL, no model libs here.
 Layer:     service
 May import:   domain/* (text, chunker, districts), schemas/* , embedder + repository (injected), app.config, app.errors
-Must NOT import:  other services/*, api/*, FastAPI/Starlette, asyncpg, google-genai, sentence-transformers
+Must NOT import:  other services/*, api/*, FastAPI/Starlette, asyncpg
 """
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ class IngestService:
             )
 
         chunks = chunk_text(normalized, self._embedder.count_tokens)
-        embeddings = await self._embedder.encode_passages(chunks)  # shape (n, 768)
+        embeddings = await self._embedder.encode_passages(chunks)  # shape (n, 1536)
 
         district_slug = canonicalize_district(request.district)
         if request.district is not None and district_slug is None:

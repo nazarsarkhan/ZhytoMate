@@ -5,7 +5,7 @@ Purpose:   POST /api/v1/knowledge/ingest — validate auth + body, delegate to I
 Layer:     api
 May import:   FastAPI (APIRouter, Depends), schemas/ingest, app.deps (auth + service accessor),
               app.services.ingest_service (type for the injected dependency)
-Must NOT import:  components/* or repository directly; domain/* directly; google-genai, asyncpg, sentence-transformers
+Must NOT import:  components/* or repository directly; domain/* directly; asyncpg
 """
 from __future__ import annotations
 

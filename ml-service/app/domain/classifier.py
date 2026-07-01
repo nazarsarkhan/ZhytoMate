@@ -4,7 +4,7 @@ Purpose:   Pure heuristic query router (ADR-010): classify_query(query) -> Query
            zero latency, no side effects. Biased toward SIMPLE — COMPLEX must be earned.
 Layer:     domain (pure)
 May import:   stdlib, schemas/common (QueryRoute)
-Must NOT import:  api/*, services/*, components/*, pipeline/*; any I/O or model lib (asyncpg, google-genai, sentence-transformers, FastAPI)
+Must NOT import:  api/*, services/*, components/*, pipeline/*; any I/O or model lib (asyncpg, FastAPI)
 """
 from __future__ import annotations
 

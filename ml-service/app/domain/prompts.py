@@ -4,7 +4,7 @@ Purpose:   RAG prompt templates. All LLM prompts live here — never inline in s
            the model to treat the question as data, not as instructions (anti-injection).
 Layer:     domain (pure strings — no I/O)
 May import:   stdlib only
-Must NOT import:  api/*, services/*, components/*, pipeline/*; any I/O or model lib (asyncpg, google-genai, sentence-transformers, FastAPI)
+Must NOT import:  api/*, services/*, components/*, pipeline/*; any I/O or model lib (asyncpg, FastAPI)
 """
 from __future__ import annotations
 

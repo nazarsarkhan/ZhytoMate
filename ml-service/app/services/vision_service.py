@@ -6,7 +6,7 @@ Purpose:   Vision analysis orchestration (§3.3, §4.3): OpenAI gpt-4o-mini visi
            with only pydantic + stdlib, mirroring the lazy pattern in app.errors / app.deps.
 Layer:     service
 May import:   domain/vision_prompts, schemas/vision, config (typing), openai (typing only), app.metrics (lazy)
-Must NOT import:  other services/*, api/*, FastAPI/Starlette, asyncpg, sentence-transformers
+Must NOT import:  other services/*, api/*, FastAPI/Starlette, asyncpg
 """
 from __future__ import annotations
 

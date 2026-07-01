@@ -3,7 +3,7 @@ Purpose:   Pydantic v2 I/O schemas for POST /api/v1/chat/query — QueryRequest 
            QueryResponse.
 Layer:     schema
 May import:   stdlib, pydantic, schemas/common (QueryRoute)
-Must NOT import:  api/*, services/*, components/*, domain/*; any I/O or model lib (asyncpg, google-genai, sentence-transformers, FastAPI routing)
+Must NOT import:  api/*, services/*, components/*, domain/*; any I/O or model lib (asyncpg, FastAPI routing)
 """
 from __future__ import annotations
 

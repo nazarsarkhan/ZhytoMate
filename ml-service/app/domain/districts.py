@@ -4,7 +4,7 @@ Purpose:   Closed district vocabulary {bohunskyi, korolovskyi} + surface-form ma
            BOTH the ingest and the query path so the two can never drift.
 Layer:     domain
 May import:   stdlib
-Must NOT import:  api/*, services/*, components/*; any I/O or model lib (asyncpg, google-genai, sentence-transformers, FastAPI)
+Must NOT import:  api/*, services/*, components/*; any I/O or model lib (asyncpg, FastAPI)
 """
 from __future__ import annotations
 

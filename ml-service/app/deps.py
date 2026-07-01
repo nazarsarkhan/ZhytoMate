@@ -4,7 +4,7 @@ Purpose:   FastAPI dependencies: the X-Internal-Token auth guard (constant-time)
            repository classes are imported inside the factory bodies to avoid import cycles.
 Layer:     api
 May import:   FastAPI, app.config, app.errors, services/* + components/* (inside factory bodies)
-Must NOT import:  api/v1/* routers (avoid cycles); domain/* directly; the hosted-LLM SDK, asyncpg, sentence-transformers
+Must NOT import:  api/v1/* routers (avoid cycles); domain/* directly; the hosted-LLM SDK, asyncpg
 """
 from __future__ import annotations
 

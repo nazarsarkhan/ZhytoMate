@@ -6,7 +6,7 @@ Purpose:   asyncpg pool (register_vector in the init callback) + KnowledgeReposi
            rate-limit upsert, and TTL delete. Internal dataclasses ChunkRecord / RetrievalResult.
 Layer:     component (repository)
 May import:   app.config (types), stdlib, numpy, asyncpg, pgvector
-Must NOT import:  services/*, api/*, pipeline/*, other components/*; FastAPI, sentence-transformers
+Must NOT import:  services/*, api/*, pipeline/*, other components/*; FastAPI
 """
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ class ChunkRecord:
     document_id: str
     chunk_index: int
     text: str
-    embedding: np.ndarray            # shape (768,), normalized
+    embedding: np.ndarray            # shape (1536,), normalized
     doc_type: str                    # 'news' | 'instruction'
     category: str | None
     district: str | None             # canonical slug or None (city-wide)
