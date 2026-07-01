@@ -6,7 +6,7 @@ Purpose:   OpenAI embedding wrapper (model injected via config; 1536d). Async HT
            (encode_query / encode_passages / count_tokens) as the old e5 Embedder, so callers
            don't change.
 Layer:     component
-May import:   stdlib, numpy, openai, tiktoken
+May import:   stdlib, numpy, openai, tiktoken, app.protocols
 Must NOT import:  app/* (except config types), services/*, api/*, other components/*; FastAPI, asyncpg
 """
 from __future__ import annotations
@@ -21,6 +21,8 @@ from collections import OrderedDict
 import numpy as np
 import tiktoken
 from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI
+
+from app.protocols import Embedder as EmbedderPort
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +62,7 @@ def _l2_normalize(vectors: np.ndarray) -> np.ndarray:
     return (vectors / norms).astype(np.float32)
 
 
-class Embedder:
+class Embedder(EmbedderPort):
     """OpenAI-backed embedder. No query:/passage: prefixes (unlike e5) — the configured model is
     single-purpose. No local model load; the async client is lightweight, created once."""
 
