@@ -20,7 +20,7 @@ from app.domain.districts import canonicalize_district
 from app.domain.text import compute_content_hash, normalize_text
 from app.metrics import district_unmapped
 from app.schemas.common import DocType
-from app.schemas.ingest import IngestRequest, IngestResponse
+from app.schemas.ingest import DeleteResponse, IngestRequest, IngestResponse
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +83,12 @@ class IngestService:
         return IngestResponse(
             status="ingested", document_id=request.document_id, chunks_processed=len(chunks)
         )
+
+    async def delete(self, document_id: str) -> DeleteResponse:
+        """Delete a document and all its chunks (idempotent — an absent id returns 0)."""
+        count = await self._repo.delete_document(document_id)
+        logger.info("delete_doc doc=%s chunks=%d", document_id, count)
+        return DeleteResponse(document_id=document_id, chunks_deleted=count)
 
     @staticmethod
     def _expires_at(request: IngestRequest) -> datetime | None:
