@@ -12,6 +12,7 @@ dependencies = [
     "pgvector>=0.3",
     "openai>=1.50",
     "tiktoken>=0.7",
+    "tenacity>=8.2",
     "prometheus-fastapi-instrumentator>=7.0",
     "prometheus-client>=0.20",
     "structlog>=24.0",
