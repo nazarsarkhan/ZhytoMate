@@ -32,6 +32,7 @@ class Settings(BaseSettings):
 
     # Feature flags
     agent_rag_enabled: bool = False  # COMPLEX queries fall back to SIMPLE when False
+    agent_max_subqueries: int = 3    # cap on AgentRAGPipeline's query-decomposition fan-out
 
     # Performance / caching
     embed_cache_maxsize: int = 1000

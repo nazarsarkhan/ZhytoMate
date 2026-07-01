@@ -43,3 +43,15 @@ degraded_responses = Counter(
     "Responses served via extractive fallback",
     ["reason"],
 )
+
+# Queries classified by route (SIMPLE | COMPLEX), regardless of which pipeline actually ran —
+# a COMPLEX query still counts as COMPLEX here even when it falls back to SimpleRAGPipeline.
+query_route_total = Counter(
+    "zhytomate_query_route_total", "Queries classified by route", ["route"]
+)
+
+# How many sub-queries AgentRAGPipeline's decomposition step produced for a COMPLEX request.
+agent_subqueries = Histogram(
+    "zhytomate_agent_subqueries", "Number of sub-queries produced by agent decomposition",
+    buckets=[1, 2, 3, 4, 5],
+)
