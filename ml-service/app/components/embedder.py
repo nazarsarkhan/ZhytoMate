@@ -1,9 +1,10 @@
 """
-Purpose:   OpenAI text-embedding-3-large wrapper (1536d). Async HTTP calls replace the old local CPU
-           encode — no threadpool/semaphore needed (network-bound, not CPU-bound). OpenAI vectors are
-           NOT unit-length, so we L2-normalize each row to match the DB's cosine (<=>) convention
-           (same as the old e5 setup). Same public interface (encode_query / encode_passages /
-           count_tokens) as the old e5 Embedder, so callers don't change.
+Purpose:   OpenAI embedding wrapper (model injected via config; 1536d). Async HTTP calls replace
+           the old local CPU encode — no threadpool/semaphore needed (network-bound, not
+           CPU-bound). OpenAI vectors are NOT unit-length, so we L2-normalize each row to match
+           the DB's cosine (<=>) convention (same as the old e5 setup). Same public interface
+           (encode_query / encode_passages / count_tokens) as the old e5 Embedder, so callers
+           don't change.
 Layer:     component
 May import:   stdlib, numpy, openai, tiktoken
 Must NOT import:  app/* (except config types), services/*, api/*, other components/*; FastAPI, asyncpg
@@ -60,8 +61,8 @@ def _l2_normalize(vectors: np.ndarray) -> np.ndarray:
 
 
 class Embedder:
-    """OpenAI-backed embedder. No query:/passage: prefixes (unlike e5) — text-embedding-3-large is a
-    single-purpose model. No local model load; the async client is lightweight, created once."""
+    """OpenAI-backed embedder. No query:/passage: prefixes (unlike e5) — the configured model is
+    single-purpose. No local model load; the async client is lightweight, created once."""
 
     def __init__(self, api_key: str, model: str, cache_maxsize: int = 1000) -> None:
         self._client = AsyncOpenAI(api_key=api_key)
