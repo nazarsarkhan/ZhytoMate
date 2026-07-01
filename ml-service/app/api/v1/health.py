@@ -47,7 +47,7 @@ async def health_deps(request: Request) -> dict[str, object]:
     state = request.app.state
     return {
         "db": await _probe_db(getattr(state, "pool", None)),
-        "openai": await _probe_openai(getattr(state, "openai_client", None)),
+        "openai": await _probe_openai(getattr(state, "llm_client", None)),
         "embedder": "loaded" if getattr(state, "embedder", None) is not None else "not_loaded",
         "pool": _pool_stats(getattr(state, "pool", None)),
     }
@@ -71,6 +71,8 @@ async def _probe_db(pool: object | None) -> str:
 
 
 async def _probe_openai(client: object | None) -> str:
+    # TODO: client is now OpenAILLMClient, not a raw AsyncOpenAI — it has no models.list().
+    # Reports "error: AttributeError" until OpenAILLMClient exposes a lightweight ping method.
     if client is None:
         return "not_ready"
     try:
