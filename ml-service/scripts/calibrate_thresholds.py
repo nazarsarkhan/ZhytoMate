@@ -5,7 +5,7 @@ Purpose:   Offline tool (NOT served): calibrate SIM_GATE / SIM_HIGH on the seede
            separation point, and emits suggested SIM_GATE (just above the irrelevant cluster) /
            SIM_HIGH (confident band). Turns SYSTEM_DESIGN §2.7's caveat into a runnable, pre-demo
            closed loop. Read-only — never writes to knowledge_base.
-           Run manually:  python scripts/calibrate_thresholds.py [--db DSN] [--model MODEL]
+           Run manually:  python scripts/calibrate_thresholds.py [--db DSN] [--api-key KEY]
 Layer:     script  (composition root for an offline job — may wire concrete components, like main.py)
 May import:   app.config, app.components/* (embedder, repository), app.domain/*, asyncpg, pgvector, stdlib
 Must NOT import:  api/*; tests/*. Never writes to the DB (read-only calibration).
@@ -25,7 +25,6 @@ from pgvector.asyncpg import register_vector
 from app.components.embedder import Embedder
 from app.components.repository import KnowledgeRepository
 
-_DEFAULT_MODEL = "intfloat/multilingual-e5-base"
 _DATA_PATH = Path(__file__).parent / "calibration_data.json"
 
 # Shipped alongside this script in calibration_data.json; regenerated here only if that file
@@ -58,9 +57,9 @@ def _parse_args() -> argparse.Namespace:
         help="Postgres DSN (default: $DATABASE_URL).",
     )
     parser.add_argument(
-        "--model",
-        default=os.environ.get("EMBED_MODEL", _DEFAULT_MODEL),
-        help="sentence-transformers model id (default: multilingual-e5-base).",
+        "--api-key",
+        default=os.environ.get("OPENAI_API_KEY"),
+        help="OpenAI API key (default: $OPENAI_API_KEY).",
     )
     return parser.parse_args()
 
@@ -109,9 +108,9 @@ def _report_separation(relevant: list[float], irrelevant: list[float]) -> None:
     print(f"SIM_HIGH={suggested_high}")
 
 
-async def _run(db_url: str, model: str, query_sets: dict[str, list[str]]) -> None:
-    print(f"Loading embedder ({model}) …")
-    embedder = Embedder(model)
+async def _run(db_url: str, api_key: str, query_sets: dict[str, list[str]]) -> None:
+    print("Loading OpenAI embedder …")
+    embedder = Embedder(api_key=api_key)
     print("Connecting to the database (read-only) …")
     pool = await _create_pool(db_url)
     try:
@@ -133,6 +132,9 @@ def main() -> int:
     if not args.db:
         print("ERROR: no database URL — pass --db or set DATABASE_URL.", file=sys.stderr)
         return 2
+    if not args.api_key:
+        print("ERROR: no OpenAI API key — pass --api-key or set OPENAI_API_KEY.", file=sys.stderr)
+        return 2
 
     if not _DATA_PATH.exists():
         _DATA_PATH.write_text(
@@ -149,7 +151,7 @@ def main() -> int:
         )
         return 2
 
-    asyncio.run(_run(args.db, args.model, query_sets))
+    asyncio.run(_run(args.db, args.api_key, query_sets))
     return 0
 
 

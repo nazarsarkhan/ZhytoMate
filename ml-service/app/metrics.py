@@ -10,10 +10,10 @@ from __future__ import annotations
 
 from prometheus_client import Counter, Histogram
 
-# Gemini outcomes per route. outcome: ok | fallback | rate_limited | error
-gemini_calls = Counter(
-    "zhytomate_gemini_calls_total",
-    "Gemini API calls",
+# LLM call outcomes per route. outcome: ok | fallback
+llm_calls = Counter(
+    "zhytomate_llm_calls_total",
+    "LLM API calls",
     ["route", "outcome"],
 )
 
@@ -37,7 +37,7 @@ district_unmapped = Counter(
     ["boundary"],
 )
 
-# Responses served via extractive fallback. reason: gemini_error | gemini_timeout | gemini_quota
+# Responses served via extractive fallback. reason: llm_error | llm_timeout | llm_quota
 degraded_responses = Counter(
     "zhytomate_degraded_responses_total",
     "Responses served via extractive fallback",

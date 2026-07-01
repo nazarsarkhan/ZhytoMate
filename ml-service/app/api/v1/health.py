@@ -1,8 +1,8 @@
 """
-Purpose:   /health/live (process up), /health/ready (model loaded AND DB reachable — the compose
-           gate; Gemini deliberately NOT probed so a Gemini blip can't pull us out of rotation, §5),
-           and /health/deps (a richer dashboard-only view that DOES probe DB + Gemini + pool stats,
-           never gating traffic). Readiness is re-checked on every call.
+Purpose:   /health/live (process up), /health/ready (embedder present AND DB reachable — the compose
+           gate; the LLM is deliberately NOT probed so an OpenAI blip can't pull us out of rotation,
+           §5), and /health/deps (a richer dashboard-only view that DOES probe DB + OpenAI + pool
+           stats, never gating traffic). Readiness is re-checked on every call.
 Layer:     api
 May import:   stdlib (asyncio), FastAPI (APIRouter, Request), fastapi.responses (JSONResponse)
 Must NOT import:  components/* or repository directly; domain/*; services/*
@@ -47,9 +47,7 @@ async def health_deps(request: Request) -> dict[str, object]:
     state = request.app.state
     return {
         "db": await _probe_db(getattr(state, "pool", None)),
-        "gemini": await _probe_gemini(
-            getattr(state, "gemini", None), getattr(state, "settings", None)
-        ),
+        "openai": await _probe_openai(getattr(state, "openai_client", None)),
         "embedder": "loaded" if getattr(state, "embedder", None) is not None else "not_loaded",
         "pool": _pool_stats(getattr(state, "pool", None)),
     }
@@ -72,18 +70,15 @@ async def _probe_db(pool: object | None) -> str:
         return f"error: {type(exc).__name__}"
 
 
-async def _probe_gemini(gemini: object | None, settings: object | None) -> str:
-    if gemini is None or settings is None:
+async def _probe_openai(client: object | None) -> str:
+    if client is None:
         return "not_ready"
     try:
-        await asyncio.wait_for(
-            gemini.aio.models.generate_content(model=settings.gemini_model, contents="ping"),
-            timeout=_PROBE_TIMEOUT_S,
-        )
+        await asyncio.wait_for(client.models.list(), timeout=_PROBE_TIMEOUT_S)
         return "ok"
     except asyncio.TimeoutError:
         return "timeout"
-    except Exception as exc:
+    except Exception as exc:  # broad on purpose — a dashboard probe never raises
         return f"error: {type(exc).__name__}"
 
 
