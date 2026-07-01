@@ -15,6 +15,7 @@ Must NOT import:  real openai, real asyncpg (injected fakes only)
 from __future__ import annotations
 
 from app.pipeline.agent import AgentRAGPipeline, _interleave_by_rank, _outcome_or_dry
+from app.pipeline.base import RETRIEVE_LIMIT
 from app.schemas.retrieval import RetrievalOutcome, RetrievalResult
 from tests.fakes.fake_embedder import FakeEmbedder
 from tests.fakes.fake_generator import FakeGenerator
@@ -144,4 +145,21 @@ def test_outcome_or_dry_logs_a_warning_naming_the_subquery_and_exception_type(ca
     with caplog.at_level("WARNING"):
         _outcome_or_dry("Коли вивезуть сміття?", RuntimeError("connection reset"))
     assert "Коли вивезуть сміття?" in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+async def test_reretry_dry_keeps_original_outcome_when_the_retry_itself_fails(caplog) -> None:
+    rewritten_query = "Коли вивезуть сміття цього тижня?"
+    generator = FakeGenerator(result=(rewritten_query, 0))
+    retriever = FakeRetriever({rewritten_query: RuntimeError("connection reset")})
+    pipeline = AgentRAGPipeline(FakeEmbedder(), retriever, generator, 0.70, 0.80, 3)
+    original = RetrievalOutcome(dense=[], fused=[])
+
+    with caplog.at_level("WARNING"):
+        result = await pipeline._reretry_dry("Коли сміття?", original, district=None)
+
+    # The retry itself raised — _reretry_dry must swallow it and hand back the sub-query's
+    # original (already-dry) outcome rather than letting the whole request 500.
+    assert result is original
+    assert retriever.calls == [(rewritten_query, None, RETRIEVE_LIMIT)]
     assert "RuntimeError" in caplog.text
