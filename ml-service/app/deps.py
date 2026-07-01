@@ -31,7 +31,7 @@ def verify_internal_token(request: Request) -> None:
         raise UnauthorizedError("Missing or invalid internal token")
 
 
-def get_ingest_service(request: Request) -> "IngestService":
+def get_ingest_service(request: Request) -> IngestService:
     """Build IngestService from app.state. Imported here (not at module top) to dodge import cycles."""
     from app.services.ingest_service import IngestService
 
@@ -39,7 +39,7 @@ def get_ingest_service(request: Request) -> "IngestService":
     return IngestService(repo=state.repo, embedder=state.embedder, settings=state.settings)
 
 
-def get_rag_service(request: Request) -> "RagService":
+def get_rag_service(request: Request) -> RagService:
     """Build RagService from app.state. Imported here (not at module top) to dodge import cycles."""
     from app.services.rag_service import RagService
 
@@ -52,7 +52,7 @@ def get_rag_service(request: Request) -> "RagService":
     )
 
 
-def get_vision_service(request: Request) -> "VisionService":
+def get_vision_service(request: Request) -> VisionService:
     """Build VisionService from app.state. Imported here (not at module top) to dodge import cycles."""
     from app.services.vision_service import VisionService
 

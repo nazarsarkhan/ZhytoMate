@@ -18,7 +18,12 @@ import pytest
 
 from app.components.hybrid_retriever import HybridRetriever
 from app.components.repository import ChunkRecord, KnowledgeRepository
-from tests.integration.conftest import make_content_hash, make_far_vec, make_random_vec, make_target_vec
+from tests.integration.conftest import (
+    make_content_hash,
+    make_far_vec,
+    make_random_vec,
+    make_target_vec,
+)
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 

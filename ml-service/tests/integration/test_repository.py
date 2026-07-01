@@ -13,7 +13,7 @@ Must NOT import:  app.api routers, google-genai, sentence-transformers (DB-real,
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -48,7 +48,7 @@ async def test_set_local_iterative_scan_returns_results_when_filtered(pg_pool):
             text=f"chunk {i}", embedding=make_random_vec(),
             doc_type="news", category=None, district="korolovskyi",
             source="http://test", content_hash=make_content_hash(i),
-            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            expires_at=datetime.now(UTC) + timedelta(days=7),
         )
         for i in range(15)
     ]
@@ -65,7 +65,7 @@ async def test_set_local_iterative_scan_returns_results_when_filtered(pg_pool):
             text=f"right chunk {i}", embedding=make_target_vec(base_vec, noise=0.02),
             doc_type="news", category=None, district="bohunskyi",
             source="http://test", content_hash=make_content_hash(100 + i),
-            expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+            expires_at=datetime.now(UTC) + timedelta(days=7),
         )
         for i in range(5)
     ]
@@ -90,7 +90,7 @@ async def test_content_hash_dedup_prevents_double_ingest(pg_pool):
         text=text, embedding=make_random_vec(),
         doc_type="news", category=None, district="bohunskyi",
         source="http://source-a.ua", content_hash=content_hash,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        expires_at=datetime.now(UTC) + timedelta(days=7),
     )
     await repo.upsert_chunks("doc_original", [chunk])
 
@@ -114,7 +114,7 @@ async def test_expired_news_filtered_from_retrieval(pg_pool):
         text="Стара новина про воду", embedding=seed_vec,
         doc_type="news", category=None, district=None,
         source="http://old.ua", content_hash="c" * 64,
-        expires_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+        expires_at=datetime.now(UTC) - timedelta(seconds=1),
     )
     await repo.upsert_chunks("expired_doc", [expired])
 
@@ -152,7 +152,7 @@ async def test_district_canonicalization_end_to_end(pg_pool):
         text="Відключення води у Богунському районі", embedding=seed_vec,
         doc_type="news", category="utilities", district=slug,
         source="http://zt-rada.gov.ua", content_hash="e" * 64,
-        expires_at=datetime.now(timezone.utc) + timedelta(days=7),
+        expires_at=datetime.now(UTC) + timedelta(days=7),
     )
     await repo.upsert_chunks("water_news", [chunk])
 

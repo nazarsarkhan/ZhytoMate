@@ -7,19 +7,19 @@ Must NOT import:  api/*, services/*, components/*, domain/*; any I/O or model li
 """
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel
 
 
-class DocType(str, Enum):
+class DocType(StrEnum):
     """Knowledge-base document kind. Mirrors the `doc_type` CHECK constraint in 0001_init.sql."""
 
     NEWS = "news"
     INSTRUCTION = "instruction"
 
 
-class QueryRoute(str, Enum):
+class QueryRoute(StrEnum):
     """R2RAG routing decision (ADR-010). Lives here so schemas and the domain classifier share it
     without schemas importing domain (re-exported from app.domain.classifier for callers)."""
 

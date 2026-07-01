@@ -14,7 +14,7 @@ Must NOT import:  domain/* directly; tests/*
 from __future__ import annotations
 
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 import structlog
 from fastapi import FastAPI
@@ -77,10 +77,8 @@ async def lifespan(app: FastAPI):
     finally:
         # 8. Graceful shutdown.
         reaper.cancel()
-        try:
+        with suppress(asyncio.CancelledError):
             await reaper
-        except asyncio.CancelledError:
-            pass
         await pool.close()
 
 

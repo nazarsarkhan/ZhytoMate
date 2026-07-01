@@ -25,7 +25,7 @@ class IngestRequest(BaseModel):
     ttl_days: int | None = Field(None, ge=1, le=365)
 
     @model_validator(mode="after")
-    def _ttl_required_for_news(self) -> "IngestRequest":
+    def _ttl_required_for_news(self) -> IngestRequest:
         """ttl_days is required when doc_type='news', ignored for 'instruction' (§3.1)."""
         if self.doc_type is DocType.NEWS and self.ttl_days is None:
             raise ValueError("ttl_days is required when doc_type is 'news'")

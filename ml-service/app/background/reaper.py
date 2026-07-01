@@ -23,7 +23,7 @@ _REAP_INTERVAL_SECONDS = 600
 
 
 async def ttl_reaper(
-    repo: "KnowledgeRepository", interval_seconds: int = _REAP_INTERVAL_SECONDS
+    repo: KnowledgeRepository, interval_seconds: int = _REAP_INTERVAL_SECONDS
 ) -> None:
     """Delete expired knowledge_base rows and stale rate_limit windows every `interval_seconds`.
     Runs until cancelled by the lifespan.

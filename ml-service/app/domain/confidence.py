@@ -11,10 +11,10 @@ Must NOT import:  api/*, services/*, components/*; any I/O or model lib (asyncpg
 """
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 
-class ConfidenceBand(str, Enum):
+class ConfidenceBand(StrEnum):
     HIGH = "high"
     MEDIUM = "medium"
     NO_INFO = "no_info"

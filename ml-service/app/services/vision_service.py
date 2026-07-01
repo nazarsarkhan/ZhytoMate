@@ -36,7 +36,7 @@ _FALLBACK = VisionResponse(is_valid=False, category="other", severity=1, title="
 
 
 class VisionService:
-    def __init__(self, generator: "VisionGenerator", settings: "Settings") -> None:
+    def __init__(self, generator: VisionGenerator, settings: Settings) -> None:
         self._generator = generator
         self._settings = settings
 

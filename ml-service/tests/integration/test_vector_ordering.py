@@ -66,7 +66,7 @@ async def test_retrieve_dense_orders_results_by_descending_cosine_similarity(pg_
     results = await repo.retrieve_dense(query_vec, None, limit=4)
 
     assert [r.text for r in results] == [f"chunk at similarity {sim}" for sim in target_similarities]
-    for result, expected_sim in zip(results, target_similarities):
+    for result, expected_sim in zip(results, target_similarities, strict=True):
         assert result.similarity == pytest.approx(expected_sim, abs=1e-3)
 
 

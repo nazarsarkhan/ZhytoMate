@@ -29,7 +29,7 @@ import structlog
 from app.domain.prompts import build_decompose_prompt, build_rewrite_prompt
 from app.domain.sufficiency import is_sufficient
 from app.metrics import agent_subqueries
-from app.pipeline.base import RETRIEVE_LIMIT, RAGPipeline, RagContext, RagResult, run_shared_tail
+from app.pipeline.base import RETRIEVE_LIMIT, RagContext, RAGPipeline, RagResult, run_shared_tail
 from app.protocols import Embedder, Generator, Retriever
 from app.schemas.retrieval import RetrievalOutcome, RetrievalResult
 
@@ -133,7 +133,10 @@ class AgentRAGPipeline(RAGPipeline):
             *(self._retrieve_one(sq, district) for sq in subqueries),
             return_exceptions=True,
         )
-        return [_outcome_or_dry(sq, result) for sq, result in zip(subqueries, raw_results)]
+        return [
+            _outcome_or_dry(sq, result)
+            for sq, result in zip(subqueries, raw_results, strict=True)
+        ]
 
     async def _reretry_dry(
         self, subquery: str, current: RetrievalOutcome, district: str | None

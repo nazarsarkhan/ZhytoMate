@@ -31,6 +31,7 @@ from app.middleware import RequestLoggingMiddleware
 from app.observability.logging import configure_logging
 from tests.fakes.fake_embedder import FakeEmbedder
 from tests.fakes.fake_generator import FakeGenerator
+
 # Re-exported so pytest can resolve them by name for tests/contract, which isn't a descendant of
 # tests/integration/conftest.py. pg_pool itself requests pg_container by name, so both must be
 # visible here — never clean_tables (see _reset_contract_tables below for why).

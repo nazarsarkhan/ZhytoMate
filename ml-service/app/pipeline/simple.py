@@ -10,7 +10,7 @@ Must NOT import:  api/*, services/*; concrete components/*; FastAPI, asyncpg, se
 """
 from __future__ import annotations
 
-from app.pipeline.base import RETRIEVE_LIMIT, RAGPipeline, RagContext, RagResult, run_shared_tail
+from app.pipeline.base import RETRIEVE_LIMIT, RagContext, RAGPipeline, RagResult, run_shared_tail
 from app.protocols import Embedder, Generator, Retriever
 
 

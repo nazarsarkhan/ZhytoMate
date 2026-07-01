@@ -122,10 +122,9 @@ class KnowledgeRepository:
             for c in chunks
         ]
         start = time.perf_counter()
-        async with self._pool.acquire() as conn:
-            async with conn.transaction():
-                await conn.execute("DELETE FROM knowledge_base WHERE document_id = $1", document_id)
-                await conn.executemany(_INSERT_SQL, records)
+        async with self._pool.acquire() as conn, conn.transaction():
+            await conn.execute("DELETE FROM knowledge_base WHERE document_id = $1", document_id)
+            await conn.executemany(_INSERT_SQL, records)
         logger.debug(
             "upsert_chunks",
             doc=document_id,
@@ -138,16 +137,15 @@ class KnowledgeRepository:
         self, query_vec: np.ndarray, district_slug: str | None, limit: int = 10
     ) -> list[RetrievalResult]:
         start = time.perf_counter()
-        async with self._pool.acquire() as conn:
-            # CRITICAL: SET LOCAL must share the SAME explicit transaction as the SELECT.
-            # asyncpg runs pooled connections in autocommit, so a bare execute("SET LOCAL …")
-            # followed by fetch("SELECT …") would run in two separate transactions and the
-            # settings would be silently discarded.
-            async with conn.transaction():
-                await conn.execute("SET LOCAL hnsw.ef_search = 100")
-                await conn.execute("SET LOCAL hnsw.iterative_scan = 'relaxed_order'")
-                await conn.execute("SET LOCAL hnsw.max_scan_tuples = 40000")
-                rows = await conn.fetch(_DENSE_SQL, query_vec, district_slug, limit)
+        # CRITICAL: SET LOCAL must share the SAME explicit transaction as the SELECT.
+        # asyncpg runs pooled connections in autocommit, so a bare execute("SET LOCAL …")
+        # followed by fetch("SELECT …") would run in two separate transactions and the
+        # settings would be silently discarded.
+        async with self._pool.acquire() as conn, conn.transaction():
+            await conn.execute("SET LOCAL hnsw.ef_search = 100")
+            await conn.execute("SET LOCAL hnsw.iterative_scan = 'relaxed_order'")
+            await conn.execute("SET LOCAL hnsw.max_scan_tuples = 40000")
+            rows = await conn.fetch(_DENSE_SQL, query_vec, district_slug, limit)
         logger.debug(
             "retrieve_dense", rows=len(rows), took_ms=round((time.perf_counter() - start) * 1000, 1)
         )
