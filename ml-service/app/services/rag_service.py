@@ -6,9 +6,10 @@ Purpose:   RAG query orchestration (§3.2, §4.2): rate-limit -> canonicalize di
            implemented; COMPLEX falls back to SIMPLE until the agent pipeline lands
            (AGENT_RAG_ENABLED). Pure orchestration over deps.
 Layer:     service
-May import:   domain/* (fusion, classifier, districts, prompts), schemas/query, app.protocols
-              (Generator port), components/repository + embedder, config, errors; openai (exception
-              types only, for classifying a fallback reason — never to make an API call directly)
+May import:   domain/* (fusion, classifier, districts, prompts, confidence, context), schemas/query,
+              app.protocols (Generator port), components/repository + embedder, config, errors;
+              openai (exception types only, for classifying a fallback reason — never to make an
+              API call directly)
 Must NOT import:  other services/*, api/*, FastAPI/Starlette, asyncpg directly
 """
 from __future__ import annotations
@@ -25,6 +26,8 @@ from app.components.embedder import Embedder
 from app.components.repository import KnowledgeRepository
 from app.config import Settings
 from app.domain.classifier import QueryRoute, classify_query
+from app.domain.confidence import ConfidenceBand, confidence_band
+from app.domain.context import CONTEXT_TOKEN_BUDGET, assemble_context
 from app.domain.districts import canonicalize_district
 from app.domain.fusion import reciprocal_rank_fusion
 from app.domain.prompts import build_rag_prompt
@@ -45,7 +48,6 @@ _NO_INFO_ANSWER = "Поки що немає інформації за цим з�
 _FALLBACK_PREFIX = "За наявними даними: "
 
 _RETRIEVE_LIMIT = 10
-_CONTEXT_CHUNKS = 3
 _GENERATE_TIMEOUT_S = 8.0
 _GENERATION_TEMPERATURE = 0.3
 _MAX_OUTPUT_TOKENS = 1024
@@ -146,7 +148,8 @@ class RagService:
         #    and the LLM is NOT called.
         top1_sim = dense[0].similarity if dense else 0.0
         retrieval_top1_sim.observe(top1_sim)
-        if not fused or top1_sim < self._settings.sim_gate:
+        band = confidence_band(top1_sim, self._settings.sim_gate, self._settings.sim_high)
+        if not fused or band is ConfidenceBand.NO_INFO:
             retrieval_empty.inc()
             logger.info(
                 "query_no_info user=%s district=%s route=%s top1=%.3f took=%.1fms",
@@ -156,7 +159,7 @@ class RagService:
                 answer=_NO_INFO_ANSWER, sources_used=[], confidence=0.0, route=route
             )
 
-        top_results = fused[:_CONTEXT_CHUNKS]
+        top_results = assemble_context(fused, CONTEXT_TOKEN_BUDGET, self._embedder.count_tokens)
         context_chunks = [result.text for result in top_results]
 
         # 8. Generate, or degrade to extractive fallback on ANY LLM error (never 5xx the caller).
