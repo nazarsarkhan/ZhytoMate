@@ -2,8 +2,10 @@
 Purpose:   asyncpg pool (register_vector in the init callback) + KnowledgeRepository:
            content-hash check, idempotent upsert (DELETE + executemany in one tx), dense
            retrieval (SET LOCAL hnsw.* MUST share the SAME tx as the SELECT — asyncpg autocommit
-           would discard them), lexical retrieval (websearch->plainto fallback), Postgres
-           rate-limit upsert, and TTL delete. Internal dataclass ChunkRecord (ingest-time transfer,
+           would discard them), lexical retrieval (websearch->plainto fallback), the Postgres
+           rate-limit counter (pure persistence — incr_rate_limit_counter; allow/deny policy lives
+           in components/rate_limiter, composed by RagService), and TTL delete + stale rate-limit
+           window sweep for the reaper. Internal dataclass ChunkRecord (ingest-time transfer,
            stays here). RetrievalResult lives in app.schemas.retrieval — the port abstraction in
            app.protocols needs it and may not import components/*.
 Layer:     component (repository)
@@ -168,9 +170,9 @@ class KnowledgeRepository:
         # similarity=0.0 — ts_rank is not a cosine; fusion ranks the lexical leg by position.
         return [_to_result(r, 0.0) for r in rows]
 
-    async def check_and_increment_rate_limit(self, user_id: str, max_per_minute: int) -> bool:
-        """Atomic per-user fixed-window counter. Returns True when the request is allowed."""
-        window_min = int(time.time()) // 60
+    async def incr_rate_limit_counter(self, hashed_key: str, window_min: int) -> int:
+        """Atomic per-key fixed-window counter (upsert + increment). Returns the count AFTER this
+        increment — the caller (RagService, via rate_limiter.evaluate) decides allow/deny."""
         count = await self._pool.fetchval(
             """
             INSERT INTO rate_limit (user_id, window_min, count) VALUES ($1, $2, 1)
@@ -178,10 +180,10 @@ class KnowledgeRepository:
             DO UPDATE SET count = rate_limit.count + 1
             RETURNING count
             """,
-            user_id, window_min,
+            hashed_key, window_min,
         )
-        logger.debug("rate_limit user=%s window=%d count=%d", user_id, window_min, count)
-        return count <= max_per_minute
+        logger.debug("rate_limit key=%s… window=%d count=%d", hashed_key[:8], window_min, count)
+        return count
 
     async def delete_expired(self) -> int:
         """Reaper sweep: delete rows past their TTL. Returns the number deleted."""
@@ -192,5 +194,22 @@ class KnowledgeRepository:
         )
         logger.debug(
             "delete_expired removed=%d took %.1fms", len(rows), (time.perf_counter() - start) * 1000
+        )
+        return len(rows)
+
+    async def delete_stale_rate_limit_windows(self, older_than_minutes: int = 5) -> int:
+        """Reaper sweep: delete rate_limit rows whose window is older than `older_than_minutes`
+        minutes ago. Returns the number of rows deleted."""
+        start = time.perf_counter()
+        # Same `int(time.time()) // 60` formula as rate_limiter.current_window() — recomputed
+        # here rather than imported, since this module's contract forbids importing other
+        # components (RagService is what wires the two together).
+        cutoff_window = int(time.time()) // 60 - older_than_minutes
+        rows = await self._pool.fetch(
+            "DELETE FROM rate_limit WHERE window_min < $1 RETURNING window_min", cutoff_window
+        )
+        logger.debug(
+            "delete_stale_rate_limit_windows removed=%d took %.1fms",
+            len(rows), (time.perf_counter() - start) * 1000,
         )
         return len(rows)
