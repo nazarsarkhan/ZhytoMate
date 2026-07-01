@@ -3,7 +3,7 @@ Purpose:   POST /api/v1/vision/analyze — validate auth + image (mime allowlist
            the schema), decode, and delegate to VisionService. HTTP wiring only.
 Layer:     api
 May import:   FastAPI (APIRouter, Depends), schemas/vision, app.deps (auth + service accessor)
-Must NOT import:  components/* or repository directly; domain/* directly; google-genai, asyncpg, sentence-transformers
+Must NOT import:  components/* or repository directly; domain/* directly; asyncpg
 """
 from __future__ import annotations
 

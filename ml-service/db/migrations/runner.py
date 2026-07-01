@@ -2,7 +2,8 @@
 Purpose:   Idempotent migration runner. Ensures migrations_log exists, then applies each
            *.sql file in this directory (lexicographic order) exactly once, recording the name.
            Each migration + its log row commit in one transaction, so a partial apply rolls back.
-           Called from the lifespan on startup; also runnable standalone (`python -m db.migrations.runner`).
+           Called from the lifespan on startup; also runnable standalone
+           (`python -m db.migrations.runner`).
 Layer:     infra (migrations)
 May import:   stdlib, asyncpg
 Must NOT import:  app/* (the runner is a leaf used by the composition root)

@@ -4,7 +4,8 @@ Purpose:   Unit: VisionService._parse_and_validate (enum/severity guard, None on
            VisionService with placeholder deps — no async calls, no real OpenAI.
 Layer:     test
 May import:   pytest, app.services.vision_service, app.schemas.vision, stdlib
-Must NOT import:  app.components, asyncpg, openai (pure/fast unit test — vision_service defers the SDK import)
+Must NOT import:  app.components, asyncpg, openai (pure/fast unit test — vision_service defers the
+              SDK import)
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ _VALID_B64 = base64.b64encode(b"\xff\xd8\xff\xe0\x00\x10JFIF fake jpeg payload")
 
 def _service() -> VisionService:
     # __init__ only stores the deps; _parse_and_validate never touches them.
-    return VisionService(openai_client=object(), settings=object())
+    return VisionService(generator=object(), settings=object())
 
 
 def _payload(**overrides: object) -> str:

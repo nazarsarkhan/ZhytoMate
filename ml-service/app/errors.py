@@ -4,14 +4,17 @@ Purpose:   Error-envelope rendering + FastAPI exception handlers + dependency-li
            handlers map them to the §3.3 envelope. FastAPI is imported lazily inside the handlers so
            importing this module (e.g. from a service) never pulls FastAPI.
 Layer:     infra
-May import:   stdlib, schemas/common (ErrorEnvelope); FastAPI/Starlette only inside handler bodies
-Must NOT import:  services/*, components/*, api/v1/* routers, domain/* (errors is a leaf others import)
+May import:   stdlib, structlog, schemas/common (ErrorEnvelope); FastAPI/Starlette only inside
+              handler bodies
+Must NOT import:  services/*, components/*, api/v1/* routers, domain/* (errors is a leaf others
+              import)
 """
 from __future__ import annotations
 
-import logging
 import uuid
 from typing import TYPE_CHECKING
+
+import structlog
 
 from app.schemas.common import ErrorDetail, ErrorEnvelope
 
@@ -20,7 +23,7 @@ if TYPE_CHECKING:
     from fastapi.exceptions import RequestValidationError
     from fastapi.responses import JSONResponse
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class AppError(Exception):
@@ -52,7 +55,7 @@ class RateLimitedError(AppError):
     retry_after = 60
 
 
-def _request_id(request: "Request") -> str:
+def _request_id(request: Request) -> str:
     """Prefer the middleware-propagated id, then the inbound header, else a fresh one."""
     return getattr(request.state, "request_id", None) or request.headers.get(
         "X-Request-ID"
@@ -65,21 +68,21 @@ def _envelope(
     request_id: str,
     status_code: int,
     headers: dict[str, str] | None = None,
-) -> "JSONResponse":
+) -> JSONResponse:
     from fastapi.responses import JSONResponse
 
     body = ErrorEnvelope(error=ErrorDetail(code=code, message=message, request_id=request_id))
     return JSONResponse(body.model_dump(), status_code=status_code, headers=headers)
 
 
-async def _app_error_handler(request: "Request", exc: AppError) -> "JSONResponse":
+async def _app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     headers = {"Retry-After": str(exc.retry_after)} if exc.retry_after is not None else None
     return _envelope(exc.code, exc.message, _request_id(request), exc.status_code, headers)
 
 
 async def _validation_error_handler(
-    request: "Request", exc: "RequestValidationError"
-) -> "JSONResponse":
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
     # Body validation (e.g. ttl_days missing for news) -> documented 400 invalid_request (§3.3),
     # not FastAPI's default 422.
     parts = [
@@ -90,15 +93,24 @@ async def _validation_error_handler(
     return _envelope("invalid_request", message, _request_id(request), 400)
 
 
-async def _unhandled_error_handler(request: "Request", exc: Exception) -> "JSONResponse":
-    logger.exception("unhandled error on %s %s", request.method, request.url.path)
+async def _unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception(
+        "unhandled_error",
+        request_id=_request_id(request),
+        method=request.method,
+        path=request.url.path,
+    )
     return _envelope("internal_error", "Internal server error", _request_id(request), 500)
 
 
-def register_error_handlers(app: "FastAPI") -> None:
+def register_error_handlers(app: FastAPI) -> None:
     """Wire the three handlers. Called once from main.py after app construction."""
     from fastapi.exceptions import RequestValidationError
 
-    app.add_exception_handler(AppError, _app_error_handler)
-    app.add_exception_handler(RequestValidationError, _validation_error_handler)
+    # Starlette's add_exception_handler stub types handlers as accepting the base Exception,
+    # but its ExceptionMiddleware dispatches by the registered exception class at runtime — a
+    # handler narrowed to a specific subclass is the documented FastAPI pattern, just one the
+    # stub doesn't model. See https://fastapi.tiangolo.com/tutorial/handling-errors/.
+    app.add_exception_handler(AppError, _app_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(RequestValidationError, _validation_error_handler)  # type: ignore[arg-type]
     app.add_exception_handler(Exception, _unhandled_error_handler)

@@ -10,6 +10,7 @@ Must NOT import:  components/* or repository directly; domain/*; services/*
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -47,13 +48,16 @@ async def health_deps(request: Request) -> dict[str, object]:
     state = request.app.state
     return {
         "db": await _probe_db(getattr(state, "pool", None)),
-        "openai": await _probe_openai(getattr(state, "openai_client", None)),
+        "openai": await _probe_openai(getattr(state, "llm_client", None)),
         "embedder": "loaded" if getattr(state, "embedder", None) is not None else "not_loaded",
         "pool": _pool_stats(getattr(state, "pool", None)),
     }
 
 
-async def _probe_db(pool: object | None) -> str:
+async def _probe_db(pool: Any) -> str:
+    # `Any`, not the concrete asyncpg Pool type: this module's layering contract forbids importing
+    # components/* directly (see docstring above), so the probe helpers stay deliberately untyped
+    # at this boundary and duck-type their way to acquire()/models.list()/get_size().
     if pool is None:
         return "not_ready"
 
@@ -64,25 +68,27 @@ async def _probe_db(pool: object | None) -> str:
     try:
         await asyncio.wait_for(_select_one(), timeout=_PROBE_TIMEOUT_S)
         return "ok"
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return "error: timeout"
     except Exception as exc:  # broad on purpose — a dashboard probe never raises
         return f"error: {type(exc).__name__}"
 
 
-async def _probe_openai(client: object | None) -> str:
+async def _probe_openai(client: Any) -> str:
+    # TODO: client is now OpenAILLMClient, not a raw AsyncOpenAI — it has no models.list().
+    # Reports "error: AttributeError" until OpenAILLMClient exposes a lightweight ping method.
     if client is None:
         return "not_ready"
     try:
         await asyncio.wait_for(client.models.list(), timeout=_PROBE_TIMEOUT_S)
         return "ok"
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return "timeout"
     except Exception as exc:  # broad on purpose — a dashboard probe never raises
         return f"error: {type(exc).__name__}"
 
 
-def _pool_stats(pool: object | None) -> dict[str, int]:
+def _pool_stats(pool: Any) -> dict[str, int]:
     if pool is None:
         return {"size": 0, "idle": 0}
     return {"size": pool.get_size(), "idle": pool.get_idle_size()}

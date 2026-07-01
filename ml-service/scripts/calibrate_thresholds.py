@@ -6,8 +6,11 @@ Purpose:   Offline tool (NOT served): calibrate SIM_GATE / SIM_HIGH on the seede
            SIM_HIGH (confident band). Turns SYSTEM_DESIGN §2.7's caveat into a runnable, pre-demo
            closed loop. Read-only — never writes to knowledge_base.
            Run manually:  python scripts/calibrate_thresholds.py [--db DSN] [--api-key KEY]
-Layer:     script  (composition root for an offline job — may wire concrete components, like main.py)
-May import:   app.config, app.components/* (embedder, repository), app.domain/*, asyncpg, pgvector, stdlib
+           [--model NAME]
+Layer:     script  (composition root for an offline job — may wire concrete components,
+           like main.py)
+May import:   app.config, app.components/* (embedder, repository), app.domain/*,
+              asyncpg, pgvector, stdlib
 Must NOT import:  api/*; tests/*. Never writes to the DB (read-only calibration).
 """
 from __future__ import annotations
@@ -61,6 +64,11 @@ def _parse_args() -> argparse.Namespace:
         default=os.environ.get("OPENAI_API_KEY"),
         help="OpenAI API key (default: $OPENAI_API_KEY).",
     )
+    parser.add_argument(
+        "--model",
+        default=os.environ.get("EMBED_MODEL"),
+        help="OpenAI embedding model (default: $EMBED_MODEL).",
+    )
     return parser.parse_args()
 
 
@@ -108,9 +116,9 @@ def _report_separation(relevant: list[float], irrelevant: list[float]) -> None:
     print(f"SIM_HIGH={suggested_high}")
 
 
-async def _run(db_url: str, api_key: str, query_sets: dict[str, list[str]]) -> None:
+async def _run(db_url: str, api_key: str, model: str, query_sets: dict[str, list[str]]) -> None:
     print("Loading OpenAI embedder …")
-    embedder = Embedder(api_key=api_key)
+    embedder = Embedder(api_key=api_key, model=model)
     print("Connecting to the database (read-only) …")
     pool = await _create_pool(db_url)
     try:
@@ -135,6 +143,9 @@ def main() -> int:
     if not args.api_key:
         print("ERROR: no OpenAI API key — pass --api-key or set OPENAI_API_KEY.", file=sys.stderr)
         return 2
+    if not args.model:
+        print("ERROR: no embedding model — pass --model or set EMBED_MODEL.", file=sys.stderr)
+        return 2
 
     if not _DATA_PATH.exists():
         _DATA_PATH.write_text(
@@ -151,7 +162,7 @@ def main() -> int:
         )
         return 2
 
-    asyncio.run(_run(args.db, args.api_key, query_sets))
+    asyncio.run(_run(args.db, args.api_key, args.model, query_sets))
     return 0
 
 

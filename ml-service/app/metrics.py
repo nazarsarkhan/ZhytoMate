@@ -43,3 +43,50 @@ degraded_responses = Counter(
     "Responses served via extractive fallback",
     ["reason"],
 )
+
+# Queries classified by route (SIMPLE | COMPLEX), regardless of which pipeline actually ran —
+# a COMPLEX query still counts as COMPLEX here even when it falls back to SimpleRAGPipeline.
+query_route_total = Counter(
+    "zhytomate_query_route_total", "Queries classified by route", ["route"]
+)
+
+# How many sub-queries AgentRAGPipeline's decomposition step produced for a COMPLEX request.
+agent_subqueries = Histogram(
+    "zhytomate_agent_subqueries", "Number of sub-queries produced by agent decomposition",
+    buckets=[1, 2, 3, 4, 5],
+)
+
+# Generator.generate() call latency (success and failure both observed — see pipeline/base.py).
+llm_latency_seconds = Histogram(
+    "zhytomate_llm_latency_seconds", "Generator.generate() call latency"
+)
+
+# OpenAI embeddings API call latency (one observation per network attempt, retries included).
+embedding_latency_seconds = Histogram(
+    "zhytomate_embedding_latency_seconds", "OpenAI embeddings API call latency"
+)
+
+# Query-embedding LRU cache hits.
+embedding_cache_hits_total = Counter(
+    "zhytomate_embedding_cache_hits_total", "Query-embedding LRU cache hits"
+)
+
+# Query-embedding LRU cache lookups (hit or miss) — divide hits by this in PromQL for hit ratio.
+embedding_cache_lookups_total = Counter(
+    "zhytomate_embedding_cache_lookups_total", "Query-embedding LRU cache lookups (hit or miss)"
+)
+
+# Hits contributed by each retrieval leg. leg: dense | lexical
+retrieval_leg_hits = Counter(
+    "zhytomate_retrieval_leg_hits_total", "Hits contributed by each retrieval leg", ["leg"]
+)
+
+# Chunks written during ingest.
+ingest_chunks_total = Counter(
+    "zhytomate_ingest_chunks_total", "Chunks written during ingest"
+)
+
+# Ingest requests short-circuited by a duplicate content hash.
+dedup_skips_total = Counter(
+    "zhytomate_dedup_skips_total", "Ingest requests short-circuited by a duplicate content hash"
+)

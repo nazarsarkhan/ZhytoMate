@@ -4,7 +4,7 @@ Purpose:   POST /api/v1/chat/query — validate auth + body, delegate to RagServ
            service.
 Layer:     api
 May import:   FastAPI (APIRouter, Depends), schemas/query, app.deps (auth + service accessor)
-Must NOT import:  components/* or repository directly; domain/* directly; google-genai, asyncpg, sentence-transformers
+Must NOT import:  components/* or repository directly; domain/* directly; asyncpg
 """
 from __future__ import annotations
 

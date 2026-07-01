@@ -3,7 +3,7 @@ Purpose:   Deterministic text normalize/clean + sha256 content_hash over the nor
            document. Same input always yields the same output (the dedup key depends on it, §2.4).
 Layer:     domain
 May import:   stdlib (re, hashlib, unicodedata)
-Must NOT import:  api/*, services/*, components/*; any I/O or model lib (asyncpg, google-genai, sentence-transformers, FastAPI)
+Must NOT import:  api/*, services/*, components/*; any I/O or model lib (asyncpg, FastAPI)
 """
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ import hashlib
 import re
 import unicodedata
 
-# Horizontal whitespace (tabs, CR, NBSP, form-feed, ...) but NOT newlines — paragraph breaks survive.
+# Horizontal whitespace (tabs, CR, NBSP, form-feed, ...) but NOT newlines — paragraph breaks
+# survive.
 _HORIZONTAL_WS_RE = re.compile(r"[^\S\n]+")
 # Spaces hugging a newline collapse onto the newline (avoids trailing spaces from CRLF input).
 _NEWLINE_PAD_RE = re.compile(r" *\n *")

@@ -4,7 +4,8 @@ Purpose:   Pydantic v2 I/O schemas for POST /api/v1/vision/analyze — VisionReq
            derived from CATEGORY_VALUES for the service's manual enum check.
 Layer:     schema
 May import:   stdlib, pydantic
-Must NOT import:  api/*, services/*, components/*, domain/*; any I/O or model lib (asyncpg, google-genai, sentence-transformers, FastAPI routing)
+Must NOT import:  api/*, services/*, components/*, domain/*; any I/O or model lib (asyncpg, FastAPI
+              routing)
 """
 from __future__ import annotations
 
@@ -38,7 +39,8 @@ class VisionRequest(BaseModel):
     @field_validator("image_base64")
     @classmethod
     def _validate_size(cls, value: str) -> str:
-        """Reject non-base64 and images whose decoded size exceeds the cap. Returns the original b64."""
+        """Reject non-base64 and images whose decoded size exceeds the cap. Returns the original
+        b64."""
         try:
             decoded = base64.b64decode(value, validate=True)
         except Exception as exc:

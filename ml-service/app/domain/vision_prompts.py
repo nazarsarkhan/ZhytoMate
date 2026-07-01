@@ -5,7 +5,7 @@ Purpose:   Vision system prompt for OpenAI image analysis. Used with response_fo
            field/enum validation, since json_object mode can't enforce a schema.
 Layer:     domain (pure)
 May import:   stdlib only
-Must NOT import:  api/*, services/*, components/*; any I/O or model lib (asyncpg, openai, sentence-transformers, FastAPI)
+Must NOT import:  api/*, services/*, components/*; any I/O or model lib (asyncpg, openai, FastAPI)
 """
 from __future__ import annotations
 

@@ -6,13 +6,16 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: zhytomate
-      POSTGRES_PASSWORD: secret
-      POSTGRES_DB: zhytomate
+      POSTGRES_USER: ${POSTGRES_USER:-zhytomate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_DB: ${POSTGRES_DB:-zhytomate}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
+      # Liveness probe only — hardcoding the default user/db here is fine even if the
+      # env vars above are overridden, since pg_isready just needs a role that can connect.
       test: ["CMD-SHELL", "pg_isready -U zhytomate -d zhytomate"]
       interval: 5s
       timeout: 3s
@@ -24,6 +27,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: unless-stopped
     env_file: .env
     depends_on:
       postgres:
@@ -34,12 +38,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 90s    # generous: first start downloads nothing but loads ~1.1GB model
+      start_period: 20s    # no local model to load anymore (OpenAI is a network call) — just DB connectivity + app startup
     ports:
       - "8000:8000"
-    volumes:
-      - hfcache:/home/app/.cache/huggingface   # model cache survives rebuilds
 
 volumes:
   pgdata: {}
-  hfcache: {}
