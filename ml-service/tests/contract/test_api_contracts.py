@@ -11,8 +11,8 @@ Purpose:   Contract: golden request/response shapes for /health/live, /health/re
                maps every RequestValidationError (missing field, bad enum, a failed field/model
                validator) to 400 invalid_request, overriding FastAPI's default 422.
              - 413 doesn't exist as a distinct code: the vision schema's decoded-size cap is a
-               pydantic field_validator, so an oversized image is just another RequestValidationError
-               -> 400, the same as any other bad field.
+               pydantic field_validator, so an oversized image is just another
+               RequestValidationError -> 400, the same as any other bad field.
              - 415 doesn't exist either: the mime_type allowlist is enforced the same way (a
                field_validator raising ValueError) -> 400, not a dedicated unsupported-media-type
                response.
@@ -159,7 +159,12 @@ async def test_vision_golden_response_shape(test_app, client) -> None:
 _PROTECTED_REQUESTS = [
     (
         "/api/v1/knowledge/ingest",
-        {"document_id": "doc-auth-check", "text": "текст", "doc_type": "instruction", "source": "src"},
+        {
+            "document_id": "doc-auth-check",
+            "text": "текст",
+            "doc_type": "instruction",
+            "source": "src",
+        },
     ),
     ("/api/v1/chat/query", {"user_query": "питання", "user_id": "u1"}),
     ("/api/v1/vision/analyze", {"image_base64": _VALID_JPEG_B64, "mime_type": "image/jpeg"}),

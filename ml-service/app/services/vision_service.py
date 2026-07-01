@@ -70,7 +70,9 @@ class VisionService:
         mode guarantees valid JSON syntax only, not field/enum compliance, so _parse_and_validate
         does the real enforcement. Raises once the adapter's retries are exhausted -> analyze
         handles it. Returns (raw_text, retry_count)."""
-        prompt = VISION_SYSTEM_PROMPT if not strict else f"{VISION_SYSTEM_PROMPT}\n\n{_STRICT_SUFFIX}"
+        prompt = (
+            VISION_SYSTEM_PROMPT if not strict else f"{VISION_SYSTEM_PROMPT}\n\n{_STRICT_SUFFIX}"
+        )
         return await self._generator.analyze_image(
             image_bytes,
             mime_type,
@@ -81,7 +83,8 @@ class VisionService:
         )
 
     def _parse_and_validate(self, raw: str) -> VisionResponse | None:
-        """Parse JSON -> VisionResponse with a manual category-enum check. Returns None on ANY error."""
+        """Parse JSON -> VisionResponse with a manual category-enum check. Returns None on ANY
+        error."""
         try:
             data = json.loads(raw)
             if not isinstance(data, dict) or data.get("category") not in ALLOWED_CATEGORIES:

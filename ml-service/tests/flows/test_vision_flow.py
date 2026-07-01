@@ -99,7 +99,9 @@ async def test_unrecognized_category_is_treated_as_invalid_and_retried() -> None
     assert len(generator.analyze_calls) == 2
 
 
-async def test_transient_api_error_on_first_attempt_goes_straight_to_fallback_with_one_call() -> None:
+async def test_transient_api_error_on_first_attempt_goes_straight_to_fallback_with_one_call() -> (
+    None
+):
     """The retry-boundary check: OpenAILLMClient (the real VisionGenerator adapter) already retries
     transient API errors internally before ever raising (tests/unit/test_llm_client.py). If
     analyze_image() itself raises here, that means the adapter's own retries were already exhausted

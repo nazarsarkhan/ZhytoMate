@@ -17,7 +17,8 @@ from app.schemas.retrieval import RetrievalResult
 
 def _result(chunk_id: int, similarity: float) -> RetrievalResult:
     return RetrievalResult(
-        id=chunk_id, text="text", source="src", doc_type="news", district=None, similarity=similarity
+        id=chunk_id, text="text", source="src", doc_type="news", district=None,
+        similarity=similarity,
     )
 
 
@@ -31,7 +32,8 @@ def test_below_gate_hits_do_not_count() -> None:
 
 
 def test_at_gate_hit_counts_inclusive() -> None:
-    # Mirrors confidence.py: top1_sim == sim_gate is NOT no-info, so it must count as a hit here too.
+    # Mirrors confidence.py: top1_sim == sim_gate is NOT no-info, so it must count as a hit here
+    # too.
     dense = [_result(1, 0.70)]
     assert is_sufficient(dense, sim_gate=0.70) is True
 

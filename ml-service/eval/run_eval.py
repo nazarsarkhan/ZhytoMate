@@ -192,7 +192,9 @@ def _parse_args() -> argparse.Namespace:
         description="Offline eval gate: retrieval hit-rate + classifier routing accuracy."
     )
     parser.add_argument(
-        "--db", default=os.environ.get("DATABASE_URL"), help="Postgres DSN (default: $DATABASE_URL)."
+        "--db",
+        default=os.environ.get("DATABASE_URL"),
+        help="Postgres DSN (default: $DATABASE_URL).",
     )
     parser.add_argument(
         "--api-key",
@@ -231,7 +233,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--judge",
         action="store_true",
-        help="Also run the informational LLM-as-judge groundedness check (never gates the exit code).",
+        help=(
+            "Also run the informational LLM-as-judge groundedness check (never gates the exit "
+            "code)."
+        ),
     )
     return parser.parse_args()
 
@@ -323,10 +328,16 @@ async def _run(args: argparse.Namespace) -> bool:
         retriever = HybridRetriever(repo, args.rrf_k)
         # internal_token is unused by IngestService — it's required by Settings' schema, not by
         # anything this script does, so a filler value avoids depending on an unrelated env var.
-        settings = Settings(database_url=args.db, openai_api_key=args.api_key, internal_token="unused")
+        settings = Settings(
+            database_url=args.db,
+            openai_api_key=args.api_key,
+            internal_token="unused",
+        )
         ingest_service = IngestService(repo, embedder, settings)
 
-        generator = OpenAILLMClient(api_key=args.api_key, model=args.llm_model) if args.judge else None
+        generator = (
+            OpenAILLMClient(api_key=args.api_key, model=args.llm_model) if args.judge else None
+        )
 
         routing, hitrate, judge_score = await run_evaluation(
             ingest_service, retriever, embedder, pool, generator=generator, k=args.k
@@ -349,7 +360,10 @@ def main() -> int:
         print("ERROR: no embedding model — pass --embed-model or set EMBED_MODEL.", file=sys.stderr)
         return 2
     if args.judge and not args.llm_model:
-        print("ERROR: --judge requires a chat model — pass --llm-model or set LLM_MODEL.", file=sys.stderr)
+        print(
+            "ERROR: --judge requires a chat model — pass --llm-model or set LLM_MODEL.",
+            file=sys.stderr,
+        )
         return 2
 
     passed = asyncio.run(_run(args))

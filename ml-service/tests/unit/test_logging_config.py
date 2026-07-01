@@ -52,7 +52,9 @@ def test_configure_logging_routes_through_stdlib_so_caplog_still_works(
     logger = structlog.get_logger("test.logging_config")
 
     with caplog.at_level("WARNING"):
-        logger.warning("agent_retrieve_failed", subquery="Коли вивезуть сміття?", err="RuntimeError")
+        logger.warning(
+            "agent_retrieve_failed", subquery="Коли вивезуть сміття?", err="RuntimeError"
+        )
 
     assert "Коли вивезуть сміття?" in caplog.text
     assert "RuntimeError" in caplog.text

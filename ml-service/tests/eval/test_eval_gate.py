@@ -54,7 +54,11 @@ _ROUTING_FLOOR = 0.95
 def _unused_settings() -> Settings:
     """IngestService's constructor requires a Settings instance but never reads it — a filler value
     avoids depending on env vars (INTERNAL_TOKEN, etc.) that are irrelevant to this test."""
-    return Settings(database_url="postgresql://unused", openai_api_key="unused", internal_token="unused")
+    return Settings(
+        database_url="postgresql://unused",
+        openai_api_key="unused",
+        internal_token="unused",
+    )
 
 
 async def _count_remaining_fixtures(pg_pool) -> int:
@@ -114,7 +118,8 @@ async def test_eval_gate_seeds_scores_and_cleans_up(pg_pool) -> None:
 
 
 async def test_cleanup_removes_seeded_rows_even_if_evaluation_raises(pg_pool) -> None:
-    """The harness's real seed -> evaluate -> cleanup contract lives in eval.run_eval.run_evaluation()
+    """The harness's real seed -> evaluate -> cleanup contract lives in
+    eval.run_eval.run_evaluation()
     (the function _run() delegates to once it has wired up real credentials). Drive THAT function
     directly — not a reimplementation of its try/finally — with an injected Retriever that raises
     partway through compute_retrieval_hitrate(), after the real fixtures have already been seeded

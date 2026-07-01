@@ -133,7 +133,12 @@ async def run_shared_tail(
         llm_latency_seconds.observe(llm_elapsed_s)
 
     sources = [
-        SourceUsed(source=r.source, doc_type=r.doc_type, district=r.district, similarity=round(r.similarity, 4))
+        SourceUsed(
+            source=r.source,
+            doc_type=r.doc_type,
+            district=r.district,
+            similarity=round(r.similarity, 4),
+        )
         for r in top_results
     ]
     return RagResult(

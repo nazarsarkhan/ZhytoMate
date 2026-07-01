@@ -5,7 +5,8 @@ Purpose:   Unit: assemble_context() — dedup by chunk id (first occurrence wins
            budget-counting so a duplicate never eats into the budget meant for a distinct chunk.
 Layer:     test
 May import:   pytest, app.domain.context, app.schemas.retrieval, stdlib
-Must NOT import:  app.api, app.services, app.components, app.pipeline; asyncpg, google-genai (pure/fast unit test)
+Must NOT import:  app.api, app.services, app.components, app.pipeline; asyncpg, google-genai
+              (pure/fast unit test)
 """
 from __future__ import annotations
 
@@ -34,7 +35,9 @@ def test_assemble_context_dedups_keeping_first_occurrence_at_its_position() -> N
     first = _result(1, "first version")
     other = _result(2, "other chunk")
     duplicate = _result(1, "duplicate version, should be dropped")
-    kept = assemble_context([first, other, duplicate], token_budget=100, count_tokens_fn=_count_words)
+    kept = assemble_context(
+        [first, other, duplicate], token_budget=100, count_tokens_fn=_count_words
+    )
     assert [c.id for c in kept] == [1, 2]
     assert kept[0] is first
 

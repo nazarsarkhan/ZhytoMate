@@ -39,7 +39,9 @@ def _stub_gold_rows(monkeypatch: pytest.MonkeyPatch, rows: list[dict]) -> None:
 
 async def test_judge_one_row_returns_true_when_verdict_starts_with_yes() -> None:
     query = "Як подати заявку на субсидію?"
-    retriever = FakeRetriever({query: RetrievalOutcome(dense=[], fused=[_hit("контекст про субсидію")])})
+    retriever = FakeRetriever(
+        {query: RetrievalOutcome(dense=[], fused=[_hit("контекст про субсидію")])}
+    )
     # Lowercase + trailing text on purpose: parsing is `.strip().upper().startswith("YES")`, not an
     # exact-match compare, so this must still count as grounded.
     generator = FakeGenerator(results=[("Ось відповідь", 0), ("yes, fully grounded", 0)])
@@ -53,7 +55,9 @@ async def test_judge_one_row_returns_true_when_verdict_starts_with_yes() -> None
 
 async def test_judge_one_row_returns_false_when_verdict_says_not_grounded() -> None:
     query = "Як подати заявку на субсидію?"
-    retriever = FakeRetriever({query: RetrievalOutcome(dense=[], fused=[_hit("контекст про субсидію")])})
+    retriever = FakeRetriever(
+        {query: RetrievalOutcome(dense=[], fused=[_hit("контекст про субсидію")])}
+    )
     generator = FakeGenerator(results=[("Ось відповідь", 0), ("NO", 0)])
     row = {"query": query, "district": None}
 
@@ -70,7 +74,8 @@ async def test_judge_one_row_short_circuits_without_calling_generator_when_no_co
 
     verdict = await _judge_one_row(retriever, FakeEmbedder(), generator, row, k=3)
 
-    assert verdict is None  # None means "nothing to judge", distinct from False ("judged, ungrounded")
+    # None means "nothing to judge", distinct from False ("judged, ungrounded")
+    assert verdict is None
     assert generator.call_count == 0  # no wasted LLM calls when there's no context to check against
 
 
@@ -95,7 +100,9 @@ async def test_run_judge_averages_over_judged_rows_excluding_no_context_rows(
             # no_context_query is intentionally absent from the map.
         }
     )
-    generator = FakeGenerator(results=[("відповідь 1", 0), ("YES", 0), ("відповідь 2", 0), ("no", 0)])
+    generator = FakeGenerator(
+        results=[("відповідь 1", 0), ("YES", 0), ("відповідь 2", 0), ("no", 0)]
+    )
 
     score = await run_judge(retriever, FakeEmbedder(), generator, k=3)
 
@@ -104,7 +111,9 @@ async def test_run_judge_averages_over_judged_rows_excluding_no_context_rows(
     assert score == 0.5
 
 
-async def test_run_judge_returns_zero_when_gold_set_is_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_run_judge_returns_zero_when_gold_set_is_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _stub_gold_rows(monkeypatch, [])
     generator = FakeGenerator()
 

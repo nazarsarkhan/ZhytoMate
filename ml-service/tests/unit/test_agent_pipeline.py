@@ -32,7 +32,9 @@ def _hit(chunk_id: int) -> RetrievalResult:
 
 
 def _pipeline(generator: FakeGenerator, max_subqueries: int = 3) -> AgentRAGPipeline:
-    return AgentRAGPipeline(FakeEmbedder(), FakeRetriever({}), generator, 0.70, 0.80, max_subqueries)
+    return AgentRAGPipeline(
+        FakeEmbedder(), FakeRetriever({}), generator, 0.70, 0.80, max_subqueries
+    )
 
 
 async def test_decompose_parses_valid_json_array() -> None:
