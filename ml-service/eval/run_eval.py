@@ -13,6 +13,10 @@ Purpose:   Offline evaluation harness (the 8->10 quality gate). Runs two gold se
            with whatever got scraped that day, which is exactly the flakiness a CI quality gate
            must not have. The harness owns only its own `eval_fixture_*` rows; everything else in
            the table is untouched.
+           SPLIT for testability: run_evaluation() takes already-constructed dependencies (real or
+           fake) and owns the seed -> evaluate -> cleanup contract, including the finally-guarantee;
+           _run() is the thin credential-based composition root that builds the real OpenAI/asyncpg
+           components and calls it. tests/eval/test_eval_gate.py drives run_evaluation() directly.
 Layer:     script  (composition root for an offline job — may wire concrete components, like main.py
            and scripts/calibrate_thresholds.py)
 May import:   app.config, app.components/* (embedder, repository, hybrid_retriever, llm),
@@ -260,10 +264,48 @@ def _print_scorecard(
     return routing_pass and hitrate_pass
 
 
+async def run_evaluation(
+    ingest_service: IngestService,
+    retriever: Retriever,
+    embedder: Embedder,
+    pool: asyncpg.Pool,
+    *,
+    generator: Generator | None = None,
+    fixtures_path: Path = _RETRIEVAL_FIXTURES_PATH,
+    routing_gold_path: Path = _ROUTING_GOLD_PATH,
+    retrieval_gold_path: Path = _RETRIEVAL_GOLD_PATH,
+    k: int = _DEFAULT_K,
+) -> tuple[tuple[int, int], tuple[int, int], float | None]:
+    """The seed -> evaluate -> cleanup core, decoupled from HOW its dependencies were built. Takes
+    already-constructed ingest_service/retriever/embedder/pool (real or fake) so it can be driven
+    directly by tests, not just by _run()'s credential-based wiring. Always deletes the seeded
+    eval_fixture_* rows in a finally block, even when scoring raises partway through — that
+    guarantee is the whole point of this function existing as a separate, injectable seam.
+    Returns (routing, hitrate, judge_score); judge_score is None unless a generator is supplied."""
+    document_ids: list[str] = []
+    try:
+        document_ids = await seed_fixtures(ingest_service, fixtures_path)
+
+        routing = compute_routing_accuracy(routing_gold_path)
+        hitrate = await compute_retrieval_hitrate(retriever, embedder, retrieval_gold_path, k=k)
+
+        judge_score = None
+        if generator is not None:
+            judge_score = await run_judge(retriever, embedder, generator, retrieval_gold_path, k=k)
+    finally:
+        await cleanup_fixtures(pool, document_ids)
+
+    return routing, hitrate, judge_score
+
+
 async def _run(args: argparse.Namespace) -> bool:
+    """Composition root: wires real credential-based components (OpenAI embedder/LLM, asyncpg
+    pool, pgvector repo/retriever) and hands them to run_evaluation(). Untested by unit tests on
+    purpose — there's nothing to assert here beyond "did construction happen with the right
+    arguments", which mypy/readability already cover; the actual seed/evaluate/cleanup behavior
+    lives in run_evaluation() and is what tests/eval/test_eval_gate.py exercises."""
     embedder = OpenAIEmbedder(api_key=args.api_key, model=args.embed_model)
     pool = await _create_pool(args.db)
-    document_ids: list[str] = []
     try:
         repo = KnowledgeRepository(pool)
         retriever = HybridRetriever(repo, args.rrf_k)
@@ -272,21 +314,12 @@ async def _run(args: argparse.Namespace) -> bool:
         settings = Settings(database_url=args.db, openai_api_key=args.api_key, internal_token="unused")
         ingest_service = IngestService(repo, embedder, settings)
 
-        document_ids = await seed_fixtures(ingest_service, _RETRIEVAL_FIXTURES_PATH)
+        generator = OpenAILLMClient(api_key=args.api_key, model=args.llm_model) if args.judge else None
 
-        routing = compute_routing_accuracy(_ROUTING_GOLD_PATH)
-        hitrate = await compute_retrieval_hitrate(
-            retriever, embedder, _RETRIEVAL_GOLD_PATH, k=args.k
+        routing, hitrate, judge_score = await run_evaluation(
+            ingest_service, retriever, embedder, pool, generator=generator, k=args.k
         )
-
-        judge_score = None
-        if args.judge:
-            generator = OpenAILLMClient(api_key=args.api_key, model=args.llm_model)
-            judge_score = await run_judge(
-                retriever, embedder, generator, _RETRIEVAL_GOLD_PATH, k=args.k
-            )
     finally:
-        await cleanup_fixtures(pool, document_ids)
         await pool.close()
 
     return _print_scorecard(routing, hitrate, args.routing_floor, args.hitrate_floor, judge_score)
