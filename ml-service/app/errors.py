@@ -93,7 +93,12 @@ async def _validation_error_handler(
 
 
 async def _unhandled_error_handler(request: "Request", exc: Exception) -> "JSONResponse":
-    logger.exception("unhandled_error", method=request.method, path=request.url.path)
+    logger.exception(
+        "unhandled_error",
+        request_id=_request_id(request),
+        method=request.method,
+        path=request.url.path,
+    )
     return _envelope("internal_error", "Internal server error", _request_id(request), 500)
 
 

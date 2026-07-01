@@ -33,21 +33,25 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             try:
                 response = await call_next(request)
             except Exception:
-                logger.exception(
+                # No traceback here on purpose: app.errors._unhandled_error_handler (running
+                # outside this middleware, as ServerErrorMiddleware's error_handler) owns the one
+                # authoritative traceback log for unhandled exceptions. Rendering one here too
+                # would duplicate it under a different event name and without the request id.
+                logger.warning(
                     "http_access",
                     method=request.method,
                     path=request.url.path,
                     status=500,
-                    latency_ms=round((time.perf_counter() - start) * 1000, 1),
+                    took_ms=round((time.perf_counter() - start) * 1000, 1),
                 )
                 raise
-            latency_ms = round((time.perf_counter() - start) * 1000, 1)
+            took_ms = round((time.perf_counter() - start) * 1000, 1)
             logger.info(
                 "http_access",
                 method=request.method,
                 path=request.url.path,
                 status=response.status_code,
-                latency_ms=latency_ms,
+                took_ms=took_ms,
             )
             response.headers[_REQUEST_ID_HEADER] = request_id
             return response
