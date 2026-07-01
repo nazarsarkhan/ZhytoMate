@@ -36,3 +36,8 @@ class IngestResponse(BaseModel):
     status: Literal["ingested", "duplicate"]
     document_id: str
     chunks_processed: int
+
+
+class DeleteResponse(BaseModel):
+    document_id: str
+    chunks_deleted: int

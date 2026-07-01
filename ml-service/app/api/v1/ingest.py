@@ -12,7 +12,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from app.deps import get_ingest_service, verify_internal_token
-from app.schemas.ingest import IngestRequest, IngestResponse
+from app.schemas.ingest import DeleteResponse, IngestRequest, IngestResponse
 from app.services.ingest_service import IngestService
 
 router = APIRouter(prefix="/api/v1/knowledge", tags=["knowledge"])
@@ -29,3 +29,13 @@ async def ingest_document(
 ) -> IngestResponse:
     """Ingest a document into the knowledge base. See docs/SYSTEM_DESIGN.md §3.1 for the contract."""
     return await svc.ingest(body)
+
+
+@router.delete("/{document_id}", response_model=DeleteResponse)
+async def delete_document(
+    document_id: str,
+    _: None = Depends(verify_internal_token),
+    svc: IngestService = Depends(get_ingest_service),
+) -> DeleteResponse:
+    """Delete a document and all its chunks (idempotent). See docs/SYSTEM_DESIGN.md §3.1."""
+    return await svc.delete(document_id)

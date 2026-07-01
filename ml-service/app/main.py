@@ -1,24 +1,22 @@
 """
-Purpose:   FastAPI composition root. Lifespan: set offline env before model load, run idempotent
-           migrations, open the asyncpg pool (register_vector), load the e5 model, build the
-           repository, create the Gemini client, wire app.state, start the TTL reaper; tear all
-           down gracefully on shutdown. Registers the error-envelope handlers, the Prometheus
-           instrumentator (/metrics), and mounts the health, knowledge-ingest, chat-query, and
-           vision routers.
+Purpose:   FastAPI composition root. Lifespan: run idempotent migrations, open the asyncpg pool
+           (register_vector), build the OpenAI-backed embedder, build the repository, create the
+           OpenAI client, wire app.state, start the TTL reaper; tear all down gracefully on
+           shutdown. Registers the error-envelope handlers, the Prometheus instrumentator
+           (/metrics), and mounts the health, knowledge-ingest, chat-query, and vision routers.
 Layer:     infra (composition root — the only module that wires across layers)
 May import:   app.config, app.components/*, app.background/*, app.api/*, app.metrics,
-              db.migrations.runner, google-genai, FastAPI, prometheus-fastapi-instrumentator
+              db.migrations.runner, openai, FastAPI, prometheus-fastapi-instrumentator
 Must NOT import:  domain/* directly; tests/*
 """
 from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from google import genai
+from openai import AsyncOpenAI
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from app import metrics  # noqa: F401 — import registers the custom counters at startup
@@ -37,11 +35,6 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     settings = get_settings()
 
-    # 0. Offline flags BEFORE the model load (transformers reads them at load time). The torch
-    #    thread cap is applied effectively inside Embedder via torch.set_num_threads (no env var).
-    os.environ["TRANSFORMERS_OFFLINE"] = str(settings.transformers_offline)
-    os.environ["HF_DATASETS_OFFLINE"] = str(settings.hf_datasets_offline)
-
     # 1. Idempotent migrations (safe to run every startup).
     applied = await run_migrations(settings.database_url)
     if applied:
@@ -50,26 +43,24 @@ async def lifespan(app: FastAPI):
     # 2. DB pool — register_vector runs on every connection.
     pool = await create_pool(settings)
 
-    # 3. Embedding model — sync load is intentional: /health/ready only goes green once the
-    #    model is actually resident in memory.
+    # 3. Embedder — OpenAI-backed (no local model load; embeddings are a network call).
     embedder = Embedder(
-        settings.embed_model,
-        num_threads=settings.torch_num_threads,
+        api_key=settings.openai_api_key,
         cache_maxsize=settings.embed_cache_maxsize,
     )
 
     # 4. Repository.
     repo = KnowledgeRepository(pool)
 
-    # 5. Gemini client (new unified SDK; key passed explicitly rather than via ambient env).
-    gemini = genai.Client(api_key=settings.gemini_api_key)
+    # 5. OpenAI client (async; key passed explicitly rather than via ambient env).
+    openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
 
     # 6. Wire app state.
     app.state.settings = settings
     app.state.pool = pool
     app.state.embedder = embedder
     app.state.repo = repo
-    app.state.gemini = gemini
+    app.state.openai_client = openai_client
 
     # 7. TTL reaper background task.
     reaper = asyncio.create_task(ttl_reaper(repo))
