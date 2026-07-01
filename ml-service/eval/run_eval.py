@@ -73,9 +73,19 @@ def _read_jsonl(path: Path) -> list[dict]:
         return [json.loads(line) for line in handle if line.strip()]
 
 
-async def seed_fixtures(ingest_service: IngestService, fixtures_path: Path) -> list[str]:
-    """Ingest every fixture in fixtures_path, return the list of document_ids seeded (for cleanup)."""
-    document_ids: list[str] = []
+async def seed_fixtures(
+    ingest_service: IngestService, fixtures_path: Path, seeded_ids: list[str] | None = None
+) -> list[str]:
+    """Ingest every fixture in fixtures_path, return the list of document_ids seeded (for cleanup).
+
+    seeded_ids, if given, is appended to IN PLACE as each fixture is ingested, so a caller that
+    holds a reference to it can still see partial progress even if this function raises partway
+    through (e.g. a transient embedding-API failure on fixture 3 of 5) — the return value alone
+    can't do that, since a raised exception means the `return` statement never runs. This is what
+    lets run_evaluation's finally-block cleanup catch fixtures that were already committed to
+    Postgres before the failure, not just a fully-successful seed pass. Defaults to a fresh local
+    list so existing no-arg callers (including direct test calls) are unaffected."""
+    document_ids = seeded_ids if seeded_ids is not None else []
     for row in _read_jsonl(fixtures_path):
         request = IngestRequest(
             document_id=row["document_id"],
@@ -279,12 +289,14 @@ async def run_evaluation(
     """The seed -> evaluate -> cleanup core, decoupled from HOW its dependencies were built. Takes
     already-constructed ingest_service/retriever/embedder/pool (real or fake) so it can be driven
     directly by tests, not just by _run()'s credential-based wiring. Always deletes the seeded
-    eval_fixture_* rows in a finally block, even when scoring raises partway through — that
-    guarantee is the whole point of this function existing as a separate, injectable seam.
-    Returns (routing, hitrate, judge_score); judge_score is None unless a generator is supplied."""
+    eval_fixture_* rows in a finally block, even when SEEDING itself raises partway through (e.g.
+    fixture 3 of 5 hits a transient embedding-API error) — document_ids is passed into
+    seed_fixtures() and mutated in place there, so the rows committed before the failure are still
+    known to this finally block, not just the rows from a fully-successful seed pass. Returns
+    (routing, hitrate, judge_score); judge_score is None unless a generator is supplied."""
     document_ids: list[str] = []
     try:
-        document_ids = await seed_fixtures(ingest_service, fixtures_path)
+        await seed_fixtures(ingest_service, fixtures_path, document_ids)
 
         routing = compute_routing_accuracy(routing_gold_path)
         hitrate = await compute_retrieval_hitrate(retriever, embedder, retrieval_gold_path, k=k)

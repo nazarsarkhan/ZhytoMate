@@ -63,6 +63,30 @@ async def _count_remaining_fixtures(pg_pool) -> int:
     )
 
 
+class _SimulatedSeedFailure(Exception):
+    pass
+
+
+class _FlakyIngestService:
+    """Delegates every call to a real IngestService except the `fail_on_call`-th one, where it
+    raises instead of delegating — simulating a transient embedding-API error partway through
+    seed_fixtures()'s own loop (Finding 1), as opposed to the test above, which simulates a
+    failure during SCORING, after seeding already finished cleanly. The calls that happen before
+    the failure are real IngestService.ingest() calls against real Postgres, so any fixture rows
+    they commit are genuinely there to be leaked if cleanup doesn't account for them."""
+
+    def __init__(self, delegate: IngestService, fail_on_call: int) -> None:
+        self._delegate = delegate
+        self._fail_on_call = fail_on_call
+        self.calls = 0
+
+    async def ingest(self, request):
+        self.calls += 1
+        if self.calls == self._fail_on_call:
+            raise _SimulatedSeedFailure("forced mid-seed error")
+        return await self._delegate.ingest(request)
+
+
 async def test_eval_gate_seeds_scores_and_cleans_up(pg_pool) -> None:
     repo = KnowledgeRepository(pg_pool)
     embedder = DeterministicFakeEmbedder()
@@ -125,4 +149,40 @@ async def test_cleanup_removes_seeded_rows_even_if_evaluation_raises(pg_pool) ->
             retrieval_gold_path=_RETRIEVAL_GOLD_PATH,
         )
 
+    assert await _count_remaining_fixtures(pg_pool) == 0
+
+
+async def test_cleanup_removes_partially_seeded_rows_when_seeding_itself_raises(pg_pool) -> None:
+    """Companion to the test above, closing a DIFFERENT gap: a failure during the seed loop itself
+    (e.g. IngestService.ingest() hitting a transient embedding-API error on fixture 3 of 5), rather
+    than a failure during scoring after seeding already finished. Before the fix, run_evaluation()
+    only learned document_ids via `document_ids = await seed_fixtures(...)` — a single assignment
+    that never executes if seed_fixtures() raises partway through, so the finally block's
+    cleanup_fixtures(pool, document_ids) ran against an empty list and the two fixtures already
+    committed to Postgres before the failure were permanently orphaned. seed_fixtures() now accepts
+    an optional list it mutates in place as it goes, so run_evaluation() can see partial progress
+    even when the loop never returns."""
+    repo = KnowledgeRepository(pg_pool)
+    embedder = DeterministicFakeEmbedder()
+    real_ingest_service = IngestService(repo, embedder, _unused_settings())
+    retriever = HybridRetriever(repo, rrf_k=60)
+
+    # retrieval_fixtures.jsonl has 5 rows; failing on the 3rd call means two real ingest() calls
+    # succeed and commit rows before the failure, matching the reviewer's live-verified scenario.
+    flaky_ingest_service = _FlakyIngestService(real_ingest_service, fail_on_call=3)
+
+    assert await _count_remaining_fixtures(pg_pool) == 0
+
+    with pytest.raises(_SimulatedSeedFailure):
+        await run_evaluation(
+            flaky_ingest_service,
+            retriever,
+            embedder,
+            pg_pool,
+            fixtures_path=_FIXTURES_PATH,
+            routing_gold_path=_ROUTING_GOLD_PATH,
+            retrieval_gold_path=_RETRIEVAL_GOLD_PATH,
+        )
+
+    assert flaky_ingest_service.calls == 3  # proves the failure really landed mid-seed-loop
     assert await _count_remaining_fixtures(pg_pool) == 0
