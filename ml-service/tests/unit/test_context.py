@@ -60,3 +60,7 @@ def test_assemble_context_dedup_runs_before_budget_counting() -> None:
     chunks = [_result(1, "a b c"), _result(1, "a b c"), _result(2, "d e f")]
     kept = assemble_context(chunks, token_budget=6, count_tokens_fn=_count_words)
     assert [c.id for c in kept] == [1, 2]
+
+
+def test_assemble_context_returns_empty_list_for_empty_input() -> None:
+    assert assemble_context([], token_budget=100, count_tokens_fn=_count_words) == []
