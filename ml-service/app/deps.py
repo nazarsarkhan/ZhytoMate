@@ -1,7 +1,12 @@
 """
 Purpose:   FastAPI dependencies: the X-Internal-Token auth guard (constant-time) + service factories
-           built from app.state (pool/embedder/settings wired in the lifespan). Concrete service +
-           repository classes are imported inside the factory bodies to avoid import cycles.
+           built from app.state (pool/embedder/settings wired in the lifespan). get_ingest_service
+           and get_vision_service build a fresh, stateless service on every call; get_rag_service is
+           the one exception — it returns the single RagService built once in app.main's lifespan,
+           because RagService owns the answer cache as internal state and a fresh instance per
+           request would never let a cached answer survive to a later request. Concrete service +
+           repository classes for the per-request factories are imported inside their bodies to
+           avoid import cycles.
 Layer:     api
 May import:   FastAPI, app.config, app.errors, services/* + components/* (inside factory bodies)
 Must NOT import:  api/v1/* routers (avoid cycles); domain/* directly; the hosted-LLM SDK, asyncpg
@@ -42,16 +47,15 @@ def get_ingest_service(request: Request) -> IngestService:
 
 
 def get_rag_service(request: Request) -> RagService:
-    """Build RagService from app.state. Imported here (not at module top) to dodge import cycles."""
-    from app.services.rag_service import RagService
-
-    state = request.app.state
-    return RagService(
-        repo=state.repo,
-        embedder=state.embedder,
-        generator=state.llm_client,
-        settings=state.settings,
-    )
+    """Return the single RagService instance built once in app.main's lifespan and stored on
+    app.state, rather than constructing a new one per call like get_ingest_service/
+    get_vision_service do. RagService owns the answer cache (_AnswerCache) as internal state, and
+    FastAPI invokes a Depends(get_rag_service) factory fresh on every incoming request — building a
+    brand-new RagService here meant a brand-new, empty cache per request, discarded the moment the
+    request finished, so the answer cache could never produce a hit in real traffic. Reading the
+    shared instance off app.state instead fixes that: the cache now lives for the process's
+    lifetime, not a single request's."""
+    return request.app.state.rag_service
 
 
 def get_vision_service(request: Request) -> VisionService:

@@ -1,13 +1,14 @@
 """
 Purpose:   FastAPI composition root. Lifespan: run idempotent migrations, open the asyncpg pool
            (register_vector), build the OpenAI-backed embedder, build the repository, create the
-           OpenAILLMClient (Generator + VisionGenerator), wire app.state, start the TTL reaper; tear
-           all down gracefully on shutdown. Registers the error-envelope handlers, the Prometheus
-           instrumentator (/metrics), and mounts the health, knowledge-ingest, chat-query, and
-           vision routers.
+           OpenAILLMClient (Generator + VisionGenerator), build the single shared RagService (it
+           owns the answer cache, so it must be built once here rather than per-request — see
+           app.deps.get_rag_service), wire app.state, start the TTL reaper; tear all down gracefully
+           on shutdown. Registers the error-envelope handlers, the Prometheus instrumentator
+           (/metrics), and mounts the health, knowledge-ingest, chat-query, and vision routers.
 Layer:     infra (composition root — the only module that wires across layers)
-May import:   app.config, app.components/*, app.background/*, app.api/*, app.metrics,
-              app.middleware, app.observability.logging, db.migrations.runner, FastAPI,
+May import:   app.config, app.components/*, app.services.rag_service, app.background/*, app.api/*,
+              app.metrics, app.middleware, app.observability.logging, db.migrations.runner, FastAPI,
               prometheus-fastapi-instrumentator
 Must NOT import:  domain/* directly; tests/*
 """
@@ -30,6 +31,7 @@ from app.config import get_settings
 from app.errors import register_error_handlers
 from app.middleware import RequestLoggingMiddleware
 from app.observability.logging import configure_logging
+from app.services.rag_service import RagService
 from db.migrations.runner import run_migrations
 
 logger = structlog.get_logger(__name__)
@@ -62,20 +64,27 @@ async def lifespan(app: FastAPI):
     #    both the Generator and VisionGenerator ports.
     llm_client = OpenAILLMClient(api_key=settings.openai_api_key, model=settings.llm_model)
 
-    # 6. Wire app state.
+    # 6. RagService — built once and shared across all requests. It owns the answer cache
+    #    internally (_AnswerCache), so a fresh instance per request would mean a fresh, empty cache
+    #    per request and no answer could ever be reused by a later request. app.deps.get_rag_service
+    #    reads this single instance off app.state instead of constructing its own.
+    rag_service = RagService(repo=repo, embedder=embedder, generator=llm_client, settings=settings)
+
+    # 7. Wire app state.
     app.state.settings = settings
     app.state.pool = pool
     app.state.embedder = embedder
     app.state.repo = repo
     app.state.llm_client = llm_client
+    app.state.rag_service = rag_service
 
-    # 7. TTL reaper background task.
+    # 8. TTL reaper background task.
     reaper = asyncio.create_task(ttl_reaper(repo))
 
     try:
         yield  # app serves requests here
     finally:
-        # 8. Graceful shutdown.
+        # 9. Graceful shutdown.
         reaper.cancel()
         with suppress(asyncio.CancelledError):
             await reaper

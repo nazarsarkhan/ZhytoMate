@@ -10,10 +10,10 @@ Purpose:   Shared fixtures for HTTP contract tests: a real FastAPI app (real rou
            get real DI wiring without touching app/main.py.
 Layer:     test
 May import:   pytest, pytest_asyncio, FastAPI, httpx, app.api.v1.*, app.errors, app.middleware,
-              app.config, app.components.repository, app.observability.logging, tests.fakes/*,
-              tests.integration.conftest (pg_pool only — never the autouse clean_tables, which must
-              stay scoped to tests/integration so plain unit tests never pay for a testcontainers
-              Postgres they don't need)
+              app.config, app.components.repository, app.services.rag_service,
+              app.observability.logging, tests.fakes/*, tests.integration.conftest (pg_pool only —
+              never the autouse clean_tables, which must stay scoped to tests/integration so plain
+              unit tests never pay for a testcontainers Postgres they don't need)
 Must NOT import:  (nothing in app/* may import tests/* — tests are leaves)
 """
 from __future__ import annotations
@@ -29,6 +29,7 @@ from app.config import Settings
 from app.errors import register_error_handlers
 from app.middleware import RequestLoggingMiddleware
 from app.observability.logging import configure_logging
+from app.services.rag_service import RagService
 from tests.fakes.fake_embedder import FakeEmbedder
 from tests.fakes.fake_generator import FakeGenerator
 
@@ -80,7 +81,12 @@ def test_app(pg_pool, _reset_contract_tables) -> FastAPI:  # noqa: F811 — same
     `test_app.state.llm_client` (a different scripted FakeGenerator) or `test_app.state.settings`
     (e.g. a lower rate_limit_per_minute) before making a request — since state is read per-request
     off `request.app.state`, mutating it right up until the request is made is safe and is exactly
-    how a test opts into non-default behaviour without a second fixture."""
+    how a test opts into non-default behaviour without a second fixture. `state.rag_service` is
+    built here (mirroring app.main's lifespan, where it's built once and shared) rather than left
+    for app.deps to construct, since app.deps.get_rag_service now only reads it off app.state — a
+    test that needs different retrieval behaviour (e.g. a FakeKnowledgeRepository seeded with hits,
+    to reach the answer cache without a real Postgres round trip) can replace
+    `test_app.state.rag_service` wholesale the same way other tests replace `state.llm_client`."""
     app = _build_app()
     app.state.settings = Settings(
         database_url="postgresql://unused/unused",
@@ -91,6 +97,12 @@ def test_app(pg_pool, _reset_contract_tables) -> FastAPI:  # noqa: F811 — same
     app.state.repo = KnowledgeRepository(pg_pool)
     app.state.embedder = FakeEmbedder()
     app.state.llm_client = FakeGenerator()
+    app.state.rag_service = RagService(
+        repo=app.state.repo,
+        embedder=app.state.embedder,
+        generator=app.state.llm_client,
+        settings=app.state.settings,
+    )
     return app
 
 
