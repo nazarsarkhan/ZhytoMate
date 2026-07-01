@@ -1,8 +1,8 @@
 import { TelegramClient } from 'gramjs';
 import { StringSession } from 'gramjs/sessions/index.js';
 import { NewMessage } from 'gramjs/events/index.js';
-import { normalizeItem } from './normalizer.js';
-import { enqueueItem, enqueueItems } from './sender.js';
+import { normalizeItem } from '../pipeline/normalizer.js';
+import { enqueueItem, enqueueItems } from '../delivery/sender.js';
 
 let client;
 const defaultBackfillDays = 30;

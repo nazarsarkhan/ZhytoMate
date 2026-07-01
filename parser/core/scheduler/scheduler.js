@@ -1,6 +1,6 @@
 import cron from 'node-cron';
-import { normalizeItems } from './normalizer.js';
-import { enqueueItems } from './sender.js';
+import { normalizeItems } from '../pipeline/normalizer.js';
+import { enqueueItems } from '../delivery/sender.js';
 
 async function runWebPlugin(plugin) {
   try {

@@ -1,9 +1,9 @@
 import 'dotenv/config';
 import express from 'express';
 import { webPlugins, tgPlugins } from './config/sources.js';
-import { startScheduler } from './core/scheduler.js';
-import { startTelegramClient } from './core/tg-client.js';
-import { closeMongo, getMongoStatus, initMongo } from './core/mongo.js';
+import { startScheduler } from './core/scheduler/scheduler.js';
+import { startTelegramClient } from './core/telegram/tg-client.js';
+import { closeMongo, getMongoStatus, initMongo } from './core/storage/mongo.js';
 
 const port = process.env.PORT || 3000;
 

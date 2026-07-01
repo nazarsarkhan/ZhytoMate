@@ -2,8 +2,8 @@ import {
   markScrapedItemDelivered,
   releaseScrapedItemReservation,
   reserveScrapedItem,
-} from './mongo.js';
-import { buildCollectorOutputs } from './ai-layer.js';
+} from '../storage/mongo.js';
+import { buildCollectorOutputs } from '../ai/ai-layer.js';
 
 const retryDelayMs = 5000;
 const queue = [];

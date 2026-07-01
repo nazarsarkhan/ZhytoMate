@@ -2,20 +2,21 @@
 
 ## Project Structure & Module Organization
 
-This repository currently contains a Node.js scraper/parser service in `scraper/`.
-Core runtime code lives in `scraper/core/`: scheduling, Telegram ingestion,
-normalization, and delivery to RAG. Source plugins live in
-`scraper/plugins/web/` and `scraper/plugins/tg/`. Enabled plugin lists are
-configured in `scraper/config/sources.js`. The service entry point is
-`scraper/index.js`. Environment defaults are documented in
-`scraper/.env.example`.
+This repository contains a Node.js scraper/parser service at the repository
+root. Core runtime code lives in domain folders under `core/`: `telegram/` for
+GramJS ingestion, `scheduler/` for cron web jobs, `pipeline/` for normalization,
+`ai/` for enrichment, `ingest/` for RAG payload mapping, `news/` for news-block
+payloads, `delivery/` for queue/output handling, and `storage/` for Mongo
+dedupe. Source plugins live in `plugins/web/` and `plugins/tg/`. Enabled plugin
+lists are configured in `config/sources.js`. The service entry point is
+`index.js`. Environment defaults are documented in `.env.example`.
 
 Tests are not yet present. When adding them, place focused unit tests near the
-module they cover or under a dedicated `scraper/tests/` directory.
+module they cover or under a dedicated `tests/` directory.
 
 ## Build, Test, and Development Commands
 
-Run commands from `scraper/`:
+Run commands from the repository root:
 
 ```bash
 npm install
@@ -55,7 +56,7 @@ testing performed, and linked issues when applicable.
 ## Security & Configuration Tips
 
 Do not commit real Telegram credentials or session strings. Copy
-`scraper/.env.example` to `.env` locally and set `TG_API_ID`, `TG_API_HASH`,
+`.env.example` to `.env` locally and set `TG_API_ID`, `TG_API_HASH`,
 `TG_SESSION`, and `RAG_URL`. Keep example plugins safe and non-destructive; real
 plugins should handle network errors and return only normalized content needed
 for ingestion.
