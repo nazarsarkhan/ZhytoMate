@@ -9,8 +9,8 @@ Purpose:   RAG query router (§3.2, §4.2): rate-limit -> canonicalize district 
            not over components directly.
 Layer:     service
 May import:   domain/{classifier, districts}, schemas/query, app.protocols (Generator port, for the
-              constructor signature only), components/repository + embedder + hybrid_retriever,
-              pipeline/{base, simple, agent}, config, errors, metrics
+              constructor signature only), components/repository + embedder + hybrid_retriever +
+              rate_limiter, pipeline/{base, simple, agent}, config, errors, metrics
 Must NOT import:  other services/*, api/*, FastAPI/Starlette, asyncpg directly, openai directly (LLM
               failure classification now lives in pipeline.base._fallback_reason)
 """
@@ -23,6 +23,7 @@ from collections import OrderedDict
 
 from app.components.embedder import Embedder
 from app.components.hybrid_retriever import HybridRetriever
+from app.components.rate_limiter import current_window, evaluate, hash_user_id
 from app.components.repository import KnowledgeRepository
 from app.config import Settings
 from app.domain.classifier import QueryRoute, classify_query
@@ -101,11 +102,13 @@ class RagService:
         start = time.perf_counter()
         user_hash = self._hash_user(request.user_id)
 
-        # 1. Per-user rate limit (Postgres fixed-window). Exceeded -> 429 via the error handler.
-        allowed = await self._repo.check_and_increment_rate_limit(
-            request.user_id, self._settings.rate_limit_per_minute
-        )
-        if not allowed:
+        # 1. Per-user rate limit (Postgres fixed-window, hashed key). Exceeded -> 429 via the
+        #    error handler. The repository only persists the count; rate_limiter.evaluate owns
+        #    the allow/deny policy.
+        hashed_key = hash_user_id(request.user_id)
+        count = await self._repo.incr_rate_limit_counter(hashed_key, current_window())
+        decision = evaluate(count, self._settings.rate_limit_per_minute)
+        if not decision.allowed:
             raise RateLimitedError("Зачекайте трохи — перевищено ліміт запитів.")
 
         # 2. Canonicalize district (unknown -> city-wide + warn, §2.6).
