@@ -1,6 +1,7 @@
 """
-Purpose:   Scriptable/raising fake Gemini client matching the gemini component interface (canned text or injected error).
+Purpose:   Scriptable/raising fake OpenAI client matching the chat-completions interface used by the
+           services (canned content or injected error). Keeps CI offline — no real LLM calls.
 Layer:     test
-May import:   stdlib, app.components.gemini (interface/type only), schemas/*
-Must NOT import:  google-genai (the whole point is to avoid the real LLM in CI)
+May import:   stdlib, app.services (interface/type only), schemas/*
+Must NOT import:  openai (the whole point is to avoid the real LLM in CI)
 """

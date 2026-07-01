@@ -1,12 +1,12 @@
 """
 Purpose:   RAG query orchestration (§3.2, §4.2): rate-limit -> canonicalize district -> classify ->
            answer-cache -> embed -> hybrid retrieve (dense+lexical, concurrent) -> RRF fuse ->
-           confidence gate (dense top-1) -> generate (Gemini, timeout+retry) -> extractive fallback
-           on any LLM error. Only the SIMPLE path is implemented; COMPLEX falls back to SIMPLE until
-           the agent pipeline lands (AGENT_RAG_ENABLED). Pure orchestration over injected deps.
+           confidence gate (dense top-1) -> generate (OpenAI chat, timeout+retry) -> extractive
+           fallback on any LLM error. Only the SIMPLE path is implemented; COMPLEX falls back to
+           SIMPLE until the agent pipeline lands (AGENT_RAG_ENABLED). Pure orchestration over deps.
 Layer:     service
 May import:   domain/* (fusion, classifier, districts, prompts), schemas/query, components/repository
-              + embedder, config, errors, google-genai
+              + embedder, config, errors, openai
 Must NOT import:  other services/*, api/*, FastAPI/Starlette, asyncpg directly
 """
 from __future__ import annotations
@@ -18,9 +18,7 @@ import random
 import time
 from collections import OrderedDict
 
-from google import genai
-from google.genai import types
-from google.genai.errors import APIError
+from openai import APIError, APITimeoutError, AsyncOpenAI
 
 from app.components.embedder import Embedder
 from app.components.repository import KnowledgeRepository
@@ -33,7 +31,7 @@ from app.errors import RateLimitedError
 from app.metrics import (
     degraded_responses,
     district_unmapped,
-    gemini_calls,
+    llm_calls,
     retrieval_empty,
     retrieval_top1_sim,
 )
@@ -56,7 +54,7 @@ _FALLBACK_CONFIDENCE_CAP = 0.5
 
 class _AnswerCache:
     """TTL + LRU cache over QueryResponse, keyed by normalized query + district slug. Avoids redundant
-    Gemini calls for repeated questions. Single-process asyncio use only — not thread-safe."""
+    LLM calls for repeated questions. Single-process asyncio use only — not thread-safe."""
 
     def __init__(self, maxsize: int, ttl_seconds: int) -> None:
         self._maxsize = maxsize
@@ -93,12 +91,12 @@ class RagService:
         self,
         repo: KnowledgeRepository,
         embedder: Embedder,
-        gemini: genai.Client,
+        openai_client: AsyncOpenAI,
         settings: Settings,
     ) -> None:
         self._repo = repo
         self._embedder = embedder
-        self._gemini = gemini
+        self._client = openai_client
         self._settings = settings
         self._cache = _AnswerCache(
             maxsize=settings.answer_cache_maxsize,
@@ -134,7 +132,7 @@ class RagService:
             logger.info("query_cache_hit user=%s route=%s", user_hash, route.value)
             return cached.model_copy(update={"route": route})
 
-        # 5. Embed the query (e5 'query:' prefix handled inside the embedder).
+        # 5. Embed the query (OpenAI embeddings — no query:/passage: prefix needed).
         query_vec = await self._embedder.encode_query(request.user_query)
 
         # 6. Hybrid retrieval — both legs concurrently — then RRF fuse.
@@ -163,20 +161,20 @@ class RagService:
 
         # 8. Generate, or degrade to extractive fallback on ANY LLM error (never 5xx the caller).
         route_label = route.value.lower()
-        gemini_ok = True
+        llm_ok = True
         try:
             answer = await self._generate(context_chunks, request.user_query)
             confidence = round(top1_sim, 2)
-            gemini_calls.labels(route=route_label, outcome="ok").inc()
+            llm_calls.labels(route=route_label, outcome="ok").inc()
         except Exception as exc:  # noqa: BLE001 — LLM is the least reliable hop; demo must stay alive (ADR-007)
-            gemini_ok = False
+            llm_ok = False
             answer = _FALLBACK_PREFIX + top_results[0].text
             confidence = min(round(top1_sim, 2), _FALLBACK_CONFIDENCE_CAP)
             reason = self._fallback_reason(exc)
-            gemini_calls.labels(route=route_label, outcome="fallback").inc()
+            llm_calls.labels(route=route_label, outcome="fallback").inc()
             degraded_responses.labels(reason=reason).inc()
             logger.warning(
-                "query_gemini_fallback user=%s err=%s reason=%s",
+                "query_llm_fallback user=%s err=%s reason=%s",
                 user_hash, type(exc).__name__, reason,
             )
 
@@ -197,57 +195,56 @@ class RagService:
         )
         self._cache.put(request.user_query, district_slug, response)
         logger.info(
-            "query_ok user=%s district=%s route=%s top1=%.3f n_chunks=%d gemini_ok=%s took=%.1fms",
-            user_hash, district_slug, route.value, top1_sim, len(context_chunks), gemini_ok,
+            "query_ok user=%s district=%s route=%s top1=%.3f n_chunks=%d llm_ok=%s took=%.1fms",
+            user_hash, district_slug, route.value, top1_sim, len(context_chunks), llm_ok,
             self._elapsed_ms(start),
         )
         logger.debug("query_text user=%s text=%r", user_hash, request.user_query)
         return response
 
     async def _generate(self, context_chunks: list[str], question: str) -> str:
-        """Call Gemini async with an 8s per-attempt timeout and up to 2 retries on transient status."""
+        """Call OpenAI chat async with an 8s per-attempt timeout and up to 2 retries on a transient
+        status (429/5xx) or a timeout."""
         prompt = build_rag_prompt(context_chunks, question)
-        config = types.GenerateContentConfig(
-            temperature=_GENERATION_TEMPERATURE,
-            max_output_tokens=_MAX_OUTPUT_TOKENS,
-        )
         last_attempt = len(_RETRY_BACKOFF_S)  # initial attempt index 0 + len(...) retries
         for attempt in range(last_attempt + 1):
             try:
                 response = await asyncio.wait_for(
-                    self._gemini.aio.models.generate_content(
-                        model=self._settings.gemini_model,
-                        contents=prompt,
-                        config=config,
+                    self._client.chat.completions.create(
+                        model=self._settings.llm_model,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=_GENERATION_TEMPERATURE,
+                        max_tokens=_MAX_OUTPUT_TOKENS,
                     ),
                     timeout=_GENERATE_TIMEOUT_S,
                 )
-                return response.text
-            except APIError as exc:
-                if exc.code not in _RETRYABLE_STATUS or attempt == last_attempt:
-                    raise  # non-transient 4xx, or retries exhausted
-                await self._sleep_backoff(attempt, f"status={exc.code}")
-            except (asyncio.TimeoutError, ConnectionError):
+                return response.choices[0].message.content or ""
+            except (APITimeoutError, asyncio.TimeoutError):
                 if attempt == last_attempt:
                     raise
                 await self._sleep_backoff(attempt, "timeout")
+            except APIError as exc:
+                status = getattr(exc, "status_code", None)
+                if status not in _RETRYABLE_STATUS or attempt == last_attempt:
+                    raise  # non-transient / no-status error, or retries exhausted
+                await self._sleep_backoff(attempt, f"status={status}")
         raise RuntimeError("unreachable: retry loop exhausted without return or raise")
 
     @staticmethod
     async def _sleep_backoff(attempt: int, reason: str) -> None:
         """Jittered exponential backoff between retries (±20% jitter)."""
         delay = _RETRY_BACKOFF_S[attempt] * random.uniform(0.8, 1.2)
-        logger.warning("gemini_retry attempt=%d reason=%s delay=%.2fs", attempt + 1, reason, delay)
+        logger.warning("llm_retry attempt=%d reason=%s delay=%.2fs", attempt + 1, reason, delay)
         await asyncio.sleep(delay)
 
     @staticmethod
     def _fallback_reason(exc: Exception) -> str:
-        """Classify a Gemini failure for the degraded_responses metric."""
-        if isinstance(exc, APIError) and getattr(exc, "code", None) == 429:
-            return "gemini_quota"
-        if isinstance(exc, (asyncio.TimeoutError, TimeoutError)):
-            return "gemini_timeout"
-        return "gemini_error"
+        """Classify an LLM failure for the degraded_responses metric."""
+        if isinstance(exc, APIError) and getattr(exc, "status_code", None) == 429:
+            return "llm_quota"
+        if isinstance(exc, (APITimeoutError, asyncio.TimeoutError, TimeoutError)):
+            return "llm_timeout"
+        return "llm_error"
 
     @staticmethod
     def _hash_user(user_id: str) -> str:
