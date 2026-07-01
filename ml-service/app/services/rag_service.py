@@ -1,57 +1,41 @@
 """
-Purpose:   RAG query orchestration (§3.2, §4.2): rate-limit -> canonicalize district -> classify ->
-           answer-cache -> embed -> hybrid retrieve (dense+lexical, concurrent) -> RRF fuse ->
-           confidence gate (dense top-1) -> generate (via the Generator port, timeout+retry owned by
-           the adapter) -> extractive fallback on any LLM error. Only the SIMPLE path is
-           implemented; COMPLEX falls back to SIMPLE until the agent pipeline lands
-           (AGENT_RAG_ENABLED). Pure orchestration over deps.
+Purpose:   RAG query router (§3.2, §4.2): rate-limit -> canonicalize district -> classify -> answer-
+           cache -> select SimpleRAGPipeline or AgentRAGPipeline (SIMPLE always; COMPLEX only reaches
+           the agent when AGENT_RAG_ENABLED, otherwise falls back to simple) -> map the pipeline's
+           RagResult onto the QueryResponse HTTP contract. All retrieval/generation/fallback logic
+           now lives in pipeline/* — HybridRetriever owns dense+lexical+RRF, and
+           pipeline.base.run_shared_tail owns the confidence gate -> generate -> extractive-fallback
+           tail shared by both pipelines — so this module is pure orchestration over the pipelines,
+           not over components directly.
 Layer:     service
-May import:   domain/* (fusion, classifier, districts, prompts, confidence, context), schemas/query,
-              app.protocols (Generator port), components/repository + embedder, config, errors;
-              openai (exception types only, for classifying a fallback reason — never to make an
-              API call directly)
-Must NOT import:  other services/*, api/*, FastAPI/Starlette, asyncpg directly
+May import:   domain/{classifier, districts}, schemas/query, app.protocols (Generator port, for the
+              constructor signature only), components/repository + embedder + hybrid_retriever,
+              pipeline/{base, simple, agent}, config, errors, metrics
+Must NOT import:  other services/*, api/*, FastAPI/Starlette, asyncpg directly, openai directly (LLM
+              failure classification now lives in pipeline.base._fallback_reason)
 """
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import logging
 import time
 from collections import OrderedDict
 
-from openai import APIError, APITimeoutError
-
 from app.components.embedder import Embedder
+from app.components.hybrid_retriever import HybridRetriever
 from app.components.repository import KnowledgeRepository
 from app.config import Settings
 from app.domain.classifier import QueryRoute, classify_query
-from app.domain.confidence import ConfidenceBand, confidence_band
-from app.domain.context import CONTEXT_TOKEN_BUDGET, assemble_context
 from app.domain.districts import canonicalize_district
-from app.domain.fusion import reciprocal_rank_fusion
-from app.domain.prompts import build_rag_prompt
 from app.errors import RateLimitedError
-from app.metrics import (
-    degraded_responses,
-    district_unmapped,
-    llm_calls,
-    retrieval_empty,
-    retrieval_top1_sim,
-)
+from app.metrics import district_unmapped, query_route_total
+from app.pipeline.agent import AgentRAGPipeline
+from app.pipeline.base import RAGPipeline, RagContext
+from app.pipeline.simple import SimpleRAGPipeline
 from app.protocols import Generator
-from app.schemas.query import QueryRequest, QueryResponse, SourceUsed
+from app.schemas.query import QueryRequest, QueryResponse
 
 logger = logging.getLogger(__name__)
-
-_NO_INFO_ANSWER = "Поки що немає інформації за цим запитом."
-_FALLBACK_PREFIX = "За наявними даними: "
-
-_RETRIEVE_LIMIT = 10
-_GENERATE_TIMEOUT_S = 8.0
-_GENERATION_TEMPERATURE = 0.3
-_MAX_OUTPUT_TOKENS = 1024
-_FALLBACK_CONFIDENCE_CAP = 0.5
 
 
 class _AnswerCache:
@@ -97,16 +81,23 @@ class RagService:
         settings: Settings,
     ) -> None:
         self._repo = repo
-        self._embedder = embedder
-        self._generator = generator
         self._settings = settings
         self._cache = _AnswerCache(
             maxsize=settings.answer_cache_maxsize,
             ttl_seconds=settings.answer_cache_ttl_seconds,
         )
+        retriever = HybridRetriever(repo, settings.rrf_k)
+        self._simple = SimpleRAGPipeline(
+            embedder, retriever, generator, settings.sim_gate, settings.sim_high
+        )
+        self._agent = AgentRAGPipeline(
+            embedder, retriever, generator, settings.sim_gate, settings.sim_high,
+            settings.agent_max_subqueries,
+        )
 
     async def query(self, request: QueryRequest) -> QueryResponse:
-        """Full SIMPLE RAG pipeline (§4.2). LLM failures degrade to extractive fallback, never 5xx."""
+        """Route to SimpleRAGPipeline or AgentRAGPipeline (§4.2). LLM failures degrade to extractive
+        fallback inside the pipeline's shared tail, never 5xx."""
         start = time.perf_counter()
         user_hash = self._hash_user(request.user_id)
 
@@ -123,10 +114,16 @@ class RagService:
             logger.warning("query_unknown_district raw=%r", request.district)
             district_unmapped.labels(boundary="query").inc()
 
-        # 3. Route. COMPLEX falls back to SIMPLE until the agent pipeline is enabled.
+        # 3. Route. COMPLEX only reaches the agent pipeline when the feature flag is on; the response
+        #    still carries the classifier's real decision either way (observability, §4.2).
         route = classify_query(request.user_query)
-        if route is QueryRoute.COMPLEX and not self._settings.agent_rag_enabled:
-            logger.info("query_complex_fallback_to_simple user=%s", user_hash)
+        query_route_total.labels(route=route.value).inc()
+        if route is QueryRoute.COMPLEX and self._settings.agent_rag_enabled:
+            pipeline: RAGPipeline = self._agent
+        else:
+            if route is QueryRoute.COMPLEX:
+                logger.info("query_complex_fallback_to_simple user=%s", user_hash)
+            pipeline = self._simple
 
         # 4. Answer cache (route re-stamped on the cached copy for observability).
         cached = self._cache.get(request.user_query, district_slug)
@@ -134,98 +131,38 @@ class RagService:
             logger.info("query_cache_hit user=%s route=%s", user_hash, route.value)
             return cached.model_copy(update={"route": route})
 
-        # 5. Embed the query (OpenAI embeddings — no query:/passage: prefix needed).
-        query_vec = await self._embedder.encode_query(request.user_query)
+        # 5. Run the selected pipeline — embedding, retrieval, and the shared confidence-gate ->
+        #    generate -> extractive-fallback tail all live behind this call.
+        ctx = RagContext(user_query=request.user_query, district_slug=district_slug, route=route)
+        result = await pipeline.run(ctx)
 
-        # 6. Hybrid retrieval — both legs concurrently — then RRF fuse.
-        dense, lexical = await asyncio.gather(
-            self._repo.retrieve_dense(query_vec, district_slug, limit=_RETRIEVE_LIMIT),
-            self._repo.retrieve_lexical(request.user_query, district_slug, limit=_RETRIEVE_LIMIT),
+        # 6. Map to the HTTP contract, log (user_id hashed; raw query only at DEBUG).
+        response = QueryResponse(
+            answer=result.answer,
+            sources_used=result.sources_used,
+            confidence=result.confidence,
+            route=result.route,
         )
-        fused = reciprocal_rank_fusion(dense, lexical, k=self._settings.rrf_k)
-
-        # 7. Confidence gate on the DENSE top-1 cosine (never the RRF score). Empty/low -> no-info,
-        #    and the LLM is NOT called.
-        top1_sim = dense[0].similarity if dense else 0.0
-        retrieval_top1_sim.observe(top1_sim)
-        band = confidence_band(top1_sim, self._settings.sim_gate, self._settings.sim_high)
-        if not fused or band is ConfidenceBand.NO_INFO:
-            retrieval_empty.inc()
+        if result.debug.get("no_info"):
+            # No-info answers are never cached — cheap to recompute (no LLM call was made), and
+            # caching one for the TTL window would risk serving a stale "no info" after the KB
+            # picks up new content that would have answered this same query.
             logger.info(
                 "query_no_info user=%s district=%s route=%s top1=%.3f took=%.1fms",
-                user_hash, district_slug, route.value, top1_sim, self._elapsed_ms(start),
+                user_hash, district_slug, route.value, result.debug.get("top1_sim", 0.0),
+                self._elapsed_ms(start),
             )
-            return QueryResponse(
-                answer=_NO_INFO_ANSWER, sources_used=[], confidence=0.0, route=route
+        else:
+            self._cache.put(request.user_query, district_slug, response)
+            logger.info(
+                "query_ok user=%s district=%s route=%s top1=%.3f n_chunks=%d llm_ok=%s "
+                "llm_retries=%d took=%.1fms",
+                user_hash, district_slug, route.value, result.debug.get("top1_sim", 0.0),
+                result.debug.get("n_chunks", 0), result.debug.get("llm_ok"),
+                result.debug.get("llm_retries", 0), self._elapsed_ms(start),
             )
-
-        top_results = assemble_context(fused, CONTEXT_TOKEN_BUDGET, self._embedder.count_tokens)
-        context_chunks = [result.text for result in top_results]
-
-        # 8. Generate, or degrade to extractive fallback on ANY LLM error (never 5xx the caller).
-        route_label = route.value.lower()
-        llm_ok = True
-        retries = 0
-        try:
-            answer, retries = await self._generate(context_chunks, request.user_query)
-            confidence = round(top1_sim, 2)
-            llm_calls.labels(route=route_label, outcome="ok").inc()
-        except Exception as exc:  # noqa: BLE001 — LLM is the least reliable hop; demo must stay alive (ADR-007)
-            llm_ok = False
-            answer = _FALLBACK_PREFIX + top_results[0].text
-            confidence = min(round(top1_sim, 2), _FALLBACK_CONFIDENCE_CAP)
-            reason = self._fallback_reason(exc)
-            llm_calls.labels(route=route_label, outcome="fallback").inc()
-            degraded_responses.labels(reason=reason).inc()
-            logger.warning(
-                "query_llm_fallback user=%s err=%s reason=%s",
-                user_hash, type(exc).__name__, reason,
-            )
-
-        # 9. Sources from the same chunks shown to the model.
-        sources = [
-            SourceUsed(
-                source=result.source,
-                doc_type=result.doc_type,
-                district=result.district,
-                similarity=round(result.similarity, 4),
-            )
-            for result in top_results
-        ]
-
-        # 10. Assemble, cache, log (user_id hashed; raw query only at DEBUG).
-        response = QueryResponse(
-            answer=answer, sources_used=sources, confidence=confidence, route=route
-        )
-        self._cache.put(request.user_query, district_slug, response)
-        logger.info(
-            "query_ok user=%s district=%s route=%s top1=%.3f n_chunks=%d llm_ok=%s "
-            "llm_retries=%d took=%.1fms",
-            user_hash, district_slug, route.value, top1_sim, len(context_chunks), llm_ok,
-            retries, self._elapsed_ms(start),
-        )
         logger.debug("query_text user=%s text=%r", user_hash, request.user_query)
         return response
-
-    async def _generate(self, context_chunks: list[str], question: str) -> tuple[str, int]:
-        """Build the prompt and delegate to the Generator port — timeout + retry/backoff live in the
-        adapter (OpenAILLMClient), not here. Returns (answer_text, retry_count)."""
-        prompt = build_rag_prompt(context_chunks, question)
-        return await self._generator.generate(
-            prompt,
-            temperature=_GENERATION_TEMPERATURE,
-            max_tokens=_MAX_OUTPUT_TOKENS,
-            timeout_s=_GENERATE_TIMEOUT_S,
-        )
-
-    @staticmethod
-    def _fallback_reason(exc: Exception) -> str:
-        """Classify an LLM failure for the degraded_responses metric."""
-        if isinstance(exc, APIError) and getattr(exc, "status_code", None) == 429:
-            return "llm_quota"
-        if isinstance(exc, (APITimeoutError, asyncio.TimeoutError, TimeoutError)):
-            return "llm_timeout"
-        return "llm_error"
 
     @staticmethod
     def _hash_user(user_id: str) -> str:
