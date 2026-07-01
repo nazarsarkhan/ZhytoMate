@@ -7,15 +7,16 @@ Purpose:   FastAPI composition root. Lifespan: run idempotent migrations, open t
            vision routers.
 Layer:     infra (composition root — the only module that wires across layers)
 May import:   app.config, app.components/*, app.background/*, app.api/*, app.metrics,
-              db.migrations.runner, FastAPI, prometheus-fastapi-instrumentator
+              app.middleware, app.observability.logging, db.migrations.runner, FastAPI,
+              prometheus-fastapi-instrumentator
 Must NOT import:  domain/* directly; tests/*
 """
 from __future__ import annotations
 
 import asyncio
-import logging
 from contextlib import asynccontextmanager
 
+import structlog
 from fastapi import FastAPI
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -27,19 +28,22 @@ from app.components.llm import OpenAILLMClient
 from app.components.repository import KnowledgeRepository, create_pool
 from app.config import get_settings
 from app.errors import register_error_handlers
+from app.middleware import RequestLoggingMiddleware
+from app.observability.logging import configure_logging
 from db.migrations.runner import run_migrations
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    configure_logging()  # must run before anything else can log
     settings = get_settings()
 
     # 1. Idempotent migrations (safe to run every startup).
     applied = await run_migrations(settings.database_url)
     if applied:
-        logger.info("applied migrations: %s", ", ".join(applied))
+        logger.info("migrations_applied", migrations=applied)
 
     # 2. DB pool — register_vector runs on every connection.
     pool = await create_pool(settings)
@@ -82,6 +86,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan, title="ZhytoMate ML Service")
 register_error_handlers(app)
+app.add_middleware(RequestLoggingMiddleware)  # X-Request-ID propagation + per-request access log
 Instrumentator().instrument(app).expose(app)  # adds /metrics (HTTP latency/throughput)
 app.include_router(health.router)
 app.include_router(ingest.router)
