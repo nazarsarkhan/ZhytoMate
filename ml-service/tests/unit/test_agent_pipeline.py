@@ -1,23 +1,32 @@
 """
-Purpose:   Unit: AgentRAGPipeline._decompose/_rewrite parsing and fallback behavior. A valid JSON
-           array becomes the sub-query list (capped at max_subqueries, whitespace-stripped, blanks
-           dropped); malformed JSON, non-list JSON, a list with a non-string element, an empty list,
-           or an all-blank list all degrade to [query] rather than raising. _rewrite returns the
-           model's stripped text on success, or the original sub-query unchanged on any failure or
-           an empty-after-strip reply.
+Purpose:   Unit: AgentRAGPipeline._decompose/_rewrite parsing and fallback behavior, plus the
+           module-level pure helper _interleave_by_rank (round-robin merge of per-sub-query fused
+           lists). A valid JSON array becomes the sub-query list (capped at max_subqueries,
+           whitespace-stripped, blanks dropped); malformed JSON, non-list JSON, a list with a
+           non-string element, an empty list, or an all-blank list all degrade to [query] rather
+           than raising. _rewrite returns the model's stripped text on success, or the original
+           sub-query unchanged on any failure or an empty-after-strip reply.
 Layer:     test
-May import:   pytest, app.pipeline.agent, tests.fakes.fake_generator, tests.fakes.fake_embedder,
-              tests.fakes.fake_retriever
+May import:   pytest, app.pipeline.agent, app.schemas.retrieval, tests.fakes.fake_generator,
+              tests.fakes.fake_embedder, tests.fakes.fake_retriever
 Must NOT import:  real openai, real asyncpg (injected fakes only)
 """
 from __future__ import annotations
 
-from app.pipeline.agent import AgentRAGPipeline
+from app.pipeline.agent import AgentRAGPipeline, _interleave_by_rank
+from app.schemas.retrieval import RetrievalOutcome, RetrievalResult
 from tests.fakes.fake_embedder import FakeEmbedder
 from tests.fakes.fake_generator import FakeGenerator
 from tests.fakes.fake_retriever import FakeRetriever
 
 _QUERY = "Коли вивезуть сміття і коли ввімкнуть світло?"
+
+
+def _hit(chunk_id: int) -> RetrievalResult:
+    return RetrievalResult(
+        id=chunk_id, text="текст", source="src", doc_type="instruction", district=None,
+        similarity=0.9,
+    )
 
 
 def _pipeline(generator: FakeGenerator, max_subqueries: int = 3) -> AgentRAGPipeline:
@@ -94,3 +103,27 @@ async def test_rewrite_keeps_original_when_model_returns_blank() -> None:
     generator = FakeGenerator(result=("   ", 0))
     rewritten = await _pipeline(generator)._rewrite("Коли сміття?")
     assert rewritten == "Коли сміття?"
+
+
+def test_interleave_by_rank_takes_rank_zero_from_every_outcome_before_rank_one() -> None:
+    outcome_a = RetrievalOutcome(dense=[], fused=[_hit(1), _hit(2), _hit(3)])
+    outcome_b = RetrievalOutcome(dense=[], fused=[_hit(4)])
+
+    interleaved = _interleave_by_rank([outcome_a, outcome_b])
+
+    # rank 0 of both outcomes first (1, 4), then rank 1 of A (2) — B has no rank 1 to contribute —
+    # then rank 2 of A (3). B's only chunk is never starved out by A's lower-ranked chunks.
+    assert [chunk.id for chunk in interleaved] == [1, 4, 2, 3]
+
+
+def test_interleave_by_rank_returns_empty_list_for_no_outcomes() -> None:
+    assert _interleave_by_rank([]) == []
+
+
+def test_interleave_by_rank_handles_an_outcome_with_no_fused_hits() -> None:
+    outcome_a = RetrievalOutcome(dense=[], fused=[_hit(1)])
+    outcome_b = RetrievalOutcome(dense=[], fused=[])  # e.g. a dry or failed sub-query
+
+    interleaved = _interleave_by_rank([outcome_a, outcome_b])
+
+    assert [chunk.id for chunk in interleaved] == [1]

@@ -4,11 +4,14 @@ Purpose:   AgentRAGPipeline(RAGPipeline): COMPLEX path via query DECOMPOSITION (
            + hybrid-retrieve each IN PARALLEL (asyncio.gather) -> is_sufficient per sub-query,
            re-query at most ONE dry sub-query (a single SHARED re-query budget across the whole
            request — if several sub-queries are dry, only the FIRST by list order is rewritten and
-           re-retried, the rest keep their original dry result) -> merge+dedup happens inside the
-           shared tail's assemble_context -> one synthesis call. Worst case: 1 (decompose) + 1
-           (rewrite) + 1 (synthesis) = 3 Generator calls. AGENT_RAG_ENABLED gating and the
-           fallback-to-SimpleRAGPipeline decision live in app.services.rag_service (the router), NOT
-           here — AgentRAGPipeline.run() always runs the full agent flow when called.
+           re-retried, the rest keep their original dry result) -> the per-sub-query fused lists are
+           rank-interleaved (round-robin: every sub-query's rank-0 chunk before any sub-query's
+           rank-1 chunk) so no single sub-query can starve the others out of the shared tail's token
+           budget -> merge+dedup happens inside the shared tail's assemble_context -> one synthesis
+           call. Worst case: 1 (decompose) + 1 (rewrite) + 1 (synthesis) = 3 Generator calls.
+           AGENT_RAG_ENABLED gating and the fallback-to-SimpleRAGPipeline decision live in
+           app.services.rag_service (the router), NOT here — AgentRAGPipeline.run() always runs the
+           full agent flow when called.
 Layer:     pipeline
 May import:   pipeline/base, protocols (Embedder/Retriever/Generator), domain/{sufficiency,prompts},
               schemas/retrieval, app.metrics, stdlib (asyncio, json, logging)
@@ -25,7 +28,7 @@ from app.domain.sufficiency import is_sufficient
 from app.metrics import agent_subqueries
 from app.pipeline.base import RETRIEVE_LIMIT, RAGPipeline, RagContext, RagResult, run_shared_tail
 from app.protocols import Embedder, Generator, Retriever
-from app.schemas.retrieval import RetrievalOutcome
+from app.schemas.retrieval import RetrievalOutcome, RetrievalResult
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +41,20 @@ _DECOMPOSE_TIMEOUT_S = 6.0
 _REWRITE_TEMPERATURE = 0.2
 _REWRITE_MAX_TOKENS = 60
 _REWRITE_TIMEOUT_S = 4.0
+
+
+def _interleave_by_rank(outcomes: list[RetrievalOutcome]) -> list[RetrievalResult]:
+    """Round-robin merge: rank-0 chunk from every sub-query first, then rank-1 from every
+    sub-query, etc. Ensures no single sub-query's results can starve the others out of the
+    downstream token budget before assemble_context's own dedup/trim runs."""
+    lists = [outcome.fused for outcome in outcomes]
+    max_len = max((len(lst) for lst in lists), default=0)
+    interleaved: list[RetrievalResult] = []
+    for i in range(max_len):
+        for lst in lists:
+            if i < len(lst):
+                interleaved.append(lst[i])
+    return interleaved
 
 
 class AgentRAGPipeline(RAGPipeline):
@@ -81,7 +98,7 @@ class AgentRAGPipeline(RAGPipeline):
             rewritten = await self._rewrite(subqueries[first_dry])
             outcomes[first_dry] = await self._retrieve_one(rewritten, ctx.district_slug)
 
-        flattened = [result for outcome in outcomes for result in outcome.fused]
+        flattened = _interleave_by_rank(outcomes)
         agent_top1 = max((outcome.dense_top1_sim for outcome in outcomes), default=0.0)
 
         return await run_shared_tail(

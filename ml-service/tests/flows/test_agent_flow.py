@@ -5,18 +5,23 @@ Purpose:   Flow (AgentRAGPipeline, fake Embedder/Retriever/Generator): a multi-i
            rewritten and re-retried — a single shared re-query budget for the whole request, not one
            per dry sub-query. Also proves the shared tail holds through the agent path: all-empty
            retrieval => the synthesis Generator call is skipped (no-info); a Generator error at
-           synthesis => the same extractive fallback as the simple path. AGENT_RAG_ENABLED
-           gating/fallback-to-simple is RagService's job, not AgentRAGPipeline's — exercised here
-           directly, not through the router.
+           synthesis => the same extractive fallback as the simple path. Also proves per-sub-query
+           fused lists are rank-interleaved before assemble_context runs, so a globally relevant
+           single-chunk sub-query isn't starved out of the token budget by a multi-chunk sub-query
+           that merely arrived first in decomposition order. AGENT_RAG_ENABLED gating/fallback-to-
+           simple is RagService's job, not AgentRAGPipeline's — exercised here directly, not through
+           the router.
 Layer:     test
-May import:   pytest, app.pipeline.agent, app.pipeline.base, tests.fakes.fake_generator,
-              tests.fakes.fake_embedder, tests.fakes.fake_retriever, app.schemas/*, stdlib (json)
+May import:   pytest, app.pipeline.agent, app.pipeline.base, app.domain.context,
+              tests.fakes.fake_generator, tests.fakes.fake_embedder, tests.fakes.fake_retriever,
+              app.schemas/*, stdlib (json)
 Must NOT import:  real openai; live network
 """
 from __future__ import annotations
 
 import json
 
+from app.domain.context import CONTEXT_TOKEN_BUDGET
 from app.pipeline.agent import AgentRAGPipeline
 from app.pipeline.base import RagContext
 from app.schemas.common import QueryRoute
@@ -35,12 +40,25 @@ _LIGHT_REWRITTEN = "Який графік відключень світла?"
 
 _MULTI_QUERY = f"{_TRASH_Q} {_LIGHT_Q} {_WATER_Q}"
 
+# Sized so any 2 of these chunks fit inside the shared-tail's real token budget but any 3 don't —
+# lets the interleaving test prove, with FakeEmbedder's word-count tokenizer, exactly which chunks
+# survive assemble_context's greedy trim under a given merge order.
+_CHUNK_TOKENS = CONTEXT_TOKEN_BUDGET // 3 + 100
 
-def _hit(chunk_id: int, similarity: float, text: str = "текст") -> RetrievalResult:
+
+def _hit(
+    chunk_id: int, similarity: float, text: str = "текст", source: str = "src"
+) -> RetrievalResult:
     return RetrievalResult(
-        id=chunk_id, text=text, source="src", doc_type="instruction", district=None,
+        id=chunk_id, text=text, source=source, doc_type="instruction", district=None,
         similarity=similarity,
     )
+
+
+def _sized_hit(chunk_id: int, similarity: float, source: str) -> RetrievalResult:
+    """A chunk whose text is exactly _CHUNK_TOKENS words long, so its cost against
+    CONTEXT_TOKEN_BUDGET is precise and deterministic under FakeEmbedder's word-count tokenizer."""
+    return _hit(chunk_id, similarity, text=" ".join(["w"] * _CHUNK_TOKENS), source=source)
 
 
 def _outcome(*hits: RetrievalResult) -> RetrievalOutcome:
@@ -139,3 +157,32 @@ async def test_synthesis_generator_error_degrades_to_extractive_fallback() -> No
     assert result.answer == f"За наявними даними: {hit_text}"
     assert result.confidence == 0.5
     assert result.debug["llm_ok"] is False
+
+
+async def test_interleaving_prevents_one_subquery_from_starving_another_out_of_the_budget() -> None:
+    """Sub-query A alone returns 3 locally top-ranked chunks whose combined size exceeds
+    CONTEXT_TOKEN_BUDGET; sub-query B returns a single, globally very relevant chunk. Under the old
+    block-concatenation merge (A's whole fused list before B's), A's chunks would consume the entire
+    budget and B's chunk would never be seen. Under rank interleaving, B's rank-0 chunk is offered
+    before A's rank-1/rank-2 chunks, so it survives assemble_context's trim."""
+    query_a, query_b = "Query A", "Query B"
+    decompose_json = json.dumps([query_a, query_b])
+    retriever = FakeRetriever(
+        {
+            query_a: _outcome(
+                _sized_hit(1, 0.95, "A0"), _sized_hit(2, 0.90, "A1"), _sized_hit(3, 0.85, "A2")
+            ),
+            query_b: _outcome(_sized_hit(4, 0.99, "B0")),
+        }
+    )
+    generator = FakeGenerator(results=[(decompose_json, 0), ("Зведена відповідь.", 0)])
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(
+        RagContext(user_query=f"{query_a} {query_b}", district_slug=None, route=QueryRoute.COMPLEX)
+    )
+
+    sources = [s.source for s in result.sources_used]
+    assert sources == ["A0", "B0"]  # B0 (B's rank 0) beats out A2 (A's rank 2) for the last slot
+    assert result.debug["n_chunks"] == 2
+    assert result.confidence == 0.99  # top1 across sub-queries is B0's — never dropped upstream
