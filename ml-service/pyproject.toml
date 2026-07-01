@@ -25,6 +25,8 @@ dev = [
     "anyio[trio]>=4.0",
     "httpx>=0.27",
     "testcontainers[postgres]>=4.0",
+    "ruff>=0.6",
+    "mypy>=1.10",
 ]
 
 [build-system]
@@ -44,3 +46,31 @@ markers = ["slow: exercises real Postgres/eval harness; excluded from the fast l
 
 [tool.ruff]
 line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+# FastAPI's Depends()-as-a-default-argument is the framework's own documented DI pattern, not the
+# accidental-mutable-default bug B008 exists to catch — whitelist it instead of noqa-ing every route.
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends"]
+
+[tool.mypy]
+# NOTE: production runs python:3.11-slim (see Dockerfile) — this is NOT a runtime version bump.
+# It's pinned to 3.12 solely because numpy 2.5's bundled __init__.pyi uses PEP 695 `type` alias
+# statements unconditionally, which mypy refuses to parse below python_version=3.12 — a hard
+# parse-time failure that isn't reachable via `ignore_missing_imports`, `ignore_errors`, or
+# `follow_imports = "skip"` overrides (all tried; the stub is parsed before overrides apply).
+# The stub syntax itself never executes, so this has no effect on actual 3.11 compatibility.
+# Revisit once numpy ships 3.11-parseable stubs or the base image moves to 3.12+.
+python_version = "3.12"
+plugins = ["pydantic.mypy"]
+warn_unused_ignores = true
+warn_redundant_casts = true
+check_untyped_defs = true
+ignore_missing_imports = true
+# app/ and db/ are PEP 420 namespace packages (no __init__.py at the root — see
+# [tool.setuptools.packages.find] above); without this, mypy resolves app/schemas/ingest.py as
+# both "schemas.ingest" and "app.schemas.ingest" and refuses to proceed.
+explicit_package_bases = true
+mypy_path = "."
