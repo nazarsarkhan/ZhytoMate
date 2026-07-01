@@ -4,14 +4,16 @@ Purpose:   Error-envelope rendering + FastAPI exception handlers + dependency-li
            handlers map them to the §3.3 envelope. FastAPI is imported lazily inside the handlers so
            importing this module (e.g. from a service) never pulls FastAPI.
 Layer:     infra
-May import:   stdlib, schemas/common (ErrorEnvelope); FastAPI/Starlette only inside handler bodies
+May import:   stdlib, structlog, schemas/common (ErrorEnvelope); FastAPI/Starlette only inside
+              handler bodies
 Must NOT import:  services/*, components/*, api/v1/* routers, domain/* (errors is a leaf others import)
 """
 from __future__ import annotations
 
-import logging
 import uuid
 from typing import TYPE_CHECKING
+
+import structlog
 
 from app.schemas.common import ErrorDetail, ErrorEnvelope
 
@@ -20,7 +22,7 @@ if TYPE_CHECKING:
     from fastapi.exceptions import RequestValidationError
     from fastapi.responses import JSONResponse
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class AppError(Exception):
@@ -91,7 +93,7 @@ async def _validation_error_handler(
 
 
 async def _unhandled_error_handler(request: "Request", exc: Exception) -> "JSONResponse":
-    logger.exception("unhandled error on %s %s", request.method, request.url.path)
+    logger.exception("unhandled_error", method=request.method, path=request.url.path)
     return _envelope("internal_error", "Internal server error", _request_id(request), 500)
 
 

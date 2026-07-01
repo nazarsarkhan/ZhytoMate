@@ -7,14 +7,15 @@ Purpose:   Vision analysis orchestration (§3.3, §4.3): generate (via the Visio
            mirroring the lazy pattern in app.errors / app.deps.
 Layer:     service
 May import:   domain/vision_prompts, schemas/vision, app.protocols (VisionGenerator port), config
-              (typing), app.metrics (lazy)
+              (typing), app.metrics (lazy), structlog
 Must NOT import:  other services/*, api/*, FastAPI/Starlette, asyncpg, openai
 """
 from __future__ import annotations
 
 import json
-import logging
 from typing import TYPE_CHECKING
+
+import structlog
 
 from app.domain.vision_prompts import VISION_SYSTEM_PROMPT
 from app.schemas.vision import ALLOWED_CATEGORIES, VisionResponse
@@ -23,7 +24,7 @@ if TYPE_CHECKING:
     from app.config import Settings
     from app.protocols import VisionGenerator
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _VISION_TIMEOUT_S = 12.0
 _VISION_TEMPERATURE = 0.1
@@ -52,10 +53,10 @@ class VisionService:
                 raw, retries = await self._call_llm(image_bytes, mime_type, strict=True)
                 result = self._parse_and_validate(raw)
         except Exception as exc:  # noqa: BLE001 — the LLM is the unreliable hop; degrade, never raise
-            logger.warning("vision_llm_error err=%s", type(exc).__name__)
+            logger.warning("vision_llm_error", err=type(exc).__name__)
 
         if result is None:
-            logger.warning("vision_fallback llm_retries=%d", retries)
+            logger.warning("vision_fallback", llm_retries=retries)
             llm_calls.labels(route="vision", outcome="fallback").inc()
             return _FALLBACK
         llm_calls.labels(route="vision", outcome="ok").inc()

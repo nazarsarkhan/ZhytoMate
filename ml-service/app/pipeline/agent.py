@@ -16,14 +16,15 @@ Purpose:   AgentRAGPipeline(RAGPipeline): COMPLEX path via query DECOMPOSITION (
            here — AgentRAGPipeline.run() always runs the full agent flow when called.
 Layer:     pipeline
 May import:   pipeline/base, protocols (Embedder/Retriever/Generator), domain/{sufficiency,prompts},
-              schemas/retrieval, app.metrics, stdlib (asyncio, json, logging)
+              schemas/retrieval, app.metrics, stdlib (asyncio, json), structlog
 Must NOT import:  api/*, services/*; concrete components/*; FastAPI, asyncpg, sentence-transformers
 """
 from __future__ import annotations
 
 import asyncio
 import json
-import logging
+
+import structlog
 
 from app.domain.prompts import build_decompose_prompt, build_rewrite_prompt
 from app.domain.sufficiency import is_sufficient
@@ -32,7 +33,7 @@ from app.pipeline.base import RETRIEVE_LIMIT, RAGPipeline, RagContext, RagResult
 from app.protocols import Embedder, Generator, Retriever
 from app.schemas.retrieval import RetrievalOutcome, RetrievalResult
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Short, near-deterministic internal calls — not the user-facing answer, so both temperature and
 # max_tokens stay well below the main generation's 0.3 / 1024.
@@ -64,7 +65,7 @@ def _outcome_or_dry(subquery: str, result: RetrievalOutcome | BaseException) -> 
     instead of propagating — the empty outcome is indistinguishable from a genuinely dry sub-query,
     so it's picked up by the existing is_sufficient/re-query logic like any other dry sub-query."""
     if isinstance(result, BaseException):
-        logger.warning("agent_retrieve_failed subquery=%r err=%s", subquery, type(result).__name__)
+        logger.warning("agent_retrieve_failed", subquery=subquery, err=type(result).__name__)
         return RetrievalOutcome(dense=[], fused=[])
     return result
 
@@ -144,9 +145,7 @@ class AgentRAGPipeline(RAGPipeline):
         try:
             return await self._retrieve_one(rewritten, district)
         except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "agent_retrieve_failed subquery=%r err=%s", rewritten, type(exc).__name__
-            )
+            logger.warning("agent_retrieve_failed", subquery=rewritten, err=type(exc).__name__)
             return current
 
     async def _retrieve_one(self, query_text: str, district: str | None) -> RetrievalOutcome:
@@ -167,16 +166,16 @@ class AgentRAGPipeline(RAGPipeline):
             )
             parsed = json.loads(raw)
         except Exception as exc:  # noqa: BLE001 — any decompose failure degrades to a single sub-query
-            logger.warning("agent_decompose_failed err=%s", type(exc).__name__)
+            logger.warning("agent_decompose_failed", err=type(exc).__name__)
             return [query]
 
         if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
-            logger.warning("agent_decompose_bad_shape raw=%r", raw)
+            logger.warning("agent_decompose_bad_shape", raw=raw)
             return [query]
 
         subqueries = [item.strip() for item in parsed[: self._max_subqueries] if item.strip()]
         if not subqueries:
-            logger.warning("agent_decompose_empty_after_filter raw=%r", raw)
+            logger.warning("agent_decompose_empty_after_filter", raw=raw)
             return [query]
         return subqueries
 
@@ -192,7 +191,7 @@ class AgentRAGPipeline(RAGPipeline):
                 timeout_s=_REWRITE_TIMEOUT_S,
             )
         except Exception as exc:  # noqa: BLE001 — a failed rewrite falls back to the original sub-query
-            logger.warning("agent_rewrite_failed err=%s", type(exc).__name__)
+            logger.warning("agent_rewrite_failed", err=type(exc).__name__)
             return subquery
 
         rewritten = raw.strip()

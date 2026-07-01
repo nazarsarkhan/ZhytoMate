@@ -9,24 +9,24 @@ Purpose:   asyncpg pool (register_vector in the init callback) + KnowledgeReposi
            stays here). RetrievalResult lives in app.schemas.retrieval — the port abstraction in
            app.protocols needs it and may not import components/*.
 Layer:     component (repository)
-May import:   app.config (types), app.schemas.retrieval, stdlib, numpy, asyncpg, pgvector
+May import:   app.config (types), app.schemas.retrieval, stdlib, numpy, asyncpg, pgvector, structlog
 Must NOT import:  services/*, api/*, pipeline/*, other components/*; FastAPI
 """
 from __future__ import annotations
 
-import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime
 
 import asyncpg
 import numpy as np
+import structlog
 from pgvector.asyncpg import register_vector
 
 from app.config import Settings
 from app.schemas.retrieval import RetrievalResult
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 async def create_pool(settings: Settings) -> asyncpg.Pool:
@@ -111,7 +111,7 @@ class KnowledgeRepository:
         found = await self._pool.fetchval(
             "SELECT 1 FROM knowledge_base WHERE content_hash = $1 LIMIT 1", content_hash
         )
-        logger.debug("content_hash_exists hash=%s… -> %s", content_hash[:8], found is not None)
+        logger.debug("content_hash_exists", hash_prefix=content_hash[:8], exists=found is not None)
         return found is not None
 
     async def upsert_chunks(self, document_id: str, chunks: list[ChunkRecord]) -> int:
@@ -127,8 +127,10 @@ class KnowledgeRepository:
                 await conn.execute("DELETE FROM knowledge_base WHERE document_id = $1", document_id)
                 await conn.executemany(_INSERT_SQL, records)
         logger.debug(
-            "upsert_chunks doc=%s n=%d took %.1fms",
-            document_id, len(records), (time.perf_counter() - start) * 1000,
+            "upsert_chunks",
+            doc=document_id,
+            n=len(records),
+            took_ms=round((time.perf_counter() - start) * 1000, 1),
         )
         return len(records)
 
@@ -147,7 +149,7 @@ class KnowledgeRepository:
                 await conn.execute("SET LOCAL hnsw.max_scan_tuples = 40000")
                 rows = await conn.fetch(_DENSE_SQL, query_vec, district_slug, limit)
         logger.debug(
-            "retrieve_dense rows=%d took %.1fms", len(rows), (time.perf_counter() - start) * 1000
+            "retrieve_dense", rows=len(rows), took_ms=round((time.perf_counter() - start) * 1000, 1)
         )
         return [_to_result(r, float(r["similarity"])) for r in rows]
 
@@ -165,7 +167,9 @@ class KnowledgeRepository:
                 _LEXICAL_SQL.format(tsquery="plainto_tsquery"), query, district_slug, limit
             )
         logger.debug(
-            "retrieve_lexical rows=%d took %.1fms", len(rows), (time.perf_counter() - start) * 1000
+            "retrieve_lexical",
+            rows=len(rows),
+            took_ms=round((time.perf_counter() - start) * 1000, 1),
         )
         # similarity=0.0 — ts_rank is not a cosine; fusion ranks the lexical leg by position.
         return [_to_result(r, 0.0) for r in rows]
@@ -182,7 +186,7 @@ class KnowledgeRepository:
             """,
             hashed_key, window_min,
         )
-        logger.debug("rate_limit key=%s… window=%d count=%d", hashed_key[:8], window_min, count)
+        logger.debug("rate_limit", key_prefix=hashed_key[:8], window=window_min, count=count)
         return count
 
     async def delete_expired(self) -> int:
@@ -193,7 +197,9 @@ class KnowledgeRepository:
             "WHERE expires_at IS NOT NULL AND expires_at < now() RETURNING id"
         )
         logger.debug(
-            "delete_expired removed=%d took %.1fms", len(rows), (time.perf_counter() - start) * 1000
+            "delete_expired",
+            removed=len(rows),
+            took_ms=round((time.perf_counter() - start) * 1000, 1),
         )
         return len(rows)
 
@@ -209,7 +215,8 @@ class KnowledgeRepository:
             "DELETE FROM rate_limit WHERE window_min < $1 RETURNING window_min", cutoff_window
         )
         logger.debug(
-            "delete_stale_rate_limit_windows removed=%d took %.1fms",
-            len(rows), (time.perf_counter() - start) * 1000,
+            "delete_stale_rate_limit_windows",
+            removed=len(rows),
+            took_ms=round((time.perf_counter() - start) * 1000, 1),
         )
         return len(rows)

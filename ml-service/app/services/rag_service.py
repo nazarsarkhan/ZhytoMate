@@ -10,16 +10,17 @@ Purpose:   RAG query router (§3.2, §4.2): rate-limit -> canonicalize district 
 Layer:     service
 May import:   domain/{classifier, districts}, schemas/query, app.protocols (Generator port, for the
               constructor signature only), components/repository + embedder + hybrid_retriever +
-              rate_limiter, pipeline/{base, simple, agent}, config, errors, metrics
+              rate_limiter, pipeline/{base, simple, agent}, config, errors, metrics, structlog
 Must NOT import:  other services/*, api/*, FastAPI/Starlette, asyncpg directly, openai directly (LLM
               failure classification now lives in pipeline.base._fallback_reason)
 """
 from __future__ import annotations
 
 import hashlib
-import logging
 import time
 from collections import OrderedDict
+
+import structlog
 
 from app.components.embedder import Embedder
 from app.components.hybrid_retriever import HybridRetriever
@@ -36,7 +37,7 @@ from app.pipeline.simple import SimpleRAGPipeline
 from app.protocols import Generator
 from app.schemas.query import QueryRequest, QueryResponse
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class _AnswerCache:
@@ -114,7 +115,7 @@ class RagService:
         # 2. Canonicalize district (unknown -> city-wide + warn, §2.6).
         district_slug = canonicalize_district(request.district)
         if request.district is not None and district_slug is None:
-            logger.warning("query_unknown_district raw=%r", request.district)
+            logger.warning("query_unknown_district", raw=request.district)
             district_unmapped.labels(boundary="query").inc()
 
         # 3. Route. COMPLEX only reaches the agent pipeline when the feature flag is on; the response
@@ -125,13 +126,13 @@ class RagService:
             pipeline: RAGPipeline = self._agent
         else:
             if route is QueryRoute.COMPLEX:
-                logger.info("query_complex_fallback_to_simple user=%s", user_hash)
+                logger.info("query_complex_fallback_to_simple", user=user_hash)
             pipeline = self._simple
 
         # 4. Answer cache (route re-stamped on the cached copy for observability).
         cached = self._cache.get(request.user_query, district_slug)
         if cached is not None:
-            logger.info("query_cache_hit user=%s route=%s", user_hash, route.value)
+            logger.info("query_cache_hit", user=user_hash, route=route.value)
             return cached.model_copy(update={"route": route})
 
         # 5. Run the selected pipeline — embedding, retrieval, and the shared confidence-gate ->
@@ -151,20 +152,29 @@ class RagService:
             # caching one for the TTL window would risk serving a stale "no info" after the KB
             # picks up new content that would have answered this same query.
             logger.info(
-                "query_no_info user=%s district=%s route=%s top1=%.3f took=%.1fms",
-                user_hash, district_slug, route.value, result.debug.get("top1_sim", 0.0),
-                self._elapsed_ms(start),
+                "query_no_info",
+                user=user_hash,
+                district=district_slug,
+                route=route.value,
+                top1_sim=round(result.debug.get("top1_sim", 0.0), 3),
+                took_ms=round(self._elapsed_ms(start), 1),
             )
         else:
             self._cache.put(request.user_query, district_slug, response)
             logger.info(
-                "query_ok user=%s district=%s route=%s top1=%.3f n_chunks=%d llm_ok=%s "
-                "llm_retries=%d took=%.1fms",
-                user_hash, district_slug, route.value, result.debug.get("top1_sim", 0.0),
-                result.debug.get("n_chunks", 0), result.debug.get("llm_ok"),
-                result.debug.get("llm_retries", 0), self._elapsed_ms(start),
+                "query_ok",
+                user=user_hash,
+                district=district_slug,
+                route=route.value,
+                top1_sim=round(result.debug.get("top1_sim", 0.0), 3),
+                n_chunks=result.debug.get("n_chunks", 0),
+                llm_ok=result.debug.get("llm_ok"),
+                llm_retries=result.debug.get("llm_retries", 0),
+                llm_ms=result.debug.get("llm_ms"),
+                degraded=not result.debug.get("llm_ok", True),
+                took_ms=round(self._elapsed_ms(start), 1),
             )
-        logger.debug("query_text user=%s text=%r", user_hash, request.user_query)
+        logger.debug("query_text", user=user_hash, text=request.user_query)
         return response
 
     @staticmethod

@@ -4,19 +4,20 @@ Purpose:   Periodic reaper coroutine — every interval, DELETE expired knowledg
            as an asyncio task by the lifespan. Resilient: a failed sweep is logged and retried
            next tick, never crashing.
 Layer:     background
-May import:   stdlib (asyncio, logging); components/repository (type only)
+May import:   stdlib (asyncio); structlog; components/repository (type only)
 Must NOT import:  api/*, services/*, schemas/*, domain/*
 """
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import TYPE_CHECKING
+
+import structlog
 
 if TYPE_CHECKING:
     from app.components.repository import KnowledgeRepository
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _REAP_INTERVAL_SECONDS = 600
 
@@ -38,12 +39,12 @@ async def ttl_reaper(
         try:
             deleted = await repo.delete_expired()
             if deleted:
-                logger.info("ttl_reaper deleted %d expired rows", deleted)
+                logger.info("ttl_reaper_expired_deleted", deleted=deleted)
             stale_windows = await repo.delete_stale_rate_limit_windows()
             if stale_windows:
-                logger.info("ttl_reaper deleted %d stale rate_limit rows", stale_windows)
+                logger.info("ttl_reaper_stale_rate_limit_deleted", deleted=stale_windows)
         except asyncio.CancelledError:
             raise  # propagate cancellation so the task stops cleanly on shutdown
         except Exception:
             # Never crash the reaper — the next tick retries both sweeps.
-            logger.exception("ttl_reaper sweep failed; will retry next tick")
+            logger.exception("ttl_reaper_sweep_failed")
