@@ -169,8 +169,9 @@ class RagService:
 
     @staticmethod
     def _hash_user(user_id: str) -> str:
-        """Hash the Telegram id for logs — the raw id is never logged or stored."""
-        return hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:8]
+        """Grep-friendly 8-char log prefix, sharing rate_limiter.hash_user_id's digest rather than
+        a second independent hash — the raw id is never logged or stored."""
+        return hash_user_id(user_id)[:8]
 
     @staticmethod
     def _elapsed_ms(start: float) -> float:

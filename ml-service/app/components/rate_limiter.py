@@ -14,9 +14,9 @@ _WINDOW_SECONDS = 60
 
 
 def hash_user_id(user_id: str) -> str:
-    """Full-length sha256 hex digest, used as the rate_limit table's key. Distinct from
-    RagService._hash_user's 8-char LOG prefix, which only needs to be grep-friendly, not
-    collision-resistant at DB-key scale."""
+    """Full-length sha256 hex digest, used as the rate_limit table's key. RagService._hash_user's
+    8-char LOG prefix is a slice of this same digest — one hash, two truncations, so there's never
+    a second independent implementation to drift out of sync."""
     return hashlib.sha256(user_id.encode("utf-8")).hexdigest()
 
 

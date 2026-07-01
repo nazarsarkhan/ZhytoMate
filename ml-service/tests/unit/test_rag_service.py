@@ -14,7 +14,11 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
+from app.components.rate_limiter import hash_user_id
 from app.config import Settings
+from app.errors import RateLimitedError
 from app.schemas.common import QueryRoute
 from app.schemas.query import QueryRequest
 from app.schemas.retrieval import RetrievalResult
@@ -77,6 +81,28 @@ async def test_complex_query_uses_simple_pipeline_when_agent_disabled() -> None:
 
     assert response.route is QueryRoute.COMPLEX  # classifier's real decision, kept for observability
     assert generator.call_count == 1  # a single synthesis call — no decompose, so it was SimpleRAGPipeline
+
+
+async def test_rate_limit_counter_receives_a_hashed_key_not_the_raw_user_id() -> None:
+    repo = FakeKnowledgeRepository(dense=[_hit(0.9)], lexical=[_hit(0.9)])
+    service = RagService(repo, FakeEmbedder(), FakeGenerator(result=("answer", 0)), _settings())
+    request = QueryRequest(user_query=_SIMPLE_QUERY, user_id="u1")
+
+    await service.query(request)
+
+    assert len(repo.rate_limit_calls) == 1
+    hashed_key, _window = repo.rate_limit_calls[0]
+    assert hashed_key == hash_user_id("u1")
+    assert hashed_key != "u1"
+
+
+async def test_query_raises_rate_limited_error_when_denied() -> None:
+    repo = FakeKnowledgeRepository(rate_limit_allowed=False)
+    service = RagService(repo, FakeEmbedder(), FakeGenerator(result=("answer", 0)), _settings())
+    request = QueryRequest(user_query=_SIMPLE_QUERY, user_id="u1")
+
+    with pytest.raises(RateLimitedError):
+        await service.query(request)
 
 
 async def test_complex_query_uses_agent_pipeline_when_enabled() -> None:
