@@ -139,6 +139,18 @@ class KnowledgeRepository:
         )
         return len(records)
 
+    async def delete_document(self, document_id: str) -> int:
+        """Delete all chunks for a document. Returns the number deleted (0 if document_id absent)."""
+        start = time.perf_counter()
+        rows = await self._pool.fetch(
+            "DELETE FROM knowledge_base WHERE document_id = $1 RETURNING id", document_id
+        )
+        logger.debug(
+            "delete_document doc=%s removed=%d took %.1fms",
+            document_id, len(rows), (time.perf_counter() - start) * 1000,
+        )
+        return len(rows)
+
     async def retrieve_dense(
         self, query_vec: np.ndarray, district_slug: str | None, limit: int = 10
     ) -> list[RetrievalResult]:
