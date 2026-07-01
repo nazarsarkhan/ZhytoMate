@@ -3,9 +3,11 @@ Purpose:   asyncpg pool (register_vector in the init callback) + KnowledgeReposi
            content-hash check, idempotent upsert (DELETE + executemany in one tx), dense
            retrieval (SET LOCAL hnsw.* MUST share the SAME tx as the SELECT — asyncpg autocommit
            would discard them), lexical retrieval (websearch->plainto fallback), Postgres
-           rate-limit upsert, and TTL delete. Internal dataclasses ChunkRecord / RetrievalResult.
+           rate-limit upsert, and TTL delete. Internal dataclass ChunkRecord (ingest-time transfer,
+           stays here). RetrievalResult lives in app.schemas.retrieval — the port abstraction in
+           app.protocols needs it and may not import components/*.
 Layer:     component (repository)
-May import:   app.config (types), stdlib, numpy, asyncpg, pgvector
+May import:   app.config (types), app.schemas.retrieval, stdlib, numpy, asyncpg, pgvector
 Must NOT import:  services/*, api/*, pipeline/*, other components/*; FastAPI
 """
 from __future__ import annotations
@@ -20,6 +22,7 @@ import numpy as np
 from pgvector.asyncpg import register_vector
 
 from app.config import Settings
+from app.schemas.retrieval import RetrievalResult
 
 logger = logging.getLogger(__name__)
 
@@ -54,18 +57,6 @@ class ChunkRecord:
     source: str
     content_hash: str                # sha256 hex, 64 chars
     expires_at: datetime | None      # None for instruction
-
-
-@dataclass
-class RetrievalResult:
-    """One retrieved chunk (internal transfer)."""
-
-    id: int
-    text: str
-    source: str
-    doc_type: str
-    district: str | None
-    similarity: float                # cosine [0,1] for the dense leg; 0.0 for the lexical leg
 
 
 _INSERT_SQL = """

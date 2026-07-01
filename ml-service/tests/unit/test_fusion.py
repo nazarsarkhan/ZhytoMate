@@ -15,7 +15,7 @@ from app.domain.fusion import reciprocal_rank_fusion
 
 @dataclass
 class _Result:
-    """Stand-in for repository.RetrievalResult — fusion only reads .id (and carries the rest)."""
+    """Stand-in for schemas.retrieval.RetrievalResult — fusion only reads .id (and carries the rest)."""
 
     id: int
     text: str = ""
