@@ -1,12 +1,13 @@
 """
 Purpose:   FastAPI composition root. Lifespan: run idempotent migrations, open the asyncpg pool
            (register_vector), build the OpenAI-backed embedder, build the repository, create the
-           OpenAI client, wire app.state, start the TTL reaper; tear all down gracefully on
-           shutdown. Registers the error-envelope handlers, the Prometheus instrumentator
-           (/metrics), and mounts the health, knowledge-ingest, chat-query, and vision routers.
+           OpenAILLMClient (Generator + VisionGenerator), wire app.state, start the TTL reaper; tear
+           all down gracefully on shutdown. Registers the error-envelope handlers, the Prometheus
+           instrumentator (/metrics), and mounts the health, knowledge-ingest, chat-query, and
+           vision routers.
 Layer:     infra (composition root — the only module that wires across layers)
 May import:   app.config, app.components/*, app.background/*, app.api/*, app.metrics,
-              db.migrations.runner, openai, FastAPI, prometheus-fastapi-instrumentator
+              db.migrations.runner, FastAPI, prometheus-fastapi-instrumentator
 Must NOT import:  domain/* directly; tests/*
 """
 from __future__ import annotations
@@ -16,13 +17,13 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from openai import AsyncOpenAI
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from app import metrics  # noqa: F401 — import registers the custom counters at startup
 from app.api.v1 import health, ingest, query, vision
 from app.background.reaper import ttl_reaper
 from app.components.embedder import Embedder
+from app.components.llm import OpenAILLMClient
 from app.components.repository import KnowledgeRepository, create_pool
 from app.config import get_settings
 from app.errors import register_error_handlers
@@ -53,15 +54,16 @@ async def lifespan(app: FastAPI):
     # 4. Repository.
     repo = KnowledgeRepository(pool)
 
-    # 5. OpenAI client (async; key passed explicitly rather than via ambient env).
-    openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+    # 5. LLM client (async; key passed explicitly rather than via ambient env). One instance backs
+    #    both the Generator and VisionGenerator ports.
+    llm_client = OpenAILLMClient(api_key=settings.openai_api_key, model=settings.llm_model)
 
     # 6. Wire app state.
     app.state.settings = settings
     app.state.pool = pool
     app.state.embedder = embedder
     app.state.repo = repo
-    app.state.openai_client = openai_client
+    app.state.llm_client = llm_client
 
     # 7. TTL reaper background task.
     reaper = asyncio.create_task(ttl_reaper(repo))

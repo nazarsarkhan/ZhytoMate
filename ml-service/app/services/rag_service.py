@@ -1,12 +1,14 @@
 """
 Purpose:   RAG query orchestration (§3.2, §4.2): rate-limit -> canonicalize district -> classify ->
            answer-cache -> embed -> hybrid retrieve (dense+lexical, concurrent) -> RRF fuse ->
-           confidence gate (dense top-1) -> generate (OpenAI chat, timeout+retry) -> extractive
-           fallback on any LLM error. Only the SIMPLE path is implemented; COMPLEX falls back to
-           SIMPLE until the agent pipeline lands (AGENT_RAG_ENABLED). Pure orchestration over deps.
+           confidence gate (dense top-1) -> generate (via the Generator port, timeout+retry owned by
+           the adapter) -> extractive fallback on any LLM error. Only the SIMPLE path is
+           implemented; COMPLEX falls back to SIMPLE until the agent pipeline lands
+           (AGENT_RAG_ENABLED). Pure orchestration over deps.
 Layer:     service
-May import:   domain/* (fusion, classifier, districts, prompts), schemas/query, components/repository
-              + embedder, config, errors, openai
+May import:   domain/* (fusion, classifier, districts, prompts), schemas/query, app.protocols
+              (Generator port), components/repository + embedder, config, errors; openai (exception
+              types only, for classifying a fallback reason — never to make an API call directly)
 Must NOT import:  other services/*, api/*, FastAPI/Starlette, asyncpg directly
 """
 from __future__ import annotations
@@ -14,11 +16,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
-import random
 import time
 from collections import OrderedDict
 
-from openai import APIError, APITimeoutError, AsyncOpenAI
+from openai import APIError, APITimeoutError
 
 from app.components.embedder import Embedder
 from app.components.repository import KnowledgeRepository
@@ -35,6 +36,7 @@ from app.metrics import (
     retrieval_empty,
     retrieval_top1_sim,
 )
+from app.protocols import Generator
 from app.schemas.query import QueryRequest, QueryResponse, SourceUsed
 
 logger = logging.getLogger(__name__)
@@ -47,8 +49,6 @@ _CONTEXT_CHUNKS = 3
 _GENERATE_TIMEOUT_S = 8.0
 _GENERATION_TEMPERATURE = 0.3
 _MAX_OUTPUT_TOKENS = 1024
-_RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
-_RETRY_BACKOFF_S = (0.5, 1.0)  # one delay per retry; len == number of retries
 _FALLBACK_CONFIDENCE_CAP = 0.5
 
 
@@ -91,12 +91,12 @@ class RagService:
         self,
         repo: KnowledgeRepository,
         embedder: Embedder,
-        openai_client: AsyncOpenAI,
+        generator: Generator,
         settings: Settings,
     ) -> None:
         self._repo = repo
         self._embedder = embedder
-        self._client = openai_client
+        self._generator = generator
         self._settings = settings
         self._cache = _AnswerCache(
             maxsize=settings.answer_cache_maxsize,
@@ -162,8 +162,9 @@ class RagService:
         # 8. Generate, or degrade to extractive fallback on ANY LLM error (never 5xx the caller).
         route_label = route.value.lower()
         llm_ok = True
+        retries = 0
         try:
-            answer = await self._generate(context_chunks, request.user_query)
+            answer, retries = await self._generate(context_chunks, request.user_query)
             confidence = round(top1_sim, 2)
             llm_calls.labels(route=route_label, outcome="ok").inc()
         except Exception as exc:  # noqa: BLE001 — LLM is the least reliable hop; demo must stay alive (ADR-007)
@@ -195,47 +196,24 @@ class RagService:
         )
         self._cache.put(request.user_query, district_slug, response)
         logger.info(
-            "query_ok user=%s district=%s route=%s top1=%.3f n_chunks=%d llm_ok=%s took=%.1fms",
+            "query_ok user=%s district=%s route=%s top1=%.3f n_chunks=%d llm_ok=%s "
+            "llm_retries=%d took=%.1fms",
             user_hash, district_slug, route.value, top1_sim, len(context_chunks), llm_ok,
-            self._elapsed_ms(start),
+            retries, self._elapsed_ms(start),
         )
         logger.debug("query_text user=%s text=%r", user_hash, request.user_query)
         return response
 
-    async def _generate(self, context_chunks: list[str], question: str) -> str:
-        """Call OpenAI chat async with an 8s per-attempt timeout and up to 2 retries on a transient
-        status (429/5xx) or a timeout."""
+    async def _generate(self, context_chunks: list[str], question: str) -> tuple[str, int]:
+        """Build the prompt and delegate to the Generator port — timeout + retry/backoff live in the
+        adapter (OpenAILLMClient), not here. Returns (answer_text, retry_count)."""
         prompt = build_rag_prompt(context_chunks, question)
-        last_attempt = len(_RETRY_BACKOFF_S)  # initial attempt index 0 + len(...) retries
-        for attempt in range(last_attempt + 1):
-            try:
-                response = await asyncio.wait_for(
-                    self._client.chat.completions.create(
-                        model=self._settings.llm_model,
-                        messages=[{"role": "user", "content": prompt}],
-                        temperature=_GENERATION_TEMPERATURE,
-                        max_tokens=_MAX_OUTPUT_TOKENS,
-                    ),
-                    timeout=_GENERATE_TIMEOUT_S,
-                )
-                return response.choices[0].message.content or ""
-            except (APITimeoutError, asyncio.TimeoutError):
-                if attempt == last_attempt:
-                    raise
-                await self._sleep_backoff(attempt, "timeout")
-            except APIError as exc:
-                status = getattr(exc, "status_code", None)
-                if status not in _RETRYABLE_STATUS or attempt == last_attempt:
-                    raise  # non-transient / no-status error, or retries exhausted
-                await self._sleep_backoff(attempt, f"status={status}")
-        raise RuntimeError("unreachable: retry loop exhausted without return or raise")
-
-    @staticmethod
-    async def _sleep_backoff(attempt: int, reason: str) -> None:
-        """Jittered exponential backoff between retries (±20% jitter)."""
-        delay = _RETRY_BACKOFF_S[attempt] * random.uniform(0.8, 1.2)
-        logger.warning("llm_retry attempt=%d reason=%s delay=%.2fs", attempt + 1, reason, delay)
-        await asyncio.sleep(delay)
+        return await self._generator.generate(
+            prompt,
+            temperature=_GENERATION_TEMPERATURE,
+            max_tokens=_MAX_OUTPUT_TOKENS,
+            timeout_s=_GENERATE_TIMEOUT_S,
+        )
 
     @staticmethod
     def _fallback_reason(exc: Exception) -> str:

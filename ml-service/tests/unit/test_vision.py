@@ -21,7 +21,7 @@ _VALID_B64 = base64.b64encode(b"\xff\xd8\xff\xe0\x00\x10JFIF fake jpeg payload")
 
 def _service() -> VisionService:
     # __init__ only stores the deps; _parse_and_validate never touches them.
-    return VisionService(openai_client=object(), settings=object())
+    return VisionService(generator=object(), settings=object())
 
 
 def _payload(**overrides: object) -> str:

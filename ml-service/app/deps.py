@@ -47,7 +47,7 @@ def get_rag_service(request: Request) -> "RagService":
     return RagService(
         repo=state.repo,
         embedder=state.embedder,
-        openai_client=state.openai_client,
+        generator=state.llm_client,
         settings=state.settings,
     )
 
@@ -57,4 +57,4 @@ def get_vision_service(request: Request) -> "VisionService":
     from app.services.vision_service import VisionService
 
     state = request.app.state
-    return VisionService(openai_client=state.openai_client, settings=state.settings)
+    return VisionService(generator=state.llm_client, settings=state.settings)
