@@ -3,14 +3,16 @@ Purpose:   Ingest orchestration (§2.4): normalize -> hash -> dedup check -> chu
            -> canonicalize district -> build ChunkRecords -> atomic upsert. Returns IngestResponse.
            Pure orchestration over injected components; no HTTP, no SQL, no model libs here.
 Layer:     service
-May import:   domain/* (text, chunker, districts), schemas/* , embedder + repository (injected), app.config, app.errors
+May import:   domain/* (text, chunker, districts), schemas/* , embedder + repository (injected),
+              app.config, app.errors, app.metrics, structlog
 Must NOT import:  other services/*, api/*, FastAPI/Starlette, asyncpg
 """
 from __future__ import annotations
 
-import logging
 import time
 from datetime import datetime, timedelta, timezone
+
+import structlog
 
 from app.components.embedder import Embedder
 from app.components.repository import ChunkRecord, KnowledgeRepository
@@ -18,11 +20,11 @@ from app.config import Settings
 from app.domain.chunker import chunk_text
 from app.domain.districts import canonicalize_district
 from app.domain.text import compute_content_hash, normalize_text
-from app.metrics import district_unmapped
+from app.metrics import dedup_skips_total, district_unmapped, ingest_chunks_total
 from app.schemas.common import DocType
 from app.schemas.ingest import IngestRequest, IngestResponse
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class IngestService:
@@ -41,18 +43,20 @@ class IngestService:
         content_hash = compute_content_hash(request.text)
 
         if await self._repo.content_hash_exists(content_hash):
-            logger.info("ingest_duplicate doc=%s", request.document_id)
+            dedup_skips_total.inc()
+            logger.info("ingest_duplicate", doc=request.document_id)
             return IngestResponse(
                 status="duplicate", document_id=request.document_id, chunks_processed=0
             )
 
         chunks = chunk_text(normalized, self._embedder.count_tokens)
+        ingest_chunks_total.inc(len(chunks))
         embeddings = await self._embedder.encode_passages(chunks)  # shape (n, 1536)
 
         district_slug = canonicalize_district(request.district)
         if request.district is not None and district_slug is None:
             logger.warning(
-                "ingest_unknown_district raw=%r doc=%s", request.district, request.document_id
+                "ingest_unknown_district", raw=request.district, doc=request.document_id
             )
             district_unmapped.labels(boundary="ingest").inc()
 
@@ -77,8 +81,12 @@ class IngestService:
 
         took_ms = (time.perf_counter() - start) * 1000
         logger.info(
-            "ingest_ok doc=%s type=%s chunks=%d district=%s took=%.1fms",
-            request.document_id, request.doc_type.value, len(chunks), district_slug, took_ms,
+            "ingest_ok",
+            doc=request.document_id,
+            type=request.doc_type.value,
+            chunks=len(chunks),
+            district=district_slug,
+            took_ms=round(took_ms, 1),
         )
         return IngestResponse(
             status="ingested", document_id=request.document_id, chunks_processed=len(chunks)

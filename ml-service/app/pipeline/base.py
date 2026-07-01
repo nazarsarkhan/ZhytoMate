@@ -9,33 +9,40 @@ Purpose:   RAGPipeline(ABC).run(ctx: RagContext) -> RagResult — the contract b
            pipeline embeds its own query text(s) internally via the injected Embedder port rather
            than receiving one upfront.
 Layer:     pipeline
-May import:   stdlib (abc, asyncio, logging, collections.abc), pydantic, app.protocols (Generator),
-              schemas/*, domain/{confidence, context, prompts}, app.metrics; openai (exception types
-              only, for classifying a fallback reason in _fallback_reason — never to make an API
-              call directly)
+May import:   stdlib (abc, asyncio, time, collections.abc), structlog, pydantic,
+              app.protocols (Generator), schemas/*, domain/{confidence, context, prompts},
+              app.metrics; openai (exception types only, for classifying a fallback reason in
+              _fallback_reason — never to make an API call directly)
 Must NOT import:  api/*, services/*; concrete components/*; FastAPI, asyncpg, sentence-transformers;
               openai beyond the narrow exception-type import noted above
 """
 from __future__ import annotations
 
 import asyncio
-import logging
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 
+import structlog
 from openai import APIError, APITimeoutError
 from pydantic import BaseModel, Field
 
 from app.domain.confidence import ConfidenceBand, confidence_band
 from app.domain.context import CONTEXT_TOKEN_BUDGET, assemble_context
 from app.domain.prompts import build_rag_prompt
-from app.metrics import degraded_responses, llm_calls, retrieval_empty, retrieval_top1_sim
+from app.metrics import (
+    degraded_responses,
+    llm_calls,
+    llm_latency_seconds,
+    retrieval_empty,
+    retrieval_top1_sim,
+)
 from app.protocols import Generator
 from app.schemas.common import QueryRoute
 from app.schemas.query import SourceUsed
 from app.schemas.retrieval import RetrievalResult
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _NO_INFO_ANSWER = "Поки що немає інформації за цим запитом."
 _FALLBACK_PREFIX = "За наявними даними: "
@@ -101,6 +108,7 @@ async def run_shared_tail(
     route_label = route.value.lower()
     llm_ok = True
     retries = 0
+    llm_start = time.perf_counter()
     try:
         answer, retries = await generator.generate(
             prompt, temperature=_GENERATION_TEMPERATURE, max_tokens=_MAX_OUTPUT_TOKENS,
@@ -116,8 +124,13 @@ async def run_shared_tail(
         llm_calls.labels(route=route_label, outcome="fallback").inc()
         degraded_responses.labels(reason=reason).inc()
         logger.warning(
-            "pipeline_llm_fallback route=%s err=%s reason=%s", route.value, type(exc).__name__, reason
+            "pipeline_llm_fallback", route=route.value, err=type(exc).__name__, reason=reason
         )
+    finally:
+        # Timed around the whole try/except — a failed/timed-out call's latency is just as
+        # operationally interesting as a successful one's.
+        llm_elapsed_s = time.perf_counter() - llm_start
+        llm_latency_seconds.observe(llm_elapsed_s)
 
     sources = [
         SourceUsed(source=r.source, doc_type=r.doc_type, district=r.district, similarity=round(r.similarity, 4))
@@ -128,6 +141,7 @@ async def run_shared_tail(
         debug={
             "no_info": False, "top1_sim": top1_sim, "band": band.value,
             "n_chunks": len(top_results), "llm_ok": llm_ok, "llm_retries": retries,
+            "llm_ms": round(llm_elapsed_s * 1000, 1),
         },
     )
 

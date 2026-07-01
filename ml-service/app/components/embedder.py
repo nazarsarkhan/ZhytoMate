@@ -6,25 +6,31 @@ Purpose:   OpenAI embedding wrapper (model injected via config; 1536d). Async HT
            (encode_query / encode_passages / count_tokens) as the old e5 Embedder, so callers
            don't change.
 Layer:     component
-May import:   stdlib, numpy, openai, tiktoken, app.protocols
+May import:   stdlib, numpy, openai, tiktoken, structlog, app.protocols, app.metrics
 Must NOT import:  app/* (except config types), services/*, api/*, other components/*; FastAPI, asyncpg
 """
 from __future__ import annotations
 
 import asyncio
 import hashlib
-import logging
 import random
 import re
+import time
 from collections import OrderedDict
 
 import numpy as np
+import structlog
 import tiktoken
 from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI
 
+from app.metrics import (
+    embedding_cache_hits_total,
+    embedding_cache_lookups_total,
+    embedding_latency_seconds,
+)
 from app.protocols import Embedder as EmbedderPort
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _EMBED_DIM = 1536
 _WHITESPACE_RE = re.compile(r"\s+")
@@ -86,9 +92,13 @@ class Embedder(EmbedderPort):
         last_attempt = len(_RETRY_BACKOFF_S)
         for attempt in range(last_attempt + 1):
             try:
-                response = await self._client.embeddings.create(
-                    model=self._model, input=texts, dimensions=_EMBED_DIM
-                )
+                call_start = time.perf_counter()
+                try:
+                    response = await self._client.embeddings.create(
+                        model=self._model, input=texts, dimensions=_EMBED_DIM
+                    )
+                finally:
+                    embedding_latency_seconds.observe(time.perf_counter() - call_start)
                 vectors = np.array([item.embedding for item in response.data], dtype=np.float32)
                 return _l2_normalize(vectors)
             except (APITimeoutError, APIConnectionError):
@@ -105,14 +115,16 @@ class Embedder(EmbedderPort):
     async def _sleep_backoff(attempt: int, reason: str) -> None:
         """Jittered backoff between retries (±20% jitter)."""
         delay = _RETRY_BACKOFF_S[attempt] * random.uniform(0.8, 1.2)
-        logger.warning("embed_retry attempt=%d reason=%s delay=%.2fs", attempt + 1, reason, delay)
+        logger.warning("embed_retry", attempt=attempt + 1, reason=reason, delay_s=round(delay, 2))
         await asyncio.sleep(delay)
 
     async def encode_query(self, text: str) -> np.ndarray:
         """LRU-cached. No 'query: ' prefix (OpenAI, unlike e5). Cache miss -> single-text batch call."""
         key = self._cache_key(text)
+        embedding_cache_lookups_total.inc()
         cached = self._query_cache.get(key)
         if cached is not None:
+            embedding_cache_hits_total.inc()
             return cached
         normalized = self._normalize_for_cache(text)
         result = (await self._embed_api_call([normalized]))[0]
