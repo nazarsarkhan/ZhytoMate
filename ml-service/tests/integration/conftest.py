@@ -1,12 +1,12 @@
 """
 Purpose:   Shared fixtures for the DB-real integration suite. Spins up ONE pgvector/pgvector:pg16
            container per session, applies the real db/migrations/*.sql, opens an asyncpg pool with
-           the pgvector codec registered, and truncates the tables before every test. Gemini and the
+           the pgvector codec registered, and truncates the tables before every test. The LLM and the
            Embedder are never touched here — these tests exercise the real repository against real
            Postgres only (vectors are seeded directly via the helpers below).
 Layer:     test
 May import:   pytest, pytest-asyncio, testcontainers, asyncpg, pgvector, numpy
-Must NOT import:  app.api routers, google-genai, sentence-transformers (DB-real, LLM/embedder-absent)
+Must NOT import:  app.api routers, openai, sentence-transformers (DB-real, LLM/embedder-absent)
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from pgvector.asyncpg import register_vector
 from testcontainers.postgres import PostgresContainer
 
 PG_IMAGE = "pgvector/pgvector:pg16"
-VECTOR_DIM = 768
+VECTOR_DIM = 1536
 
 _MIGRATIONS_DIR = Path(__file__).resolve().parents[2] / "db" / "migrations"
 
@@ -65,7 +65,7 @@ async def clean_tables(pg_pool):
 
 
 def make_random_vec() -> np.ndarray:
-    """Normalized random 768-dim vector for seeding test rows."""
+    """Normalized random 1536-dim vector for seeding test rows."""
     vec = np.random.randn(VECTOR_DIM).astype(np.float32)
     return vec / np.linalg.norm(vec)
 

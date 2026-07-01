@@ -1,11 +1,11 @@
 """
-Purpose:   e5-base load + encode with required prefixes ('query: ' / 'passage: '), CPU-bound
-           encode offloaded via loop.run_in_executor onto a dedicated ThreadPoolExecutor(2),
-           gated by Semaphore(2) so concurrent requests can't starve the event loop. Instance-level
-           LRU(1000) cache for query embeddings; tokenizer-based count_tokens for the chunker.
-           Model loaded ONCE in the lifespan — never per request.
+Purpose:   OpenAI text-embedding-3-large wrapper (1536d). Async HTTP calls replace the old local CPU
+           encode — no threadpool/semaphore needed (network-bound, not CPU-bound). OpenAI vectors are
+           NOT unit-length, so we L2-normalize each row to match the DB's cosine (<=>) convention
+           (same as the old e5 setup). Same public interface (encode_query / encode_passages /
+           count_tokens) as the old e5 Embedder, so callers don't change.
 Layer:     component
-May import:   stdlib, numpy, sentence-transformers, torch
+May import:   stdlib, numpy, openai, tiktoken
 Must NOT import:  app/* (except config types), services/*, api/*, other components/*; FastAPI, asyncpg
 """
 from __future__ import annotations
@@ -13,25 +13,22 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import random
 import re
-import time
 from collections import OrderedDict
-from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
-import torch
-from sentence_transformers import SentenceTransformer
+import tiktoken
+from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
-# Dedicated executor + semaphore: cap concurrent CPU encode work at 2 (design decision 3).
-_THREAD_POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="embedder")
-_ENCODE_SEMAPHORE = asyncio.Semaphore(2)
-
-# e5 REQUIRES these prefixes; swapping them silently destroys recall (asserted in tests).
-_QUERY_PREFIX = "query: "
-_PASSAGE_PREFIX = "passage: "
+_EMBED_MODEL = "text-embedding-3-large"
+_EMBED_DIM = 1536
 _WHITESPACE_RE = re.compile(r"\s+")
+
+_RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+_RETRY_BACKOFF_S = (0.5, 1.0)  # one delay per retry; len == number of retries
 
 
 class LRUCache:
@@ -55,14 +52,23 @@ class LRUCache:
             self._store.popitem(last=False)
 
 
+def _l2_normalize(vectors: np.ndarray) -> np.ndarray:
+    """Row-wise L2 normalization. OpenAI embeddings are not unit-length; the DB cosine (<=>)
+    operator and the old e5 convention both assume normalized vectors."""
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0  # guard against a zero vector
+    return (vectors / norms).astype(np.float32)
+
+
 class Embedder:
-    def __init__(self, model_name: str, num_threads: int = 4, cache_maxsize: int = 1000) -> None:
-        # Effective thread cap. NOTE: torch does NOT read a TORCH_NUM_THREADS env var;
-        # set_num_threads is the real lever to stop torch grabbing every core (design decision 7).
-        torch.set_num_threads(num_threads)
-        self.model = SentenceTransformer(model_name)
-        self._tokenizer = self.model.tokenizer
+    """OpenAI-backed embedder. No query:/passage: prefixes (unlike e5) — text-embedding-3-large is a
+    single-purpose model. No local model load; the async client is lightweight, created once."""
+
+    def __init__(self, api_key: str, cache_maxsize: int = 1000) -> None:
+        self._client = AsyncOpenAI(api_key=api_key)
         self._query_cache = LRUCache(maxsize=cache_maxsize)
+        # cl100k_base covers text-embedding-3-* token counting for the chunker's cap.
+        self._tokenizer = tiktoken.get_encoding("cl100k_base")
 
     def _normalize_for_cache(self, text: str) -> str:
         return _WHITESPACE_RE.sub(" ", text.lower().strip())
@@ -70,39 +76,50 @@ class Embedder:
     def _cache_key(self, text: str) -> str:
         return hashlib.sha1(self._normalize_for_cache(text).encode("utf-8")).hexdigest()
 
-    def _encode_sync(self, texts: list[str]) -> np.ndarray:
-        """Pure sync — always called via run_in_executor, never directly on the event loop."""
-        return self.model.encode(
-            texts,
-            batch_size=32,
-            normalize_embeddings=True,
-            show_progress_bar=False,
-        )
+    async def _embed_api_call(self, texts: list[str]) -> np.ndarray:
+        """One batched embeddings call (1536d), L2-normalized. Up to 2 retries on a retryable status
+        (429/5xx) or a connection/timeout error; raises on persistent failure (ingest fails loudly;
+        the query path catches it and degrades — see rag_service)."""
+        last_attempt = len(_RETRY_BACKOFF_S)
+        for attempt in range(last_attempt + 1):
+            try:
+                response = await self._client.embeddings.create(
+                    model=_EMBED_MODEL, input=texts, dimensions=_EMBED_DIM
+                )
+                vectors = np.array([item.embedding for item in response.data], dtype=np.float32)
+                return _l2_normalize(vectors)
+            except (APITimeoutError, APIConnectionError):
+                if attempt == last_attempt:
+                    raise
+                await self._sleep_backoff(attempt, "connection")
+            except APIStatusError as exc:
+                if exc.status_code not in _RETRYABLE_STATUS or attempt == last_attempt:
+                    raise
+                await self._sleep_backoff(attempt, f"status={exc.status_code}")
+        raise RuntimeError("unreachable: retry loop exhausted without return or raise")
 
-    async def _encode(self, texts: list[str]) -> np.ndarray:
-        loop = asyncio.get_running_loop()
-        start = time.perf_counter()
-        async with _ENCODE_SEMAPHORE:
-            vecs = await loop.run_in_executor(_THREAD_POOL, self._encode_sync, texts)
-        logger.debug("encode n=%d took %.1fms", len(texts), (time.perf_counter() - start) * 1000)
-        return vecs
+    @staticmethod
+    async def _sleep_backoff(attempt: int, reason: str) -> None:
+        """Jittered backoff between retries (±20% jitter)."""
+        delay = _RETRY_BACKOFF_S[attempt] * random.uniform(0.8, 1.2)
+        logger.warning("embed_retry attempt=%d reason=%s delay=%.2fs", attempt + 1, reason, delay)
+        await asyncio.sleep(delay)
 
     async def encode_query(self, text: str) -> np.ndarray:
-        """Prefix 'query: ' (required by e5). Instance LRU cache hit avoids the encode entirely."""
+        """LRU-cached. No 'query: ' prefix (OpenAI, unlike e5). Cache miss -> single-text batch call."""
         key = self._cache_key(text)
         cached = self._query_cache.get(key)
         if cached is not None:
             return cached
-        prefixed = f"{_QUERY_PREFIX}{self._normalize_for_cache(text)}"
-        result = (await self._encode([prefixed]))[0]
+        normalized = self._normalize_for_cache(text)
+        result = (await self._embed_api_call([normalized]))[0]
         self._query_cache.put(key, result)
         return result
 
     async def encode_passages(self, texts: list[str]) -> np.ndarray:
-        """Prefix 'passage: ' (required by e5). No caching — one-shot at ingest. Returns (n, 768)."""
-        prefixed = [f"{_PASSAGE_PREFIX}{t}" for t in texts]
-        return await self._encode(prefixed)
+        """One batched call at ingest — no caching, no prefix. Returns shape (len(texts), 1536)."""
+        return await self._embed_api_call(texts)
 
     def count_tokens(self, text: str) -> int:
-        """Token count via the model's own subword tokenizer (chunker 480-token cap, §2.2)."""
-        return len(self._tokenizer.encode(text, add_special_tokens=True))
+        """tiktoken cl100k_base count — used by the chunker's token cap (§2.2)."""
+        return len(self._tokenizer.encode(text))
