@@ -23,7 +23,6 @@ from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpe
 
 logger = logging.getLogger(__name__)
 
-_EMBED_MODEL = "text-embedding-3-large"
 _EMBED_DIM = 1536
 _WHITESPACE_RE = re.compile(r"\s+")
 
@@ -64,8 +63,9 @@ class Embedder:
     """OpenAI-backed embedder. No query:/passage: prefixes (unlike e5) — text-embedding-3-large is a
     single-purpose model. No local model load; the async client is lightweight, created once."""
 
-    def __init__(self, api_key: str, cache_maxsize: int = 1000) -> None:
+    def __init__(self, api_key: str, model: str, cache_maxsize: int = 1000) -> None:
         self._client = AsyncOpenAI(api_key=api_key)
+        self._model = model
         self._query_cache = LRUCache(maxsize=cache_maxsize)
         # cl100k_base covers text-embedding-3-* token counting for the chunker's cap.
         self._tokenizer = tiktoken.get_encoding("cl100k_base")
@@ -84,7 +84,7 @@ class Embedder:
         for attempt in range(last_attempt + 1):
             try:
                 response = await self._client.embeddings.create(
-                    model=_EMBED_MODEL, input=texts, dimensions=_EMBED_DIM
+                    model=self._model, input=texts, dimensions=_EMBED_DIM
                 )
                 vectors = np.array([item.embedding for item in response.data], dtype=np.float32)
                 return _l2_normalize(vectors)

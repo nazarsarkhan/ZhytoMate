@@ -46,6 +46,7 @@ async def lifespan(app: FastAPI):
     # 3. Embedder — OpenAI-backed (no local model load; embeddings are a network call).
     embedder = Embedder(
         api_key=settings.openai_api_key,
+        model=settings.embed_model,
         cache_maxsize=settings.embed_cache_maxsize,
     )
 
