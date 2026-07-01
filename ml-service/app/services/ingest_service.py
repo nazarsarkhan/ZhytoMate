@@ -10,7 +10,7 @@ Must NOT import:  other services/*, api/*, FastAPI/Starlette, asyncpg
 from __future__ import annotations
 
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 
@@ -97,5 +97,6 @@ class IngestService:
         """news -> now()+ttl_days; instruction -> never expires (§2.5). ttl_days presence is guaranteed
         for news by the schema validator."""
         if request.doc_type is DocType.NEWS:
-            return datetime.now(timezone.utc) + timedelta(days=request.ttl_days)
+            assert request.ttl_days is not None  # enforced by IngestRequest's model_validator
+            return datetime.now(UTC) + timedelta(days=request.ttl_days)
         return None

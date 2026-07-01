@@ -10,12 +10,13 @@ import logging
 import sys
 
 import structlog
+from structlog.typing import Processor
 
 # Shared by both structlog-originated records (via the main `processors` chain) and plain stdlib
 # records from third-party libraries (uvicorn, asyncpg, ...) that never go through structlog at all
 # — `foreign_pre_chain` below runs these same steps on those before final rendering, so every line
 # on stdout gets the same level/timestamp shape.
-_SHARED_PROCESSORS = [
+_SHARED_PROCESSORS: list[Processor] = [
     structlog.contextvars.merge_contextvars,
     structlog.stdlib.add_log_level,
     structlog.processors.TimeStamper(fmt="iso"),

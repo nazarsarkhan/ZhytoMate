@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import time
 from collections import OrderedDict
+from typing import cast
 
 import structlog
 
@@ -32,7 +33,7 @@ from app.domain.districts import canonicalize_district
 from app.errors import RateLimitedError
 from app.metrics import district_unmapped, query_route_total
 from app.pipeline.agent import AgentRAGPipeline
-from app.pipeline.base import RAGPipeline, RagContext
+from app.pipeline.base import RagContext, RAGPipeline
 from app.pipeline.simple import SimpleRAGPipeline
 from app.protocols import Generator
 from app.schemas.query import QueryRequest, QueryResponse
@@ -156,7 +157,9 @@ class RagService:
                 user=user_hash,
                 district=district_slug,
                 route=route.value,
-                top1_sim=round(result.debug.get("top1_sim", 0.0), 3),
+                # debug is dict[str, object] (heterogeneous by design); top1_sim is always the
+                # float set by pipeline.base's run_shared_tail/no-info branch.
+                top1_sim=round(cast(float, result.debug.get("top1_sim", 0.0)), 3),
                 took_ms=round(self._elapsed_ms(start), 1),
             )
         else:
@@ -166,7 +169,9 @@ class RagService:
                 user=user_hash,
                 district=district_slug,
                 route=route.value,
-                top1_sim=round(result.debug.get("top1_sim", 0.0), 3),
+                # debug is dict[str, object] (heterogeneous by design); top1_sim is always the
+                # float set by pipeline.base's run_shared_tail/no-info branch.
+                top1_sim=round(cast(float, result.debug.get("top1_sim", 0.0)), 3),
                 n_chunks=result.debug.get("n_chunks", 0),
                 llm_ok=result.debug.get("llm_ok"),
                 llm_retries=result.debug.get("llm_retries", 0),
