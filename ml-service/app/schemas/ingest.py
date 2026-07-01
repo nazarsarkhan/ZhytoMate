@@ -4,7 +4,8 @@ Purpose:   IngestRequest / IngestResponse models for POST /api/v1/knowledge/inge
            service or router.
 Layer:     schema
 May import:   stdlib, pydantic, schemas/common (DocType)
-Must NOT import:  api/*, services/*, components/*, domain/*; any I/O or model lib (asyncpg, FastAPI routing)
+Must NOT import:  api/*, services/*, components/*, domain/*; any I/O or model lib (asyncpg, FastAPI
+              routing)
 """
 from __future__ import annotations
 

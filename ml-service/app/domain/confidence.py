@@ -1,5 +1,6 @@
 """
-Purpose:   Map top-1 similarity -> confidence band (high / medium / no-info) using SIM_GATE / SIM_HIGH.
+Purpose:   Map top-1 similarity -> confidence band (high / medium / no-info) using SIM_GATE /
+           SIM_HIGH.
            Boundary semantics: sim_gate is EXCLUSIVE on the no-info side (top1_sim < sim_gate ->
            NO_INFO, so top1_sim == sim_gate is NOT no-info), matching rag_service's existing gate
            check. sim_high is INCLUSIVE (top1_sim >= sim_high -> HIGH), per SYSTEM_DESIGN's stated
@@ -7,7 +8,9 @@ Purpose:   Map top-1 similarity -> confidence band (high / medium / no-info) usi
            (every value is either NO_INFO or HIGH) — this is intentional, not an error.
 Layer:     domain
 May import:   stdlib, schemas/common
-Must NOT import:  api/*, services/*, components/*; any I/O or model lib (asyncpg, google-genai, sentence-transformers, FastAPI). Thresholds are passed in (sourced from config), not imported.
+Must NOT import:  api/*, services/*, components/*; any I/O or model lib (asyncpg, google-genai,
+              sentence-transformers, FastAPI). Thresholds are passed in (sourced from config), not
+              imported.
 """
 from __future__ import annotations
 

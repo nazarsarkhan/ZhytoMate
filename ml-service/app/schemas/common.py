@@ -3,7 +3,8 @@ Purpose:   Shared schema primitives: the DocType enum (no magic strings for doc_
            ErrorEnvelope returned by every error handler (§3.3).
 Layer:     schema
 May import:   stdlib, pydantic
-Must NOT import:  api/*, services/*, components/*, domain/*; any I/O or model lib (asyncpg, FastAPI routing)
+Must NOT import:  api/*, services/*, components/*, domain/*; any I/O or model lib (asyncpg, FastAPI
+              routing)
 """
 from __future__ import annotations
 

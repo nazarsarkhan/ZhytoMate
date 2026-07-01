@@ -79,8 +79,10 @@ async def test_complex_query_uses_simple_pipeline_when_agent_disabled() -> None:
 
     response = await service.query(request)
 
-    assert response.route is QueryRoute.COMPLEX  # classifier's real decision, kept for observability
-    assert generator.call_count == 1  # a single synthesis call — no decompose, so it was SimpleRAGPipeline
+    # classifier's real decision, kept for observability
+    assert response.route is QueryRoute.COMPLEX
+    # a single synthesis call — no decompose, so it was SimpleRAGPipeline
+    assert generator.call_count == 1
 
 
 async def test_rate_limit_counter_receives_a_hashed_key_not_the_raw_user_id() -> None:

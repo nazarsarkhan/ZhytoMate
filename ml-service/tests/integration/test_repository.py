@@ -9,7 +9,8 @@ Purpose:   The critical DB-real integration tests (design §2.3–§2.6) against
 Layer:     test
 May import:   pytest, pytest-asyncio, app.components.repository, app.components.rate_limiter,
               app.domain.*, tests.integration.conftest
-Must NOT import:  app.api routers, google-genai, sentence-transformers (DB-real, LLM/embedder-absent)
+Must NOT import:  app.api routers, google-genai, sentence-transformers (DB-real,
+              LLM/embedder-absent)
 """
 from __future__ import annotations
 
@@ -34,7 +35,8 @@ async def test_set_local_iterative_scan_returns_results_when_filtered(pg_pool):
     requested number of *matching* rows (iterative_scan keeps expanding the HNSW scan).
 
     15 chunks in 'korolovskyi' -> a 'bohunskyi' query returns nothing (clean filter).
-    Add 5 'bohunskyi' chunks near the query vector -> the same query returns exactly 3, all bohunskyi.
+    Add 5 'bohunskyi' chunks near the query vector -> the same query returns exactly 3, all
+    bohunskyi.
     """
     repo = KnowledgeRepository(pg_pool)
 

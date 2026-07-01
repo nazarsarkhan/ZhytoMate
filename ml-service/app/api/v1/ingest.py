@@ -27,5 +27,6 @@ async def ingest_document(
     body: IngestRequest,
     svc: IngestService = Depends(get_ingest_service),
 ) -> IngestResponse:
-    """Ingest a document into the knowledge base. See docs/SYSTEM_DESIGN.md §3.1 for the contract."""
+    """Ingest a document into the knowledge base. See docs/SYSTEM_DESIGN.md §3.1 for the
+    contract."""
     return await svc.ingest(body)

@@ -1,5 +1,6 @@
 """
-Purpose:   Unit: top-1 similarity maps to the correct band across SIM_GATE / SIM_HIGH boundaries (incl. exact-edge values).
+Purpose:   Unit: top-1 similarity maps to the correct band across SIM_GATE / SIM_HIGH boundaries
+           (incl. exact-edge values).
 Layer:     test
 May import:   pytest, app.domain.confidence, stdlib
 Must NOT import:  app.api, app.services, app.components; asyncpg, google-genai (pure/fast unit test)
@@ -20,7 +21,8 @@ _SIM_HIGH = 0.80
         (0.0, ConfidenceBand.NO_INFO),
         (0.5, ConfidenceBand.NO_INFO),
         (0.69, ConfidenceBand.NO_INFO),
-        (0.70, ConfidenceBand.MEDIUM),  # exactly at sim_gate: NOT no-info (matches rag_service's `<` gate today)
+        # exactly at sim_gate: NOT no-info (matches rag_service's `<` gate today)
+        (0.70, ConfidenceBand.MEDIUM),
         (0.75, ConfidenceBand.MEDIUM),
         (0.79, ConfidenceBand.MEDIUM),
         (0.80, ConfidenceBand.HIGH),  # exactly at sim_high: HIGH (>= is inclusive)

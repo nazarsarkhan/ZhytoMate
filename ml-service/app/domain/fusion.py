@@ -6,7 +6,8 @@ Purpose:   Reciprocal Rank Fusion (RRF) — merges the dense (pgvector) and lexi
            score; the confidence gate reads dense top-1, not this fused order.
 Layer:     domain (pure — no I/O at runtime)
 May import:   stdlib; app.schemas.retrieval.RetrievalResult (TYPE_CHECKING only — duck-typed on .id
-              at runtime, so this stays importable without asyncpg/pgvector and trivially unit-testable)
+              at runtime, so this stays importable without asyncpg/pgvector and trivially
+              unit-testable)
 Must NOT import:  services/*, api/*, embedder, asyncpg, FastAPI (none imported at runtime)
 """
 from __future__ import annotations

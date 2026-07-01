@@ -4,7 +4,8 @@ Purpose:   Unit: reciprocal_rank_fusion() — dedups a chunk seen in both legs, 
            Uses a lightweight duck-typed result so the test stays pure (no asyncpg/pgvector).
 Layer:     test
 May import:   pytest, app.domain.fusion, stdlib
-Must NOT import:  app.api, app.services, app.components, app.pipeline; asyncpg, google-genai (pure/fast unit test)
+Must NOT import:  app.api, app.services, app.components, app.pipeline; asyncpg, google-genai
+              (pure/fast unit test)
 """
 from __future__ import annotations
 
@@ -15,7 +16,8 @@ from app.domain.fusion import reciprocal_rank_fusion
 
 @dataclass
 class _Result:
-    """Stand-in for schemas.retrieval.RetrievalResult — fusion only reads .id (and carries the rest)."""
+    """Stand-in for schemas.retrieval.RetrievalResult — fusion only reads .id (and carries the
+    rest)."""
 
     id: int
     text: str = ""

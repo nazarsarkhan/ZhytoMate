@@ -36,7 +36,8 @@ class IngestService:
         self._settings = settings
 
     async def ingest(self, request: IngestRequest) -> IngestResponse:
-        """Full idempotent pipeline (§2.4). Duplicate content short-circuits before any embedding."""
+        """Full idempotent pipeline (§2.4). Duplicate content short-circuits before any
+        embedding."""
         start = time.perf_counter()
 
         normalized = normalize_text(request.text)
@@ -94,8 +95,8 @@ class IngestService:
 
     @staticmethod
     def _expires_at(request: IngestRequest) -> datetime | None:
-        """news -> now()+ttl_days; instruction -> never expires (§2.5). ttl_days presence is guaranteed
-        for news by the schema validator."""
+        """news -> now()+ttl_days; instruction -> never expires (§2.5). ttl_days presence is
+        guaranteed for news by the schema validator."""
         if request.doc_type is DocType.NEWS:
             assert request.ttl_days is not None  # enforced by IngestRequest's model_validator
             return datetime.now(UTC) + timedelta(days=request.ttl_days)

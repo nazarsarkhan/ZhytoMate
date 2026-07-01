@@ -3,7 +3,8 @@ Purpose:   Pydantic v2 I/O schemas for POST /api/v1/chat/query — QueryRequest 
            QueryResponse.
 Layer:     schema
 May import:   stdlib, pydantic, schemas/common (QueryRoute)
-Must NOT import:  api/*, services/*, components/*, domain/*; any I/O or model lib (asyncpg, FastAPI routing)
+Must NOT import:  api/*, services/*, components/*, domain/*; any I/O or model lib (asyncpg, FastAPI
+              routing)
 """
 from __future__ import annotations
 
@@ -14,7 +15,8 @@ from app.schemas.common import QueryRoute
 
 class QueryRequest(BaseModel):
     user_query: str = Field(..., min_length=1, max_length=1000)
-    user_id: str = Field(..., min_length=1)  # Telegram id — rate limit + hashed logging only, never stored
+    # Telegram id — rate limit + hashed logging only, never stored
+    user_id: str = Field(..., min_length=1)
     district: str | None = None  # raw surface form — canonicalized in the service (§2.6)
 
 

@@ -1,12 +1,12 @@
 """
-Purpose:   RAG query router (§3.2, §4.2): rate-limit -> canonicalize district -> classify -> answer-
-           cache -> select SimpleRAGPipeline or AgentRAGPipeline (SIMPLE always; COMPLEX only reaches
-           the agent when AGENT_RAG_ENABLED, otherwise falls back to simple) -> map the pipeline's
-           RagResult onto the QueryResponse HTTP contract. All retrieval/generation/fallback logic
-           now lives in pipeline/* — HybridRetriever owns dense+lexical+RRF, and
-           pipeline.base.run_shared_tail owns the confidence gate -> generate -> extractive-fallback
-           tail shared by both pipelines — so this module is pure orchestration over the pipelines,
-           not over components directly.
+Purpose:   RAG query router (§3.2, §4.2): rate-limit -> canonicalize district -> classify
+           -> answer-cache -> select SimpleRAGPipeline or AgentRAGPipeline (SIMPLE always; COMPLEX
+           only reaches the agent when AGENT_RAG_ENABLED, otherwise falls back to simple) -> map the
+           pipeline's RagResult onto the QueryResponse HTTP contract. All
+           retrieval/generation/fallback logic now lives in pipeline/* — HybridRetriever owns
+           dense+lexical+RRF, and pipeline.base.run_shared_tail owns the confidence gate -> generate
+           -> extractive-fallback tail shared by both pipelines — so this module is pure
+           orchestration over the pipelines, not over components directly.
 Layer:     service
 May import:   domain/{classifier, districts}, schemas/query, app.protocols (Generator port, for the
               constructor signature only), components/repository + embedder + hybrid_retriever +
@@ -42,8 +42,9 @@ logger = structlog.get_logger(__name__)
 
 
 class _AnswerCache:
-    """TTL + LRU cache over QueryResponse, keyed by normalized query + district slug. Avoids redundant
-    LLM calls for repeated questions. Single-process asyncio use only — not thread-safe."""
+    """TTL + LRU cache over QueryResponse, keyed by normalized query + district slug. Avoids
+    redundant LLM calls for repeated questions. Single-process asyncio use only — not
+    thread-safe."""
 
     def __init__(self, maxsize: int, ttl_seconds: int) -> None:
         self._maxsize = maxsize
@@ -119,8 +120,8 @@ class RagService:
             logger.warning("query_unknown_district", raw=request.district)
             district_unmapped.labels(boundary="query").inc()
 
-        # 3. Route. COMPLEX only reaches the agent pipeline when the feature flag is on; the response
-        #    still carries the classifier's real decision either way (observability, §4.2).
+        # 3. Route. COMPLEX only reaches the agent pipeline when the feature flag is on; the
+        #    response still carries the classifier's real decision either way (observability, §4.2).
         route = classify_query(request.user_query)
         query_route_total.labels(route=route.value).inc()
         if route is QueryRoute.COMPLEX and self._settings.agent_rag_enabled:

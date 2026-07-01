@@ -28,10 +28,10 @@ def chunk_text(text: str, count_tokens_fn: Callable[[str], int]) -> list[str]:
     Small docs (<= SINGLE_CHUNK_THRESHOLD tokens) return as a single chunk. Otherwise sentences are
     greedily packed until the next would push the chunk past TARGET_TOKENS — that's the normal
     stopping point, not HARD_MAX_TOKENS; each new chunk is seeded with the trailing ~OVERLAP_TOKENS
-    of the previous one for continuity. A chunk only grows past TARGET_TOKENS (up to HARD_MAX_TOKENS)
-    when a single sentence pushes it there; a lone sentence over the hard cap is word-split as a last
-    resort instead. Every returned string is stripped, non-empty, and within the cap (except the rare
-    token-less giant word). Always returns at least one element.
+    of the previous one for continuity. A chunk only grows past TARGET_TOKENS (up to
+    HARD_MAX_TOKENS) when a single sentence pushes it there; a lone sentence over the hard cap is
+    word-split as a last resort instead. Every returned string is stripped, non-empty, and within
+    the cap (except the rare token-less giant word). Always returns at least one element.
     """
     text = text.strip()
     if not text:
@@ -75,7 +75,8 @@ def chunk_text(text: str, count_tokens_fn: Callable[[str], int]) -> list[str]:
 
 
 def _split_sentences(text: str) -> list[str]:
-    """Paragraphs (\\n\\n) then sentences (period + whitespace); every piece stripped and non-empty."""
+    """Paragraphs (\\n\\n) then sentences (period + whitespace); every piece stripped and
+    non-empty."""
     sentences: list[str] = []
     for paragraph in text.split("\n\n"):
         paragraph = paragraph.strip()
@@ -89,7 +90,8 @@ def _split_sentences(text: str) -> list[str]:
 
 
 def _overlap_tail(sentences: list[str], count_tokens_fn: Callable[[str], int]) -> list[str]:
-    """Trailing sentences whose cumulative token count stays around OVERLAP_TOKENS (at least one)."""
+    """Trailing sentences whose cumulative token count stays around
+    OVERLAP_TOKENS (at least one)."""
     tail: list[str] = []
     total = 0
     for sentence in reversed(sentences):

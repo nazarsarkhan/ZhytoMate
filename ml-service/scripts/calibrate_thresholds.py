@@ -5,9 +5,12 @@ Purpose:   Offline tool (NOT served): calibrate SIM_GATE / SIM_HIGH on the seede
            separation point, and emits suggested SIM_GATE (just above the irrelevant cluster) /
            SIM_HIGH (confident band). Turns SYSTEM_DESIGN §2.7's caveat into a runnable, pre-demo
            closed loop. Read-only — never writes to knowledge_base.
-           Run manually:  python scripts/calibrate_thresholds.py [--db DSN] [--api-key KEY] [--model NAME]
-Layer:     script  (composition root for an offline job — may wire concrete components, like main.py)
-May import:   app.config, app.components/* (embedder, repository), app.domain/*, asyncpg, pgvector, stdlib
+           Run manually:  python scripts/calibrate_thresholds.py [--db DSN] [--api-key KEY]
+           [--model NAME]
+Layer:     script  (composition root for an offline job — may wire concrete components,
+           like main.py)
+May import:   app.config, app.components/* (embedder, repository), app.domain/*,
+              asyncpg, pgvector, stdlib
 Must NOT import:  api/*; tests/*. Never writes to the DB (read-only calibration).
 """
 from __future__ import annotations

@@ -5,7 +5,8 @@ Purpose:   Unit: OpenAILLMClient retry/backoff behaviour, shared by generate() (
            (e.g. 400) is never retried, and analyze_image() now retries too — before this adapter
            existed, VisionService's own vision call had zero retries on any API error.
 Layer:     test
-May import:   pytest, app.components.llm, openai (exception types only, to build fakes), httpx, stdlib
+May import:   pytest, app.components.llm, openai (exception types only, to build fakes), httpx,
+              stdlib
 Must NOT import:  live network
 """
 from __future__ import annotations

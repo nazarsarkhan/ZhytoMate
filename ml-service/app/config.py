@@ -2,7 +2,8 @@
 Purpose:   pydantic-settings Settings (env + tunables) and a cached get_settings() singleton.
 Layer:     infra
 May import:   stdlib, pydantic, pydantic-settings
-Must NOT import:  any app.* module (config is a leaf — everything imports it; it imports nothing internal)
+Must NOT import:  any app.* module (config is a leaf — everything imports it; it imports nothing
+              internal)
 """
 from __future__ import annotations
 

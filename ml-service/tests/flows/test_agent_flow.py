@@ -119,9 +119,11 @@ async def test_only_the_first_dry_subquery_is_rewritten_and_reretried() -> None:
     assert generator.call_count == 3
     call_texts = [c[0] for c in retriever.calls]
     assert call_texts.count(_TRASH_Q) == 1
-    assert call_texts.count(_LIGHT_Q) == 1           # the initial (dry) retrieve for the rewritten one
+    # the initial (dry) retrieve for the rewritten one
+    assert call_texts.count(_LIGHT_Q) == 1
     assert call_texts.count(_WATER_Q) == 1           # still only retrieved once — never rewritten
-    assert call_texts.count(_LIGHT_REWRITTEN) == 1   # the single shared re-query budget was spent here
+    # the single shared re-query budget was spent here
+    assert call_texts.count(_LIGHT_REWRITTEN) == 1
     assert len(retriever.calls) == 4
     assert result.answer == "Зведена відповідь."
     assert result.confidence == 0.95  # max dense top-1 across sub-queries (rewritten світло wins)
@@ -137,7 +139,8 @@ async def test_all_subqueries_dry_returns_no_info_without_synthesis_call() -> No
         RagContext(user_query=_TRASH_Q, district_slug=None, route=QueryRoute.SIMPLE)
     )
 
-    # decompose + the single shared rewrite attempt both happen; synthesis never runs (no-info gate).
+    # decompose + the single shared rewrite attempt both happen; synthesis never runs
+    # (no-info gate).
     assert generator.call_count == 2
     assert result.debug["no_info"] is True
     assert result.sources_used == []

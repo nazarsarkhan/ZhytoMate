@@ -3,11 +3,12 @@ Purpose:   Retrieval transfer types shared across layers: RetrievalResult (one r
            dense or lexical) and RetrievalOutcome (the dense leg + the RRF-fused leg together).
            Lives in schemas — not components/repository — so app.protocols (which may only import
            schemas/domain types, never components/*) can type Retriever.retrieve()'s return value.
-           RetrievalOutcome.dense_top1_sim preserves the load-bearing distinction the confidence gate
-           relies on: the dense-only top-1 cosine, never the RRF-fused order/score.
+           RetrievalOutcome.dense_top1_sim preserves the load-bearing distinction the confidence
+           gate relies on: the dense-only top-1 cosine, never the RRF-fused order/score.
 Layer:     schema
 May import:   stdlib (dataclasses)
-Must NOT import:  api/*, services/*, components/*, domain/*; any I/O or model lib (asyncpg, FastAPI routing)
+Must NOT import:  api/*, services/*, components/*, domain/*; any I/O or model lib (asyncpg, FastAPI
+              routing)
 """
 from __future__ import annotations
 

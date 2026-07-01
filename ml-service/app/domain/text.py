@@ -11,7 +11,8 @@ import hashlib
 import re
 import unicodedata
 
-# Horizontal whitespace (tabs, CR, NBSP, form-feed, ...) but NOT newlines — paragraph breaks survive.
+# Horizontal whitespace (tabs, CR, NBSP, form-feed, ...) but NOT newlines — paragraph breaks
+# survive.
 _HORIZONTAL_WS_RE = re.compile(r"[^\S\n]+")
 # Spaces hugging a newline collapse onto the newline (avoids trailing spaces from CRLF input).
 _NEWLINE_PAD_RE = re.compile(r" *\n *")

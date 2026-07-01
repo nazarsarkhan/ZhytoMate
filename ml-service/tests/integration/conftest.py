@@ -1,9 +1,9 @@
 """
 Purpose:   Shared fixtures for the DB-real integration suite. Spins up ONE pgvector/pgvector:pg16
            container per session, applies the real db/migrations/*.sql, opens an asyncpg pool with
-           the pgvector codec registered, and truncates the tables before every test. The LLM and the
-           Embedder are never touched here — these tests exercise the real repository against real
-           Postgres only (vectors are seeded directly via the helpers below).
+           the pgvector codec registered, and truncates the tables before every test. The LLM and
+           the Embedder are never touched here — these tests exercise the real repository against
+           real Postgres only (vectors are seeded directly via the helpers below).
 Layer:     test
 May import:   pytest, pytest-asyncio, testcontainers, asyncpg, pgvector, numpy
 Must NOT import:  app.api routers, openai, sentence-transformers (DB-real, LLM/embedder-absent)

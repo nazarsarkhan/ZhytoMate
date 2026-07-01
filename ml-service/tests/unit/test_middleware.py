@@ -2,10 +2,11 @@
 Purpose:   Unit: RequestLoggingMiddleware's externally-observable X-Request-ID header contract —
            accept-or-generate, echoed back on the response. app.errors._request_id and the rest of
            the system depend on request.state.request_id being populated correctly; the generic
-           access-log line's content is not asserted here (that's covered by test_logging_config.py).
-           Also covers the ServerErrorMiddleware/RequestLoggingMiddleware ordering regression: a
-           truly unhandled exception must be logged with a rendered traceback exactly once, and that
-           log line must still carry the request id even though it runs outside this middleware.
+           access-log line's content is not asserted here (that's covered by
+           test_logging_config.py). Also covers the ServerErrorMiddleware/RequestLoggingMiddleware
+           ordering regression: a truly unhandled exception must be logged with a rendered traceback
+           exactly once, and that log line must still carry the request id even though it runs
+           outside this middleware.
 Layer:     test
 May import:   pytest, fastapi.testclient, app.middleware, app.errors, app.observability.logging
 Must NOT import:  live network

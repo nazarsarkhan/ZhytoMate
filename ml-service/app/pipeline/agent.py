@@ -184,7 +184,8 @@ class AgentRAGPipeline(RAGPipeline):
 
     async def _rewrite(self, subquery: str) -> str:
         """1 Generator call (only reached if some sub-query was dry). On any failure, or an
-        empty-after-strip reply, keep the original subquery text — never raise out of this method."""
+        empty-after-strip reply, keep the original subquery text — never raise out of this
+        method."""
         prompt = build_rewrite_prompt(subquery)
         try:
             raw, _ = await self._generator.generate(

@@ -4,7 +4,8 @@ Purpose:   Unit: VisionService._parse_and_validate (enum/severity guard, None on
            VisionService with placeholder deps — no async calls, no real OpenAI.
 Layer:     test
 May import:   pytest, app.services.vision_service, app.schemas.vision, stdlib
-Must NOT import:  app.components, asyncpg, openai (pure/fast unit test — vision_service defers the SDK import)
+Must NOT import:  app.components, asyncpg, openai (pure/fast unit test — vision_service defers the
+              SDK import)
 """
 from __future__ import annotations
 

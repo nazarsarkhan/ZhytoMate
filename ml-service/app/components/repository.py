@@ -115,7 +115,8 @@ class KnowledgeRepository:
         return found is not None
 
     async def upsert_chunks(self, document_id: str, chunks: list[ChunkRecord]) -> int:
-        """Replace a document's chunks atomically: DELETE then bulk INSERT. Returns rows inserted."""
+        """Replace a document's chunks atomically: DELETE then bulk INSERT. Returns rows
+        inserted."""
         records = [
             (c.document_id, c.chunk_index, c.text, c.embedding, c.doc_type,
              c.category, c.district, c.source, c.content_hash, c.expires_at)
@@ -154,7 +155,8 @@ class KnowledgeRepository:
     async def retrieve_lexical(
         self, query: str, district_slug: str | None, limit: int = 10
     ) -> list[RetrievalResult]:
-        """Full-text leg (§2.8). websearch_to_tsquery primary; plainto_tsquery fallback on 0 rows."""
+        """Full-text leg (§2.8). websearch_to_tsquery primary; plainto_tsquery fallback on 0
+        rows."""
         start = time.perf_counter()
         rows = await self._pool.fetch(
             _LEXICAL_SQL.format(tsquery="websearch_to_tsquery"), query, district_slug, limit

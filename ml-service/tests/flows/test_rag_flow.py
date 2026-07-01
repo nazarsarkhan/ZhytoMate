@@ -1,9 +1,10 @@
 """
 Purpose:   Flow (SimpleRAGPipeline, fake Embedder/Retriever/Generator): empty retrieval => Generator
-           NOT called (no-info path); a sufficiently similar retrieval => Generator IS called and its
-           answer is returned; a Generator error => extractive fallback (the top chunk's text,
+           NOT called (no-info path); a sufficiently similar retrieval => Generator IS called and
+           its answer is returned; a Generator error => extractive fallback (the top chunk's text,
            prefixed) instead of a 5xx. Exercises the pipeline directly (not RagService, which also
-           owns rate-limiting/caching against a real repo — out of scope for this fast, DB-free flow).
+           owns rate-limiting/caching against a real repo — out of scope for this fast, DB-free
+           flow).
 Layer:     test
 May import:   pytest, app.pipeline.simple, app.pipeline.base, tests.fakes.fake_generator,
               tests.fakes.fake_embedder, tests.fakes.fake_retriever, app.schemas/*

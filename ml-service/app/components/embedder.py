@@ -7,7 +7,8 @@ Purpose:   OpenAI embedding wrapper (model injected via config; 1536d). Async HT
            don't change.
 Layer:     component
 May import:   stdlib, numpy, openai, tiktoken, structlog, app.protocols, app.metrics
-Must NOT import:  app/* (except config types), services/*, api/*, other components/*; FastAPI, asyncpg
+Must NOT import:  app/* (except config types), services/*, api/*, other components/*; FastAPI,
+              asyncpg
 """
 from __future__ import annotations
 
@@ -119,7 +120,8 @@ class Embedder(EmbedderPort):
         await asyncio.sleep(delay)
 
     async def encode_query(self, text: str) -> np.ndarray:
-        """LRU-cached. No 'query: ' prefix (OpenAI, unlike e5). Cache miss -> single-text batch call."""
+        """LRU-cached. No 'query: ' prefix (OpenAI, unlike e5). Cache miss -> single-text batch
+        call."""
         key = self._cache_key(text)
         embedding_cache_lookups_total.inc()
         cached = self._query_cache.get(key)

@@ -1,6 +1,6 @@
 """
-Purpose:   Unit: build_rag_prompt keeps context and the user question in separate XML blocks, carries
-           the anti-injection instruction, and separates chunks with a horizontal rule.
+Purpose:   Unit: build_rag_prompt keeps context and the user question in separate XML blocks,
+           carries the anti-injection instruction, and separates chunks with a horizontal rule.
            build_decompose_prompt/build_rewrite_prompt: the question text survives verbatim, the
            decompose prompt names the max sub-query count and demands JSON-only output, the rewrite
            prompt demands question-only output.

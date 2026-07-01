@@ -4,7 +4,8 @@ Purpose:   Unit: classify_query() truth table — short single-intent -> SIMPLE;
            bias toward SIMPLE.
 Layer:     test
 May import:   pytest, app.domain.classifier, stdlib
-Must NOT import:  app.api, app.services, app.components, app.pipeline; asyncpg, google-genai (pure/fast unit test)
+Must NOT import:  app.api, app.services, app.components, app.pipeline; asyncpg, google-genai
+              (pure/fast unit test)
 """
 from __future__ import annotations
 

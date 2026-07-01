@@ -1,11 +1,12 @@
 """
 Purpose:   Integration: IngestService's content_hash idempotency against a real Postgres repository
            — re-ingesting the SAME document_id with identical text is deduped before any embedding
-           call, and re-ingesting it with EDITED text atomically replaces the old chunks (no leftover
-           rows) instead of accumulating duplicates. KnowledgeRepository's own dedup/upsert SQL is
-           already proven directly in test_repository.py (test_content_hash_dedup_prevents_double_
-           ingest); this file's job is IngestService's orchestration on top of it — real Postgres,
-           real KnowledgeRepository, FakeEmbedder (no OpenAI call needed to prove idempotency).
+           call, and re-ingesting it with EDITED text atomically replaces the old chunks (no
+           leftover rows) instead of accumulating duplicates. KnowledgeRepository's own dedup/upsert
+           SQL is already proven directly in test_repository.py
+           (test_content_hash_dedup_prevents_double_ingest); this file's job is IngestService's
+           orchestration on top of it — real Postgres, real KnowledgeRepository, FakeEmbedder (no
+           OpenAI call needed to prove idempotency).
 Layer:     test
 May import:   pytest, testcontainers, app.components.repository, app.services.ingest_service,
               app.schemas/*, app.config, tests.fakes.fake_embedder, tests.integration.conftest

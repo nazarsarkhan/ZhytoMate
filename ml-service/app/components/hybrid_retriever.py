@@ -28,7 +28,8 @@ from app.schemas.retrieval import RetrievalOutcome
 
 class HybridRetriever(Retriever):
     """Adapts KnowledgeRepository's two retrieval legs to the Retriever port: dense + lexical run
-    concurrently, then RRF-fuse. Stateless beyond the injected repo and the RRF smoothing constant."""
+    concurrently, then RRF-fuse. Stateless beyond the injected repo and the RRF smoothing
+    constant."""
 
     def __init__(self, repo: KnowledgeRepository, rrf_k: int) -> None:
         self._repo = repo

@@ -10,7 +10,8 @@ Purpose:   LLM prompt templates. All prompts live here — never inline in servi
            parses the raw response directly and must handle a malformed reply defensively.
 Layer:     domain (pure strings — no I/O)
 May import:   stdlib only
-Must NOT import:  api/*, services/*, components/*, pipeline/*; any I/O or model lib (asyncpg, FastAPI)
+Must NOT import:  api/*, services/*, components/*, pipeline/*; any I/O or model lib (asyncpg,
+              FastAPI)
 """
 from __future__ import annotations
 

@@ -14,7 +14,9 @@ Purpose:   assemble_context(chunks, token_budget, count_tokens_fn) -> list[Retri
            never disagree about which chunks were actually shown to the model.
 Layer:     domain
 May import:   stdlib, schemas/retrieval (RetrievalResult)
-Must NOT import:  api/*, services/*, components/*, pipeline/*; any I/O or model lib (asyncpg, google-genai, sentence-transformers, FastAPI). Token counting uses an injected callable to stay pure.
+Must NOT import:  api/*, services/*, components/*, pipeline/*; any I/O or model lib (asyncpg,
+              google-genai, sentence-transformers, FastAPI). Token counting uses an injected
+              callable to stay pure.
 """
 from __future__ import annotations
 

@@ -24,7 +24,8 @@ _INTERNAL_TOKEN_HEADER = "X-Internal-Token"
 
 
 def verify_internal_token(request: Request) -> None:
-    """Constant-time compare of X-Internal-Token vs settings.internal_token; 401 on miss/mismatch."""
+    """Constant-time compare of X-Internal-Token vs settings.internal_token; 401 on
+    miss/mismatch."""
     expected = request.app.state.settings.internal_token
     provided = request.headers.get(_INTERNAL_TOKEN_HEADER)
     if provided is None or not hmac.compare_digest(provided, expected):
@@ -32,7 +33,8 @@ def verify_internal_token(request: Request) -> None:
 
 
 def get_ingest_service(request: Request) -> IngestService:
-    """Build IngestService from app.state. Imported here (not at module top) to dodge import cycles."""
+    """Build IngestService from app.state. Imported here (not at module top) to dodge import
+    cycles."""
     from app.services.ingest_service import IngestService
 
     state = request.app.state
@@ -53,7 +55,8 @@ def get_rag_service(request: Request) -> RagService:
 
 
 def get_vision_service(request: Request) -> VisionService:
-    """Build VisionService from app.state. Imported here (not at module top) to dodge import cycles."""
+    """Build VisionService from app.state. Imported here (not at module top) to dodge import
+    cycles."""
     from app.services.vision_service import VisionService
 
     state = request.app.state

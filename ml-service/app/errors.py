@@ -6,7 +6,8 @@ Purpose:   Error-envelope rendering + FastAPI exception handlers + dependency-li
 Layer:     infra
 May import:   stdlib, structlog, schemas/common (ErrorEnvelope); FastAPI/Starlette only inside
               handler bodies
-Must NOT import:  services/*, components/*, api/v1/* routers, domain/* (errors is a leaf others import)
+Must NOT import:  services/*, components/*, api/v1/* routers, domain/* (errors is a leaf others
+              import)
 """
 from __future__ import annotations
 
