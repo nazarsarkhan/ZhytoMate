@@ -1,6 +1,8 @@
 """
-Purpose:   Unit: chunker honours target 380 / hard-max 480 / overlap 50 token boundaries and never
-           exceeds the cap. Tokens are faked as whitespace-words so the test is pure and fast.
+Purpose:   Unit: chunker honours target 300 / hard-max 400 / overlap 50 token boundaries, packs
+           toward the target as the normal stopping point, and never exceeds the hard cap except via
+           a single oversized sentence. Tokens are faked as whitespace-words so the test is pure and
+           fast.
 Layer:     test
 May import:   pytest, app.domain.chunker, stdlib
 Must NOT import:  app.api, app.services, app.components; asyncpg, google-genai (pure/fast unit test)
@@ -10,6 +12,7 @@ from __future__ import annotations
 from app.domain.chunker import (
     HARD_MAX_TOKENS,
     SINGLE_CHUNK_THRESHOLD,
+    TARGET_TOKENS,
     chunk_text,
 )
 
@@ -59,4 +62,26 @@ def test_giant_single_sentence_is_word_split() -> None:
     giant = " ".join(f"w{i}" for i in range(HARD_MAX_TOKENS * 2))  # one period-free sentence
     chunks = chunk_text(giant, _count_words)
     assert len(chunks) >= 2
+    assert all(_count_words(chunk) <= HARD_MAX_TOKENS for chunk in chunks)
+
+
+def test_normal_packing_stops_at_target_not_hard_max() -> None:
+    """With ordinary short sentences, packing should stop at TARGET_TOKENS rather than growing all
+    the way to HARD_MAX_TOKENS just because that's technically still within the cap."""
+    chunks = chunk_text(_sentences(600), _count_words)
+    non_final_chunks = chunks[:-1]
+    assert len(non_final_chunks) >= 2  # otherwise this test isn't exercising the packing loop
+    for chunk in non_final_chunks:
+        token_count = _count_words(chunk)
+        assert token_count <= TARGET_TOKENS
+        assert token_count > TARGET_TOKENS - 10  # within one sentence (10 tokens) of the target
+
+
+def test_sentence_between_target_and_hard_max_forms_its_own_chunk() -> None:
+    """A single sentence longer than TARGET_TOKENS but within HARD_MAX_TOKENS is kept whole (not
+    word-split) and is the one legitimate way a chunk grows past the target."""
+    lead_in = _sentences(TARGET_TOKENS)
+    long_sentence = " ".join(f"w{i}" for i in range(TARGET_TOKENS + 20)) + "."
+    chunks = chunk_text(f"{lead_in} {long_sentence}", _count_words)
+    assert any(_count_words(chunk) > TARGET_TOKENS for chunk in chunks)
     assert all(_count_words(chunk) <= HARD_MAX_TOKENS for chunk in chunks)
