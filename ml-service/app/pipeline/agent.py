@@ -1,6 +1,145 @@
 """
-Purpose:   AgentRAGPipeline(RAGPipeline): COMPLEX path via query DECOMPOSITION (not open-ended rewriting). decompose(query) -> <= AGENT_MAX_SUBQUERIES sub-queries (1 Generator call) -> embed + hybrid-retrieve each IN PARALLEL (asyncio.gather) -> is_sufficient per sub-query, re-query a dry one at most ONCE (the bounded "max 3 / rewrite" semantics) -> merge+dedup -> assemble_context -> shared tail with one synthesis call. Gated by AGENT_RAG_ENABLED; falls back to SimpleRAGPipeline when off.
+Purpose:   AgentRAGPipeline(RAGPipeline): COMPLEX path via query DECOMPOSITION (not open-ended
+           rewriting). decompose(query) -> <= max_subqueries sub-queries (1 Generator call) -> embed
+           + hybrid-retrieve each IN PARALLEL (asyncio.gather) -> is_sufficient per sub-query,
+           re-query at most ONE dry sub-query (a single SHARED re-query budget across the whole
+           request — if several sub-queries are dry, only the FIRST by list order is rewritten and
+           re-retried, the rest keep their original dry result) -> merge+dedup happens inside the
+           shared tail's assemble_context -> one synthesis call. Worst case: 1 (decompose) + 1
+           (rewrite) + 1 (synthesis) = 3 Generator calls. AGENT_RAG_ENABLED gating and the
+           fallback-to-SimpleRAGPipeline decision live in app.services.rag_service (the router), NOT
+           here — AgentRAGPipeline.run() always runs the full agent flow when called.
 Layer:     pipeline
-May import:   pipeline/base, protocols (Embedder/Retriever/Generator), domain/{fusion,context,sufficiency,confidence,prompts}, schemas/*, app.config (types)
-Must NOT import:  api/*, services/*; concrete components/*; FastAPI, asyncpg, google-genai, sentence-transformers
+May import:   pipeline/base, protocols (Embedder/Retriever/Generator), domain/{sufficiency,prompts},
+              schemas/retrieval, app.metrics, stdlib (asyncio, json, logging)
+Must NOT import:  api/*, services/*; concrete components/*; FastAPI, asyncpg, sentence-transformers
 """
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+
+from app.domain.prompts import build_decompose_prompt, build_rewrite_prompt
+from app.domain.sufficiency import is_sufficient
+from app.metrics import agent_subqueries
+from app.pipeline.base import RETRIEVE_LIMIT, RAGPipeline, RagContext, RagResult, run_shared_tail
+from app.protocols import Embedder, Generator, Retriever
+from app.schemas.retrieval import RetrievalOutcome
+
+logger = logging.getLogger(__name__)
+
+# Short, near-deterministic internal calls — not the user-facing answer, so both temperature and
+# max_tokens stay well below the main generation's 0.3 / 1024.
+_DECOMPOSE_TEMPERATURE = 0.1
+_DECOMPOSE_MAX_TOKENS = 200
+_DECOMPOSE_TIMEOUT_S = 6.0
+
+_REWRITE_TEMPERATURE = 0.2
+_REWRITE_MAX_TOKENS = 60
+_REWRITE_TIMEOUT_S = 4.0
+
+
+class AgentRAGPipeline(RAGPipeline):
+    """COMPLEX-route pipeline: decompose -> parallel retrieve -> single bounded re-query -> shared
+    tail. See module docstring for the exact bound on Generator calls."""
+
+    def __init__(
+        self,
+        embedder: Embedder,
+        retriever: Retriever,
+        generator: Generator,
+        sim_gate: float,
+        sim_high: float,
+        max_subqueries: int,
+    ) -> None:
+        self._embedder = embedder
+        self._retriever = retriever
+        self._generator = generator
+        self._sim_gate = sim_gate
+        self._sim_high = sim_high
+        self._max_subqueries = max_subqueries
+
+    async def run(self, ctx: RagContext) -> RagResult:
+        subqueries = await self._decompose(ctx.user_query)
+        agent_subqueries.observe(len(subqueries))
+
+        outcomes = list(
+            await asyncio.gather(
+                *(self._retrieve_one(sq, ctx.district_slug) for sq in subqueries)
+            )
+        )
+
+        dry_indices = [
+            i for i, outcome in enumerate(outcomes)
+            if not is_sufficient(outcome.dense, self._sim_gate)
+        ]
+        if dry_indices:
+            # Single shared re-query budget: only the FIRST dry sub-query (by list order) gets
+            # rewritten and re-retried, even if others are also dry.
+            first_dry = dry_indices[0]
+            rewritten = await self._rewrite(subqueries[first_dry])
+            outcomes[first_dry] = await self._retrieve_one(rewritten, ctx.district_slug)
+
+        flattened = [result for outcome in outcomes for result in outcome.fused]
+        agent_top1 = max((outcome.dense_top1_sim for outcome in outcomes), default=0.0)
+
+        return await run_shared_tail(
+            generator=self._generator,
+            sim_gate=self._sim_gate,
+            sim_high=self._sim_high,
+            count_tokens_fn=self._embedder.count_tokens,
+            retrieved=flattened,
+            top1_sim=agent_top1,
+            question=ctx.user_query,
+            route=ctx.route,
+        )
+
+    async def _retrieve_one(self, query_text: str, district: str | None) -> RetrievalOutcome:
+        query_vec = await self._embedder.encode_query(query_text)
+        return await self._retriever.retrieve(query_text, query_vec, district, k=RETRIEVE_LIMIT)
+
+    async def _decompose(self, query: str) -> list[str]:
+        """1 Generator call. Any parse failure, non-list, empty list, or non-string element degrades
+        to [query] (agent behaves like simple for this request rather than raising) — logged as a
+        warning in every degrade case."""
+        prompt = build_decompose_prompt(query, self._max_subqueries)
+        try:
+            raw, _ = await self._generator.generate(
+                prompt,
+                temperature=_DECOMPOSE_TEMPERATURE,
+                max_tokens=_DECOMPOSE_MAX_TOKENS,
+                timeout_s=_DECOMPOSE_TIMEOUT_S,
+            )
+            parsed = json.loads(raw)
+        except Exception as exc:  # noqa: BLE001 — any decompose failure degrades to a single sub-query
+            logger.warning("agent_decompose_failed err=%s", type(exc).__name__)
+            return [query]
+
+        if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
+            logger.warning("agent_decompose_bad_shape raw=%r", raw)
+            return [query]
+
+        subqueries = [item.strip() for item in parsed[: self._max_subqueries] if item.strip()]
+        if not subqueries:
+            logger.warning("agent_decompose_empty_after_filter raw=%r", raw)
+            return [query]
+        return subqueries
+
+    async def _rewrite(self, subquery: str) -> str:
+        """1 Generator call (only reached if some sub-query was dry). On any failure, or an
+        empty-after-strip reply, keep the original subquery text — never raise out of this method."""
+        prompt = build_rewrite_prompt(subquery)
+        try:
+            raw, _ = await self._generator.generate(
+                prompt,
+                temperature=_REWRITE_TEMPERATURE,
+                max_tokens=_REWRITE_MAX_TOKENS,
+                timeout_s=_REWRITE_TIMEOUT_S,
+            )
+        except Exception as exc:  # noqa: BLE001 — a failed rewrite falls back to the original sub-query
+            logger.warning("agent_rewrite_failed err=%s", type(exc).__name__)
+            return subquery
+
+        rewritten = raw.strip()
+        return rewritten if rewritten else subquery
