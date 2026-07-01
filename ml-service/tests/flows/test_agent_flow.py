@@ -5,12 +5,13 @@ Purpose:   Flow (AgentRAGPipeline, fake Embedder/Retriever/Generator): a multi-i
            rewritten and re-retried — a single shared re-query budget for the whole request, not one
            per dry sub-query. Also proves the shared tail holds through the agent path: all-empty
            retrieval => the synthesis Generator call is skipped (no-info); a Generator error at
-           synthesis => the same extractive fallback as the simple path. Also proves per-sub-query
-           fused lists are rank-interleaved before assemble_context runs, so a globally relevant
-           single-chunk sub-query isn't starved out of the token budget by a multi-chunk sub-query
-           that merely arrived first in decomposition order. AGENT_RAG_ENABLED gating/fallback-to-
-           simple is RagService's job, not AgentRAGPipeline's — exercised here directly, not through
-           the router.
+           synthesis => the same extractive fallback as the simple path. Also covers the two Phase-4
+           review fixes: per-sub-query fused lists are rank-interleaved before assemble_context
+           runs, so a globally relevant single-chunk sub-query isn't starved out of the token budget
+           by a multi-chunk sub-query that merely arrived first in decomposition order; and a
+           sub-query whose retrieve() raises degrades to a dry outcome instead of aborting the whole
+           request. AGENT_RAG_ENABLED gating/fallback-to-simple is RagService's job, not
+           AgentRAGPipeline's — exercised here directly, not through the router.
 Layer:     test
 May import:   pytest, app.pipeline.agent, app.pipeline.base, app.domain.context,
               tests.fakes.fake_generator, tests.fakes.fake_embedder, tests.fakes.fake_retriever,
@@ -186,3 +187,44 @@ async def test_interleaving_prevents_one_subquery_from_starving_another_out_of_t
     assert sources == ["A0", "B0"]  # B0 (B's rank 0) beats out A2 (A's rank 2) for the last slot
     assert result.debug["n_chunks"] == 2
     assert result.confidence == 0.99  # top1 across sub-queries is B0's — never dropped upstream
+
+
+async def test_one_subquery_retrieval_failure_is_isolated_and_treated_as_dry() -> None:
+    """A transient error inside one sub-query's retrieve() (e.g. a dropped Postgres connection) must
+    not blow up the whole agent request. It degrades to an empty (dry) outcome, so the existing
+    single shared re-query budget picks it up exactly like any other dry sub-query, while the other,
+    unaffected sub-query's result still reaches the synthesis prompt."""
+    query_a, query_b = "Query A", "Query B"
+    rewritten_b = "Query B, уточнено"
+    decompose_json = json.dumps([query_a, query_b])
+    retriever = FakeRetriever(
+        {
+            query_a: _outcome(_hit(1, 0.95, "Дані по A.")),
+            query_b: RuntimeError("connection reset by peer"),
+            rewritten_b: _outcome(_hit(2, 0.90, "Дані по B після рерайту.")),
+        }
+    )
+    generator = FakeGenerator(
+        results=[(decompose_json, 0), (rewritten_b, 0), ("Зведена відповідь.", 0)]
+    )
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(
+        RagContext(user_query=f"{query_a} {query_b}", district_slug=None, route=QueryRoute.COMPLEX)
+    )
+
+    # (a) the request completes and produces the synthesized answer rather than raising/500ing.
+    assert result.answer == "Зведена відповідь."
+    assert result.debug["no_info"] is False
+
+    # (b) sub-query A's result was unaffected by B's failure, and B's recovered (post-rewrite)
+    # result reached the final context too — the failure of the first attempt didn't drop it.
+    similarities = sorted(s.similarity for s in result.sources_used)
+    assert similarities == [0.90, 0.95]
+
+    # (c) the failed sub-query was treated as dry: it got the one shared re-query, and it recovered.
+    call_texts = [c[0] for c in retriever.calls]
+    assert call_texts.count(query_a) == 1
+    assert call_texts.count(query_b) == 1
+    assert call_texts.count(rewritten_b) == 1
+    assert generator.call_count == 3  # decompose + exactly one rewrite + synthesis

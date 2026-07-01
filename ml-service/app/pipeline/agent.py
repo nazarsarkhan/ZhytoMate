@@ -1,17 +1,19 @@
 """
 Purpose:   AgentRAGPipeline(RAGPipeline): COMPLEX path via query DECOMPOSITION (not open-ended
            rewriting). decompose(query) -> <= max_subqueries sub-queries (1 Generator call) -> embed
-           + hybrid-retrieve each IN PARALLEL (asyncio.gather) -> is_sufficient per sub-query,
-           re-query at most ONE dry sub-query (a single SHARED re-query budget across the whole
-           request — if several sub-queries are dry, only the FIRST by list order is rewritten and
-           re-retried, the rest keep their original dry result) -> the per-sub-query fused lists are
-           rank-interleaved (round-robin: every sub-query's rank-0 chunk before any sub-query's
-           rank-1 chunk) so no single sub-query can starve the others out of the shared tail's token
-           budget -> merge+dedup happens inside the shared tail's assemble_context -> one synthesis
-           call. Worst case: 1 (decompose) + 1 (rewrite) + 1 (synthesis) = 3 Generator calls.
-           AGENT_RAG_ENABLED gating and the fallback-to-SimpleRAGPipeline decision live in
-           app.services.rag_service (the router), NOT here — AgentRAGPipeline.run() always runs the
-           full agent flow when called.
+           + hybrid-retrieve each IN PARALLEL (asyncio.gather(..., return_exceptions=True) — a
+           sub-query whose retrieval raises degrades to an empty RetrievalOutcome, logged as a
+           warning, rather than failing the whole request) -> is_sufficient per sub-query (a failed
+           retrieval is just another form of dry), re-query at most ONE dry sub-query (a single
+           SHARED re-query budget across the whole request — if several sub-queries are dry, only
+           the FIRST by list order is rewritten and re-retried, the rest keep their original dry
+           result) -> the per-sub-query fused lists are rank-interleaved (round-robin: every
+           sub-query's rank-0 chunk before any sub-query's rank-1 chunk) so no single sub-query can
+           starve the others out of the shared tail's token budget -> merge+dedup happens inside the
+           shared tail's assemble_context -> one synthesis call. Worst case: 1 (decompose) + 1
+           (rewrite) + 1 (synthesis) = 3 Generator calls. AGENT_RAG_ENABLED gating and the
+           fallback-to-SimpleRAGPipeline decision live in app.services.rag_service (the router), NOT
+           here — AgentRAGPipeline.run() always runs the full agent flow when called.
 Layer:     pipeline
 May import:   pipeline/base, protocols (Embedder/Retriever/Generator), domain/{sufficiency,prompts},
               schemas/retrieval, app.metrics, stdlib (asyncio, json, logging)
@@ -57,6 +59,16 @@ def _interleave_by_rank(outcomes: list[RetrievalOutcome]) -> list[RetrievalResul
     return interleaved
 
 
+def _outcome_or_dry(subquery: str, result: RetrievalOutcome | BaseException) -> RetrievalOutcome:
+    """A sub-query's retrieval failing (e.g. a transient DB error) degrades to an empty outcome
+    instead of propagating — the empty outcome is indistinguishable from a genuinely dry sub-query,
+    so it's picked up by the existing is_sufficient/re-query logic like any other dry sub-query."""
+    if isinstance(result, BaseException):
+        logger.warning("agent_retrieve_failed subquery=%r err=%s", subquery, type(result).__name__)
+        return RetrievalOutcome(dense=[], fused=[])
+    return result
+
+
 class AgentRAGPipeline(RAGPipeline):
     """COMPLEX-route pipeline: decompose -> parallel retrieve -> single bounded re-query -> shared
     tail. See module docstring for the exact bound on Generator calls."""
@@ -81,11 +93,7 @@ class AgentRAGPipeline(RAGPipeline):
         subqueries = await self._decompose(ctx.user_query)
         agent_subqueries.observe(len(subqueries))
 
-        outcomes = list(
-            await asyncio.gather(
-                *(self._retrieve_one(sq, ctx.district_slug) for sq in subqueries)
-            )
-        )
+        outcomes = await self._retrieve_all(subqueries, ctx.district_slug)
 
         dry_indices = [
             i for i, outcome in enumerate(outcomes)
@@ -95,8 +103,9 @@ class AgentRAGPipeline(RAGPipeline):
             # Single shared re-query budget: only the FIRST dry sub-query (by list order) gets
             # rewritten and re-retried, even if others are also dry.
             first_dry = dry_indices[0]
-            rewritten = await self._rewrite(subqueries[first_dry])
-            outcomes[first_dry] = await self._retrieve_one(rewritten, ctx.district_slug)
+            outcomes[first_dry] = await self._reretry_dry(
+                subqueries[first_dry], outcomes[first_dry], ctx.district_slug
+            )
 
         flattened = _interleave_by_rank(outcomes)
         agent_top1 = max((outcome.dense_top1_sim for outcome in outcomes), default=0.0)
@@ -111,6 +120,34 @@ class AgentRAGPipeline(RAGPipeline):
             question=ctx.user_query,
             route=ctx.route,
         )
+
+    async def _retrieve_all(
+        self, subqueries: list[str], district: str | None
+    ) -> list[RetrievalOutcome]:
+        """Fan out one retrieval per sub-query in parallel. return_exceptions=True: a single
+        sub-query's transient retrieval failure (e.g. a dropped DB connection) must not abort the
+        whole request (ADR-007) — _outcome_or_dry turns it into an empty (dry) outcome instead,
+        which the existing is_sufficient/re-query logic then treats like any other dry sub-query."""
+        raw_results = await asyncio.gather(
+            *(self._retrieve_one(sq, district) for sq in subqueries),
+            return_exceptions=True,
+        )
+        return [_outcome_or_dry(sq, result) for sq, result in zip(subqueries, raw_results)]
+
+    async def _reretry_dry(
+        self, subquery: str, current: RetrievalOutcome, district: str | None
+    ) -> RetrievalOutcome:
+        """Rewrites `subquery` and re-retrieves once — the single shared re-query budget. A failed
+        re-query keeps `current` (the sub-query's original, already-dry outcome) rather than 500ing
+        the whole request — same graceful-degradation contract as the initial fan-out."""
+        rewritten = await self._rewrite(subquery)
+        try:
+            return await self._retrieve_one(rewritten, district)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "agent_retrieve_failed subquery=%r err=%s", rewritten, type(exc).__name__
+            )
+            return current
 
     async def _retrieve_one(self, query_text: str, district: str | None) -> RetrievalOutcome:
         query_vec = await self._embedder.encode_query(query_text)

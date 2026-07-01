@@ -1,11 +1,12 @@
 """
-Purpose:   Unit: AgentRAGPipeline._decompose/_rewrite parsing and fallback behavior, plus the
-           module-level pure helper _interleave_by_rank (round-robin merge of per-sub-query fused
-           lists). A valid JSON array becomes the sub-query list (capped at max_subqueries,
-           whitespace-stripped, blanks dropped); malformed JSON, non-list JSON, a list with a
-           non-string element, an empty list, or an all-blank list all degrade to [query] rather
-           than raising. _rewrite returns the model's stripped text on success, or the original
-           sub-query unchanged on any failure or an empty-after-strip reply.
+Purpose:   Unit: AgentRAGPipeline._decompose/_rewrite parsing and fallback behavior, plus the two
+           module-level pure helpers _interleave_by_rank (round-robin merge of per-sub-query fused
+           lists) and _outcome_or_dry (a failed sub-query retrieval degrades to an empty outcome
+           instead of propagating). A valid JSON array becomes the sub-query list (capped at
+           max_subqueries, whitespace-stripped, blanks dropped); malformed JSON, non-list JSON, a
+           list with a non-string element, an empty list, or an all-blank list all degrade to
+           [query] rather than raising. _rewrite returns the model's stripped text on success, or
+           the original sub-query unchanged on any failure or an empty-after-strip reply.
 Layer:     test
 May import:   pytest, app.pipeline.agent, app.schemas.retrieval, tests.fakes.fake_generator,
               tests.fakes.fake_embedder, tests.fakes.fake_retriever
@@ -13,7 +14,7 @@ Must NOT import:  real openai, real asyncpg (injected fakes only)
 """
 from __future__ import annotations
 
-from app.pipeline.agent import AgentRAGPipeline, _interleave_by_rank
+from app.pipeline.agent import AgentRAGPipeline, _interleave_by_rank, _outcome_or_dry
 from app.schemas.retrieval import RetrievalOutcome, RetrievalResult
 from tests.fakes.fake_embedder import FakeEmbedder
 from tests.fakes.fake_generator import FakeGenerator
@@ -127,3 +128,20 @@ def test_interleave_by_rank_handles_an_outcome_with_no_fused_hits() -> None:
     interleaved = _interleave_by_rank([outcome_a, outcome_b])
 
     assert [chunk.id for chunk in interleaved] == [1]
+
+
+def test_outcome_or_dry_passes_a_successful_outcome_through_unchanged() -> None:
+    outcome = RetrievalOutcome(dense=[_hit(1)], fused=[_hit(1)])
+    assert _outcome_or_dry("сміття", outcome) is outcome
+
+
+def test_outcome_or_dry_converts_an_exception_to_an_empty_outcome() -> None:
+    result = _outcome_or_dry("сміття", RuntimeError("connection reset"))
+    assert result == RetrievalOutcome(dense=[], fused=[])
+
+
+def test_outcome_or_dry_logs_a_warning_naming_the_subquery_and_exception_type(caplog) -> None:
+    with caplog.at_level("WARNING"):
+        _outcome_or_dry("Коли вивезуть сміття?", RuntimeError("connection reset"))
+    assert "Коли вивезуть сміття?" in caplog.text
+    assert "RuntimeError" in caplog.text
