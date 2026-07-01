@@ -20,8 +20,8 @@ Purpose:   Contract: golden request/response shapes for /health/live, /health/re
              - 503 IS real, but only from /health/ready (db/embedder absent) — and its body is the
                plain {"status": "..."} shape, not the {"error": {...}} envelope other codes use.
 Layer:     test
-May import:   pytest, httpx, app.config, tests.conftest (test_app/client/TEST_INTERNAL_TOKEN),
-              tests.fakes/*
+May import:   pytest, httpx, app.config, app.schemas.retrieval, app.services.rag_service,
+              tests.conftest (test_app/client/TEST_INTERNAL_TOKEN), tests.fakes/*
 Must NOT import:  real openai (fakes wired through tests.conftest)
 """
 from __future__ import annotations
@@ -32,8 +32,11 @@ import json
 import pytest
 
 from app.config import Settings
+from app.schemas.retrieval import RetrievalResult
+from app.services.rag_service import RagService
 from tests.conftest import TEST_INTERNAL_TOKEN
 from tests.fakes.fake_generator import FakeGenerator
+from tests.fakes.fake_repository import FakeKnowledgeRepository
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 
@@ -130,6 +133,53 @@ async def test_query_golden_response_shape_on_an_empty_knowledge_base(client) ->
     assert body["sources_used"] == []
     assert body["confidence"] == 0.0
     assert body["route"] == "SIMPLE"
+
+
+async def test_query_answer_cache_persists_across_separate_requests(test_app, client) -> None:
+    """Regression test for the bug where app.deps.get_rag_service built a brand-new RagService (and
+    therefore a brand-new, empty answer cache) on every call — FastAPI invokes a
+    Depends(get_rag_service) factory fresh for every incoming request, so the cache could never
+    survive from one request to the next. This has to go through two separate `client.post` calls
+    (two separate HTTP requests, each resolving get_rag_service independently) to exercise that
+    path; a unit test that builds one RagService and calls `.query()` on it twice — like
+    tests/unit/test_rag_service.py's cache tests — never touches app.deps at all and would not have
+    caught this.
+
+    Retrieval is stubbed via a FakeKnowledgeRepository (rather than ingesting into the real
+    Postgres-backed `state.repo` through FakeEmbedder's all-zero vectors) so the dense leg returns a
+    real, non-zero similarity instead of the zero-norm-vector NaN described in
+    test_query_golden_response_shape_on_an_empty_knowledge_base above. `state.repo` and
+    `state.llm_client` are overridden too (not just `state.rag_service`) so that a would-be-buggy
+    get_rag_service that rebuilds RagService from those pieces on every call sees the same
+    retrievable content and the same generator as the shared instance does — otherwise a mutation
+    test against the old build-fresh-every-call code would fail for the wrong reason (an empty real
+    repo -> no-info gate) instead of the actual bug (a second, uncached LLM call).
+    """
+    hit = RetrievalResult(
+        id=1, text="Сміття вивозять щовівторка.", source="src", doc_type="instruction",
+        district=None, similarity=0.9,
+    )
+    generator = FakeGenerator(result=("Сміття вивозять щовівторка.", 0))
+    fake_repo = FakeKnowledgeRepository(dense=[hit], lexical=[hit])
+    test_app.state.repo = fake_repo
+    test_app.state.llm_client = generator
+    test_app.state.rag_service = RagService(
+        repo=fake_repo,
+        embedder=test_app.state.embedder,
+        generator=generator,
+        settings=test_app.state.settings,
+    )
+    payload = {"user_query": "Коли вивезуть сміття?", "user_id": "cache-contract-user"}
+
+    first = await client.post("/api/v1/chat/query", headers=AUTH, json=payload)
+    second = await client.post("/api/v1/chat/query", headers=AUTH, json=payload)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["answer"] == first.json()["answer"]
+    # A second LLM call would mean the second request built its own fresh, empty cache instead of
+    # reusing the RagService (and its cache) built once above.
+    assert generator.call_count == 1
 
 
 async def test_vision_golden_response_shape(test_app, client) -> None:
@@ -260,6 +310,16 @@ async def test_query_rate_limit_returns_429_once_exceeded(test_app, client) -> N
         openai_api_key="unused",
         internal_token=TEST_INTERNAL_TOKEN,
         rate_limit_per_minute=2,
+    )
+    # RagService reads rate_limit_per_minute off the settings object it was constructed with, not
+    # off app.state at request time (the same way real Settings are process-lifetime-fixed behind
+    # get_settings()'s lru_cache) — so overriding state.settings alone no longer reaches it now that
+    # RagService is built once instead of per-request. Rebuild it here to pick up the new settings.
+    test_app.state.rag_service = RagService(
+        repo=test_app.state.repo,
+        embedder=test_app.state.embedder,
+        generator=test_app.state.llm_client,
+        settings=test_app.state.settings,
     )
     payload = {"user_query": "Скільки коштує проїзд?", "user_id": "rate-limited-user"}
 
