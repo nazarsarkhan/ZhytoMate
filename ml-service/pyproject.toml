@@ -40,6 +40,7 @@ namespaces = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 pythonpath = ["."]
+markers = ["slow: exercises real Postgres/eval harness; excluded from the fast lane (pytest -m 'not slow')"]
 
 [tool.ruff]
 line-length = 100
