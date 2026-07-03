@@ -8,8 +8,8 @@ const CONFIG = {
   schedule: "*/30 * * * *",
   useAi: false,
   backfillMonths: 12,
-  maxPages: 800,
-  maxItems: 1200,
+  maxPages: 1500,
+  maxItems: 2000,
   attachmentLimitPerPage: 5,
   documentAttachmentLimitPerPage: 20,
   concurrency: 3,
@@ -208,20 +208,6 @@ function inferDocType(sourceKind, title, text) {
   return "instruction";
 }
 
-function inferSearchCategory(term, title) {
-  const text = `${term} ${title}`.toLowerCase();
-
-  if (/впо|переміщ|переселен|соціаль|допомог|житл|правнич/.test(text)) {
-    return "social";
-  }
-
-  if (/ветеран|військов/.test(text)) {
-    return "safety";
-  }
-
-  return "other";
-}
-
 function parseNumericDate(value) {
   const match = normalizeWhitespace(value).match(
     /\b([0-3]?\d)[./-]([01]?\d)[./-]((?:19|20)\d{2})\b/,
@@ -237,35 +223,23 @@ function parseNumericDate(value) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function parseSearchItems($, currentUrl, cutoff) {
-  const parsed = new URL(currentUrl);
-  const term = parsed.searchParams.get("search") || "";
+// Search pages only list headlines. Rather than ingest title-only items (which carry no answerable
+// body and, as dated news, get born-expired and dropped by the RAG anyway), hand the article URLs
+// back to the crawler so each is fetched as a full page — real body via extractMainText. This is
+// what gives the KB substantive content for topics that otherwise appear only as search results.
+function parseSearchResultUrls($, currentUrl) {
+  const urls = new Set();
 
-  return $(".srchpgitm")
-    .map((_, element) => {
-      const link = $(element).find("a[href]").first();
-      const url = toAbsoluteUrl(link.attr("href"), currentUrl);
-      const title = normalizeWhitespace(
-        $(element).find(".title").first().text() || link.text(),
-      );
-      const date = parseNumericDate($(element).find(".date").first().text());
+  $(".srchpgitm").each((_, element) => {
+    const link = $(element).find("a[href]").first();
+    const url = toAbsoluteUrl(link.attr("href"), currentUrl);
 
-      if (!url || !title || !date || date < cutoff) {
-        return null;
-      }
+    if (url && shouldCrawlPage(url)) {
+      urls.add(url);
+    }
+  });
 
-      return {
-        url,
-        title,
-        body: title,
-        publishedAt: date.toISOString(),
-        category: inferSearchCategory(term, title),
-        docType: "news",
-        sourceKind: "search-result",
-      };
-    })
-    .get()
-    .filter(Boolean);
+  return [...urls];
 }
 
 function inferPublishedAt($, fallbackDate) {
@@ -462,9 +436,12 @@ async function parsePage(
     sourceKind === "document-index" ? documentAttachmentLimit : attachmentLimit;
 
   if (sourceKind === "search") {
+    // Crawl the civic articles surfaced by the search seeds BEFORE generic nav/section pages, so the
+    // high-value how-to content is captured within the page budget instead of losing the race to it.
     return {
-      items: parseSearchItems($, page.url, cutoff),
-      pageLinks: [],
+      items: [],
+      pageLinks: parseSearchResultUrls($, page.url),
+      priorityPageLinks: true,
     };
   }
 
