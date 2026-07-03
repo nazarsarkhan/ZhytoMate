@@ -1,3 +1,5 @@
+import { clampTtlDays } from './ttl.js';
+
 const allowedLangs = new Set(['uk', 'ru']);
 
 const wordChars = '\\p{L}\\p{N}_';
@@ -208,12 +210,19 @@ function normalizeForSearch(value) {
   return (value || '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-function buildText(item) {
-  if (item.title) {
-    return `${item.title}\n\n${item.body || ''}`;
-  }
+function cleanSourceText(value) {
+  return (value || '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 
-  return item.body || '';
+function buildText(item) {
+  const body = item.body || '';
+  const combined = item.title ? `${item.title}\n\n${body}` : body;
+  return cleanSourceText(combined);
 }
 
 function inferDocType(item) {
@@ -464,7 +473,8 @@ export function toIngestRequest(item) {
       source: item.url || item.source,
       category,
       district: inferDistrict(text),
-      ttl_days: inferTtlDays(text, category, item.publishedAt),
+      ttl_days: clampTtlDays(inferTtlDays(text, category, item.publishedAt)),
+      published_at: item.publishedAt,
     },
   };
 }

@@ -1,5 +1,6 @@
 import { toIngestRequest } from '../ingest/ingest-mapper.js';
 import { toNewsItem } from '../news/news-mapper.js';
+import { clampTtlDays } from '../ingest/ttl.js';
 
 const allowedCategories = new Set([
   'memorial',
@@ -28,6 +29,51 @@ const importanceByLabel = new Map([
   ['archive', 1],
 ]);
 const labelByImportance = new Map([...importanceByLabel].map(([label, importance]) => [importance, label]));
+
+// OpenAI Structured Outputs schema (strict). Enforced server-side so the model can never return
+// malformed or off-vocabulary JSON. Bounds (importance/ttl range) stay out of the schema on purpose
+// and are enforced in the normalize* helpers, which also apply the heuristic fallbacks.
+const responseFormat = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'zhytomate_item',
+    strict: true,
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        category: { type: 'string', enum: [...allowedCategories] },
+        district: { type: ['string', 'null'], enum: [...allowedDistricts, null] },
+        doc_type: { type: 'string', enum: [...allowedDocTypes] },
+        title: { type: 'string' },
+        summary: { type: 'string' },
+        importance: { type: 'integer' },
+        importance_label: { type: 'string', enum: [...allowedImportanceLabels] },
+        is_announcement: { type: 'boolean' },
+        event_date: { type: ['string', 'null'] },
+        ttl_days: { type: 'integer' },
+        tags: { type: 'array', items: { type: 'string' } },
+        should_skip: { type: 'boolean' },
+        skip_reason: { type: ['string', 'null'] },
+      },
+      required: [
+        'category',
+        'district',
+        'doc_type',
+        'title',
+        'summary',
+        'importance',
+        'importance_label',
+        'is_announcement',
+        'event_date',
+        'ttl_days',
+        'tags',
+        'should_skip',
+        'skip_reason',
+      ],
+    },
+  },
+};
 
 function isAiLayerEnabled() {
   return process.env.AI_LAYER_ENABLED === 'true';
@@ -150,31 +196,14 @@ function buildOpenAiMessages(aiInput) {
           'Skip only clear ads, empty/noisy posts, or items outside Zhytomyr city scope.',
           'Skip operational air raid alert notices, including alert started, alert ongoing, and alert cancelled/all-clear posts.',
           'Do not skip substantive news that only mentions an air raid alert as context.',
-          'clean_text must preserve useful factual content while removing channel signatures, repeated whitespace, hashtags-only clutter, and tracking links.',
           'summary must be short and factual in the source language.',
           'title must be a concise news title in the source language.',
           'Use input.published_at as the reference date for relative dates such as today, tomorrow, and from tomorrow.',
           'event_date must be ISO8601 when an explicit or relative future/event date is present, otherwise null.',
-          'The heuristic draft ttl_days is only an initial estimate.',
-          'Adjust ttl_days up or down for any category based on usefulness from input.published_at; keep the draft value when it looks reasonable.',
-          'Short one-off announcements for today/tomorrow/from tomorrow usually need ttl_days 1..3; long-running instructions, memorials, policy, or reference-like items may need more.',
+          'ttl_days is how many days from input.published_at the item stays useful; it must be an integer between 1 and 365.',
+          'The heuristic draft ttl_days is only an initial estimate; adjust it up or down based on usefulness and keep it within 1..365.',
+          'Short one-off announcements for today/tomorrow usually need ttl_days 1..3; long-running instructions, memorials, policy, or reference-like items may need more, but never above 365.',
         ],
-        output_schema: {
-          category: [...allowedCategories].join(' | '),
-          district: 'bohunskyi | korolovskyi | null',
-          doc_type: 'news | instruction',
-          title: 'string',
-          summary: 'string',
-          clean_text: 'string',
-          importance: 'integer 1..5',
-          importance_label: 'critical | high | normal | low | archive',
-          is_announcement: 'boolean',
-          event_date: 'ISO8601 string | null',
-          ttl_days: 'integer >= 1',
-          tags: 'string[] up to 8 items',
-          should_skip: 'boolean',
-          skip_reason: 'string | null',
-        },
         input: aiInput,
       }),
     },
@@ -198,7 +227,7 @@ async function callOpenAiChatCompletion(aiInput) {
       model: getAiModel(),
       temperature: getAiTemperature(),
       max_tokens: getAiMaxTokens(),
-      response_format: { type: 'json_object' },
+      response_format: responseFormat,
       messages: buildOpenAiMessages(aiInput),
     }),
   });
@@ -209,7 +238,17 @@ async function callOpenAiChatCompletion(aiInput) {
   }
 
   const payload = await response.json();
-  const content = payload.choices?.[0]?.message?.content;
+  const choice = payload.choices?.[0];
+
+  if (choice?.finish_reason === 'length') {
+    throw new Error('OpenAI completion truncated (finish_reason=length); raise AI_MAX_TOKENS');
+  }
+
+  if (choice?.message?.refusal) {
+    throw new Error(`OpenAI refused the request: ${truncateText(choice.message.refusal, 200)}`);
+  }
+
+  const content = choice?.message?.content;
 
   if (!content) {
     throw new Error('OpenAI API returned an empty completion');
@@ -271,10 +310,11 @@ function normalizeTtlDays(value, fallback) {
   const ttlDays = Number(value);
 
   if (Number.isFinite(ttlDays) && ttlDays >= 1) {
-    return Math.ceil(ttlDays);
+    return clampTtlDays(ttlDays);
   }
 
-  return Number(fallback);
+  const fallbackDays = Number(fallback);
+  return clampTtlDays(Number.isFinite(fallbackDays) && fallbackDays >= 1 ? fallbackDays : 7);
 }
 
 function normalizeBoolean(value, fallback) {
@@ -327,7 +367,6 @@ function mergeModelCorrections(aiInput, corrections) {
   const category = normalizeCategory(corrections.category, draftRequest.category);
   const district = normalizeDistrict(corrections.district, draftRequest.district);
   const docType = normalizeDocType(corrections.doc_type, draftRequest.doc_type);
-  const cleanText = normalizeNullableString(corrections.clean_text) || draftRequest.text;
   const ttlDays = normalizeTtlDays(corrections.ttl_days, draftRequest.ttl_days);
   const title = normalizeNullableString(corrections.title) || draftNewsItem.title;
   const summary = normalizeNullableString(corrections.summary) || draftNewsItem.summary;
@@ -340,7 +379,6 @@ function mergeModelCorrections(aiInput, corrections) {
 
   const ingestRequest = {
     ...draftRequest,
-    text: cleanText,
     doc_type: docType,
     category,
     district,
@@ -351,7 +389,7 @@ function mergeModelCorrections(aiInput, corrections) {
     ...draftNewsItem,
     title: truncateText(title, 140),
     summary: truncateText(summary, 280),
-    body: cleanText,
+    body: draftRequest.text,
     category,
     district,
     importance: importance.importance,
