@@ -8,11 +8,18 @@ import { v4 as uuidv4 } from 'uuid';
  * @param {'web' | 'telegram'} type Source type.
  * @returns {object} Normalized item.
  */
+function toIsoOrFallback(value, fallback) {
+  if (!value) {
+    return fallback;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? fallback : date.toISOString();
+}
+
 export function normalizeItem(rawItem, plugin, type) {
   const now = new Date().toISOString();
-  const publishedAt = rawItem.publishedAt
-    ? new Date(rawItem.publishedAt).toISOString()
-    : now;
+  const publishedAt = toIsoOrFallback(rawItem.publishedAt, now);
 
   return {
     id: uuidv4(),

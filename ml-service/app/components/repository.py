@@ -72,7 +72,7 @@ _DENSE_SQL = """
     SELECT id, text, source, doc_type, district,
            1 - (embedding <=> $1::vector) AS similarity
     FROM knowledge_base
-    WHERE (doc_type = 'instruction' OR expires_at > now())
+    WHERE (expires_at IS NULL OR expires_at > now())
       AND ($2::text IS NULL OR district = $2 OR district IS NULL)
     ORDER BY embedding <=> $1::vector
     LIMIT $3
@@ -85,7 +85,7 @@ _LEXICAL_SQL = """
            ts_rank_cd(tsv, query) AS rank
     FROM knowledge_base, {tsquery}('simple', $1) AS query
     WHERE tsv @@ query
-      AND (doc_type = 'instruction' OR expires_at > now())
+      AND (expires_at IS NULL OR expires_at > now())
       AND ($2::text IS NULL OR district = $2 OR district IS NULL)
     ORDER BY rank DESC
     LIMIT $3
@@ -135,7 +135,8 @@ class KnowledgeRepository:
         return len(records)
 
     async def delete_document(self, document_id: str) -> int:
-        """Delete all chunks for a document. Returns the number deleted (0 if document_id absent)."""
+        """Delete all chunks for a document. Returns the number deleted (0 if document_id
+        absent)."""
         start = time.perf_counter()
         rows = await self._pool.fetch(
             "DELETE FROM knowledge_base WHERE document_id = $1 RETURNING id", document_id

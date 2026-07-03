@@ -28,6 +28,22 @@ function isNewsSendEnabled() {
   return process.env.NEWS_SEND_ENABLED === 'true';
 }
 
+// A 4xx (except 429) means the request itself is invalid — retrying it unchanged will always fail,
+// so the item must be dropped rather than blocking the queue. 429 and 5xx/network errors are
+// transient and keep their retry behavior.
+export function isPermanentHttpStatus(status) {
+  return status >= 400 && status < 500 && status !== 429;
+}
+
+class DeliveryError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.name = 'DeliveryError';
+    this.status = status;
+    this.permanent = isPermanentHttpStatus(status);
+  }
+}
+
 async function postItem(ingestRequest) {
   if (!isRagSendEnabled()) {
     console.log('IngestRequest ready for ML service:');
@@ -39,12 +55,13 @@ async function postItem(ingestRequest) {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
+      'X-Internal-Token': process.env.INTERNAL_TOKEN,
     },
     body: JSON.stringify(ingestRequest),
   });
 
   if (!response.ok) {
-    throw new Error(`RAG ingest failed with HTTP ${response.status}`);
+    throw new DeliveryError(`RAG ingest failed with HTTP ${response.status}`, response.status);
   }
 }
 
@@ -64,7 +81,7 @@ async function postNewsItem(newsItem) {
   });
 
   if (!response.ok) {
-    throw new Error(`News ingest failed with HTTP ${response.status}`);
+    throw new DeliveryError(`News ingest failed with HTTP ${response.status}`, response.status);
   }
 }
 
@@ -112,6 +129,20 @@ async function drainQueue() {
         await postNewsItem(outputs.newsItem);
         await markScrapedItemDelivered(item);
       } catch (error) {
+        if (error.permanent) {
+          console.error(
+            `Dropping item ${item.id} (permanent HTTP ${error.status}): ${error.message}`,
+          );
+
+          try {
+            await markScrapedItemSkipped(item, `permanent delivery failure: HTTP ${error.status}`);
+          } catch (skipError) {
+            console.error(`Failed to mark item skipped ${item.id}:`, skipError.message);
+          }
+
+          continue;
+        }
+
         console.error(`Failed to send item ${item.id}:`, error.message);
 
         try {
