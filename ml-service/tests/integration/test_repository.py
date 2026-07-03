@@ -105,7 +105,8 @@ async def test_content_hash_dedup_prevents_double_ingest(pg_pool):
 
 async def test_expired_news_filtered_from_retrieval(pg_pool):
     """§2.5: expired rows are never served, even if HNSW finds them. Proves the
-    (doc_type='instruction' OR expires_at > now()) freshness filter."""
+    (expires_at IS NULL OR expires_at > now()) freshness filter — NULL covers instructions and
+    evergreen news, a set expiry in the past is filtered out."""
     repo = KnowledgeRepository(pg_pool)
 
     seed_vec = make_random_vec()
