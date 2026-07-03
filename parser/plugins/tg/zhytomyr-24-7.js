@@ -1,5 +1,7 @@
+// Disabled: this account is not a member of the "Житомир 24/7" channel, so Telegram rejects the
+// backfill with CHANNEL_INVALID. Re-enable and re-verify CHANNEL_ID once the account joins it.
 const CONFIG = {
-  enabled: true,
+  enabled: false,
   useAi: true,
   backfillDays: 30,
   backfillLimit: 1000,
