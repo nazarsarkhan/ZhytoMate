@@ -1,7 +1,15 @@
+const CONFIG = {
+  enabled: false,
+  useAi: true,
+  backfillDays: 30,
+  backfillLimit: 1000,
+};
+
 export default {
   id: 'example-tg',
   channelUsername: 'example_channel',
-  enabled: false,
+  enabled: CONFIG.enabled,
+  settings: CONFIG,
 
   /**
    * Parse a GramJS message into a raw item.

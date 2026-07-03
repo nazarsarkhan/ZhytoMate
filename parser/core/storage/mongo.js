@@ -1,28 +1,46 @@
 import crypto from 'node:crypto';
+import dns from 'node:dns';
 import { MongoClient } from 'mongodb';
 
 const defaultMongoUri = 'mongodb://127.0.0.1:27017';
 const defaultDbName = 'future_in_action_scraper';
-const defaultCollectionName = 'scraped_items';
+const defaultScrapedCollectionName = 'scraped_items';
+const defaultNewsCollectionName = 'news_items';
 const defaultReservationTtlMinutes = 30;
+const defaultDnsServers = ['1.1.1.1', '8.8.8.8'];
 
 let client;
-let collection;
+let scrapedCollection;
+let newsCollection;
+let dnsConfigured = false;
 
 function getMongoUri() {
   return process.env.MONGO_URI || defaultMongoUri;
 }
 
 function getDbName() {
-  return process.env.MONGO_DB || defaultDbName;
+  if (process.env.MONGO_DB) {
+    return process.env.MONGO_DB;
+  }
+
+  try {
+    const dbName = new URL(getMongoUri()).pathname.replace(/^\/+/, '');
+    return dbName || defaultDbName;
+  } catch {
+    return defaultDbName;
+  }
 }
 
-function getCollectionName() {
-  return process.env.MONGO_COLLECTION || defaultCollectionName;
+function getScrapedCollectionName() {
+  return defaultScrapedCollectionName;
 }
 
-function isDedupeEnabled() {
-  return process.env.SCRAPER_DEDUPE_ENABLED !== 'false';
+function getNewsCollectionName() {
+  return defaultNewsCollectionName;
+}
+
+function isMongoStorageEnabled() {
+  return true;
 }
 
 function getReservationTtlMs() {
@@ -32,6 +50,37 @@ function getReservationTtlMs() {
     : defaultReservationTtlMinutes;
 
   return safeMinutes * 60 * 1000;
+}
+
+function getDnsServers() {
+  const value = process.env.DNS_SERVERS;
+
+  if (!value) {
+    return defaultDnsServers;
+  }
+
+  return value
+    .split(',')
+    .map((server) => server.trim())
+    .filter(Boolean);
+}
+
+function configureDns() {
+  if (dnsConfigured) {
+    return;
+  }
+
+  const servers = getDnsServers();
+
+  if (servers.length === 0) {
+    dnsConfigured = true;
+    return;
+  }
+
+  dns.setServers(servers);
+  dns.setDefaultResultOrder('ipv4first');
+  dnsConfigured = true;
+  console.log(`DNS servers configured for Mongo SRV lookup: ${servers.join(', ')}`);
 }
 
 function hashText(value) {
@@ -53,35 +102,54 @@ export function getDedupeKey(item) {
 }
 
 export async function initMongo() {
-  if (!isDedupeEnabled()) {
-    console.log('Mongo dedupe disabled');
-    return null;
+  if (scrapedCollection && newsCollection) {
+    return {
+      scrapedItems: scrapedCollection,
+      newsItems: newsCollection,
+    };
   }
 
-  if (collection) {
-    return collection;
-  }
-
+  configureDns();
   client = new MongoClient(getMongoUri());
   await client.connect();
 
   const db = client.db(getDbName());
-  collection = db.collection(getCollectionName());
+  scrapedCollection = db.collection(getScrapedCollectionName());
+  newsCollection = db.collection(getNewsCollectionName());
 
-  await collection.createIndex({ dedupeKey: 1 }, { unique: true });
-  await collection.createIndex({ source: 1, type: 1, publishedAt: -1 });
-  await collection.createIndex({ status: 1, reservedAt: 1 });
+  await scrapedCollection.createIndex({ dedupeKey: 1 }, { unique: true });
+  await scrapedCollection.createIndex({ source: 1, type: 1, publishedAt: -1 });
+  await scrapedCollection.createIndex({ status: 1, reservedAt: 1 });
+  await newsCollection.createIndex({ external_id: 1 }, { unique: true });
+  await newsCollection.createIndex({ publishedDate: -1, source: 1 });
+  await newsCollection.createIndex({ category: 1, publishedDate: -1 });
+  await newsCollection.createIndex({ expires_at: 1 });
 
-  console.log(`Mongo dedupe ready: ${getDbName()}.${getCollectionName()}`);
-  return collection;
+  console.log(`Mongo scraped registry ready: ${getDbName()}.${getScrapedCollectionName()}`);
+  console.log(`Mongo news storage ready: ${getDbName()}.${getNewsCollectionName()}`);
+
+  return {
+    scrapedItems: scrapedCollection,
+    newsItems: newsCollection,
+  };
+}
+
+async function getScrapedCollection() {
+  const collections = await initMongo();
+  return collections.scrapedItems;
+}
+
+async function getNewsCollection() {
+  const collections = await initMongo();
+  return collections.newsItems;
 }
 
 export async function reserveScrapedItem(item) {
-  if (!isDedupeEnabled()) {
+  if (!isMongoStorageEnabled()) {
     return true;
   }
 
-  const items = await initMongo();
+  const items = await getScrapedCollection();
   const dedupeKey = getDedupeKey(item);
   const now = new Date();
 
@@ -136,11 +204,11 @@ export async function reserveScrapedItem(item) {
 }
 
 export async function markScrapedItemDelivered(item) {
-  if (!isDedupeEnabled()) {
+  if (!isMongoStorageEnabled()) {
     return;
   }
 
-  const items = await initMongo();
+  const items = await getScrapedCollection();
   await items.updateOne(
     { dedupeKey: getDedupeKey(item) },
     {
@@ -152,24 +220,79 @@ export async function markScrapedItemDelivered(item) {
   );
 }
 
-export async function releaseScrapedItemReservation(item) {
-  if (!isDedupeEnabled()) {
+export async function markScrapedItemSkipped(item, reason) {
+  if (!isMongoStorageEnabled()) {
     return;
   }
 
-  const items = await initMongo();
+  const items = await getScrapedCollection();
+  await items.updateOne(
+    { dedupeKey: getDedupeKey(item) },
+    {
+      $set: {
+        status: 'skipped',
+        skippedAt: new Date(),
+        skipReason: reason || null,
+      },
+    },
+  );
+}
+
+export async function releaseScrapedItemReservation(item) {
+  if (!isMongoStorageEnabled()) {
+    return;
+  }
+
+  const items = await getScrapedCollection();
   await items.deleteOne({
     dedupeKey: getDedupeKey(item),
     status: 'reserved',
   });
 }
 
+function getPublishedDate(newsItem) {
+  const date = new Date(newsItem.published_at || Date.now());
+
+  if (Number.isNaN(date.getTime())) {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  return date.toISOString().slice(0, 10);
+}
+
+export async function saveNewsItem(newsItem, sourceItem) {
+  if (!isMongoStorageEnabled()) {
+    return;
+  }
+
+  const items = await getNewsCollection();
+  const now = new Date();
+  await items.updateOne(
+    { external_id: newsItem.external_id },
+    {
+      $set: {
+        ...newsItem,
+        publishedDate: getPublishedDate(newsItem),
+        sourceItemId: sourceItem.id,
+        sourceUrl: sourceItem.url || null,
+        sourceType: sourceItem.type,
+        updatedAt: now,
+      },
+      $setOnInsert: {
+        createdAt: now,
+      },
+    },
+    { upsert: true },
+  );
+}
+
 export function getMongoStatus() {
   return {
-    dedupeEnabled: isDedupeEnabled(),
-    connected: Boolean(collection),
+    storageEnabled: isMongoStorageEnabled(),
+    connected: Boolean(scrapedCollection && newsCollection),
     db: getDbName(),
-    collection: getCollectionName(),
+    scrapedCollection: getScrapedCollectionName(),
+    newsCollection: getNewsCollectionName(),
   };
 }
 
@@ -180,5 +303,6 @@ export async function closeMongo() {
 
   await client.close();
   client = null;
-  collection = null;
+  scrapedCollection = null;
+  newsCollection = null;
 }

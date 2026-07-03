@@ -137,8 +137,14 @@ async function resolvePluginEntity(plugin) {
 }
 
 async function backfillTelegramPlugin(plugin) {
-  const backfillDays = getEnvNumber('TG_BACKFILL_DAYS', defaultBackfillDays);
-  const backfillLimit = getEnvNumber('TG_BACKFILL_LIMIT', defaultBackfillLimit);
+  const backfillDays = getEnvNumber(
+    `TG_${plugin.id.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_BACKFILL_DAYS`,
+    plugin.settings?.backfillDays || getEnvNumber('TG_BACKFILL_DAYS', defaultBackfillDays),
+  );
+  const backfillLimit = getEnvNumber(
+    `TG_${plugin.id.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_BACKFILL_LIMIT`,
+    plugin.settings?.backfillLimit || getEnvNumber('TG_BACKFILL_LIMIT', defaultBackfillLimit),
+  );
   const cutoff = new Date(Date.now() - backfillDays * 24 * 60 * 60 * 1000);
   const normalizedItems = [];
 

@@ -1,7 +1,9 @@
 import {
   markScrapedItemDelivered,
+  markScrapedItemSkipped,
   releaseScrapedItemReservation,
   reserveScrapedItem,
+  saveNewsItem,
 } from '../storage/mongo.js';
 import { buildCollectorOutputs } from '../ai/ai-layer.js';
 
@@ -89,13 +91,6 @@ async function drainQueue() {
       const item = queue.shift();
 
       try {
-        const outputs = await buildCollectorOutputs(item);
-
-        if (outputs.skipped) {
-          console.log(`Item skipped before downstream outputs: ${item.source} ${outputs.reason}`);
-          continue;
-        }
-
         const isReserved = await reserveScrapedItem(item);
 
         if (!isReserved) {
@@ -103,7 +98,16 @@ async function drainQueue() {
           continue;
         }
 
+        const outputs = await buildCollectorOutputs(item);
+
+        if (outputs.skipped) {
+          console.log(`Item skipped before downstream outputs: ${item.source} ${outputs.reason}`);
+          await markScrapedItemSkipped(item, outputs.reason);
+          continue;
+        }
+
         console.log(`AI layer mode: ${outputs.ai.mode}`);
+        await saveNewsItem(outputs.newsItem, item);
         await postItem(outputs.ingestRequest);
         await postNewsItem(outputs.newsItem);
         await markScrapedItemDelivered(item);

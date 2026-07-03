@@ -1,3 +1,10 @@
+const CONFIG = {
+  enabled: true,
+  useAi: true,
+  backfillDays: 30,
+  backfillLimit: 1000,
+};
+
 const CHANNEL_ID = "-1001357913753";
 const CHANNEL_USERNAME = "zhtmr";
 const CHANNEL_NAME = "Житомирська міська рада";
@@ -31,7 +38,8 @@ export default {
   channelId: CHANNEL_ID,
   channelUsername: CHANNEL_USERNAME,
   channelName: CHANNEL_NAME,
-  enabled: Boolean(CHANNEL_ID || CHANNEL_USERNAME),
+  enabled: CONFIG.enabled && Boolean(CHANNEL_ID || CHANNEL_USERNAME),
+  settings: CONFIG,
 
   /**
    * Parse one Telegram post from this channel.

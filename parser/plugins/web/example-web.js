@@ -1,7 +1,16 @@
+const CONFIG = {
+  enabled: false,
+  schedule: '*/30 * * * *',
+  useAi: false,
+  maxPages: 10,
+  maxItems: 25,
+};
+
 export default {
   id: 'example-web',
-  schedule: '*/30 * * * *',
-  enabled: true,
+  schedule: CONFIG.schedule,
+  enabled: CONFIG.enabled,
+  settings: CONFIG,
 
   /**
    * Fetch items from a website, RSS feed, or API.

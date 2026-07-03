@@ -24,6 +24,11 @@ export function normalizeItem(rawItem, plugin, type) {
     publishedAt,
     scrapedAt: now,
     lang: 'uk',
+    category: rawItem.category,
+    docType: rawItem.docType,
+    attachments: rawItem.attachments,
+    sourceKind: rawItem.sourceKind,
+    useAi: rawItem.useAi ?? plugin.settings?.useAi ?? plugin.useAi,
   };
 }
 

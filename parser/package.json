@@ -7,16 +7,22 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
-    "session": "node scripts/generate-session.js"
+    "session": "node scripts/generate-session.js",
+    "test": "node --test"
   },
   "dependencies": {
+    "cheerio": "^1.2.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "gramjs": "npm:telegram@^2.26.22",
+    "mammoth": "^1.12.0",
     "mongodb": "^7.4.0",
     "node-cron": "^3.0.3",
+    "p-limit": "^7.3.0",
+    "pdf-parse": "^2.4.5",
     "qrcode-terminal": "^0.12.0",
-    "uuid": "^11.0.5"
+    "uuid": "^11.0.5",
+    "word-extractor": "^1.0.4"
   },
   "engines": {
     "node": ">=20"

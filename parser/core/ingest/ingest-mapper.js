@@ -217,6 +217,10 @@ function buildText(item) {
 }
 
 function inferDocType(item) {
+  if (item.docType === 'news' || item.docType === 'instruction') {
+    return item.docType;
+  }
+
   if (item.type === 'telegram') {
     return 'news';
   }
@@ -226,7 +230,11 @@ function inferDocType(item) {
   }
 
   if (item.source?.includes('zt-rada') || item.url?.includes('zt-rada.gov.ua')) {
-    return item.url?.includes('pages=') ? 'news' : 'instruction';
+    if (item.sourceKind === 'calendar' || item.sourceKind === 'post') {
+      return 'news';
+    }
+
+    return 'instruction';
   }
 
   return 'news';

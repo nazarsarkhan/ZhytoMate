@@ -33,6 +33,10 @@ function isAiLayerEnabled() {
   return process.env.AI_LAYER_ENABLED === 'true';
 }
 
+function shouldUseAiForItem(item) {
+  return isAiLayerEnabled() && item.useAi !== false;
+}
+
 function getAiProvider() {
   return process.env.AI_PROVIDER || 'placeholder';
 }
@@ -465,7 +469,7 @@ export async function buildCollectorOutputs(item) {
     };
   }
 
-  if (!isAiLayerEnabled()) {
+  if (!shouldUseAiForItem(item)) {
     const ingestRequest = validateIngestRequest(draft.request);
 
     return {
@@ -477,7 +481,7 @@ export async function buildCollectorOutputs(item) {
       ai: {
         used: false,
         provider: getAiProvider(),
-        mode: 'heuristic_draft_only',
+        mode: item.useAi === false ? 'disabled_for_source' : 'heuristic_draft_only',
       },
     };
   }
