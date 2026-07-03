@@ -14,6 +14,7 @@ Must NOT import:  services/*, api/*, pipeline/*, other components/*; FastAPI
 """
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -103,6 +104,23 @@ def _to_result(row: asyncpg.Record, similarity: float) -> RetrievalResult:
     )
 
 
+# Letters-only tokens of length >= 3 — drops stopword-ish short words and digits. Letters only, so
+# the joined result is always a syntactically valid to_tsquery input (no operators to escape).
+_TSQUERY_WORD = re.compile(r"[^\W\d_]{3,}", re.UNICODE)
+
+
+def _to_or_tsquery(query: str) -> str:
+    """Build an OR tsquery ("a | b | c") from a natural-language query. websearch_to_tsquery and
+    plainto_tsquery AND every term, so a verbose question matches no single chunk; ORing the
+    significant terms lets the lexical leg still surface chunks that contain the distinctive words
+    (RRF then re-ranks them against the dense leg)."""
+    seen: list[str] = []
+    for token in _TSQUERY_WORD.findall(query.lower()):
+        if token not in seen:
+            seen.append(token)
+    return " | ".join(seen[:12])
+
+
 class KnowledgeRepository:
     def __init__(self, pool: asyncpg.Pool) -> None:
         self._pool = pool
@@ -179,6 +197,14 @@ class KnowledgeRepository:
             rows = await self._pool.fetch(
                 _LEXICAL_SQL.format(tsquery="plainto_tsquery"), query, district_slug, limit
             )
+        if not rows:
+            # Both of the above AND every term, so a verbose question matches no single chunk.
+            # Fall back to an OR of the significant terms so the lexical leg still contributes.
+            or_query = _to_or_tsquery(query)
+            if or_query:
+                rows = await self._pool.fetch(
+                    _LEXICAL_SQL.format(tsquery="to_tsquery"), or_query, district_slug, limit
+                )
         logger.debug(
             "retrieve_lexical",
             rows=len(rows),
