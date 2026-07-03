@@ -92,6 +92,21 @@ _LEXICAL_SQL = """
     LIMIT $3
 """
 
+# OR fallback ($1 = "a | b | c" tsquery, $4 = the same terms as an array). Ranks by how many
+# DISTINCT query terms a chunk covers, so a chunk mentioning several of the words beats one that
+# just repeats a single common word (e.g. a price list full of "послуга"); ts_rank_cd breaks ties.
+_OR_LEXICAL_SQL = """
+    SELECT id, text, source, doc_type, district,
+           (SELECT count(*) FROM unnest($4::text[]) AS term
+            WHERE tsv @@ plainto_tsquery('simple', term)) AS coverage
+    FROM knowledge_base, to_tsquery('simple', $1) AS query
+    WHERE tsv @@ query
+      AND (expires_at IS NULL OR expires_at > now())
+      AND ($2::text IS NULL OR district = $2 OR district IS NULL)
+    ORDER BY coverage DESC, ts_rank_cd(tsv, query) DESC
+    LIMIT $3
+"""
+
 
 def _to_result(row: asyncpg.Record, similarity: float) -> RetrievalResult:
     return RetrievalResult(
@@ -109,16 +124,15 @@ def _to_result(row: asyncpg.Record, similarity: float) -> RetrievalResult:
 _TSQUERY_WORD = re.compile(r"[^\W\d_]{3,}", re.UNICODE)
 
 
-def _to_or_tsquery(query: str) -> str:
-    """Build an OR tsquery ("a | b | c") from a natural-language query. websearch_to_tsquery and
-    plainto_tsquery AND every term, so a verbose question matches no single chunk; ORing the
-    significant terms lets the lexical leg still surface chunks that contain the distinctive words
-    (RRF then re-ranks them against the dense leg)."""
+def _significant_terms(query: str) -> list[str]:
+    """Distinct >=3-letter tokens from a query (drops short stopword-ish words and digits),
+    order-preserving. The raw material for the lexical OR fallback — filtered by corpus frequency
+    in KnowledgeRepository._distinctive_terms before use."""
     seen: list[str] = []
     for token in _TSQUERY_WORD.findall(query.lower()):
         if token not in seen:
             seen.append(token)
-    return " | ".join(seen[:12])
+    return seen[:12]
 
 
 class KnowledgeRepository:
@@ -187,7 +201,7 @@ class KnowledgeRepository:
         self, query: str, district_slug: str | None, limit: int = 10
     ) -> list[RetrievalResult]:
         """Full-text leg (§2.8). websearch_to_tsquery primary; plainto_tsquery fallback on 0
-        rows."""
+        rows; coverage-ranked OR fallback when both AND queries are empty."""
         start = time.perf_counter()
         rows = await self._pool.fetch(
             _LEXICAL_SQL.format(tsquery="websearch_to_tsquery"), query, district_slug, limit
@@ -198,12 +212,13 @@ class KnowledgeRepository:
                 _LEXICAL_SQL.format(tsquery="plainto_tsquery"), query, district_slug, limit
             )
         if not rows:
-            # Both of the above AND every term, so a verbose question matches no single chunk.
-            # Fall back to an OR of the significant terms so the lexical leg still contributes.
-            or_query = _to_or_tsquery(query)
-            if or_query:
+            # Both of the above AND every term, so a verbose question matches no single chunk. Fall
+            # back to an OR of the significant terms, ranked by how many DISTINCT terms each chunk
+            # covers so a chunk mentioning several of the words beats one repeating a common filler.
+            terms = _significant_terms(query)
+            if terms:
                 rows = await self._pool.fetch(
-                    _LEXICAL_SQL.format(tsquery="to_tsquery"), or_query, district_slug, limit
+                    _OR_LEXICAL_SQL, " | ".join(terms), district_slug, limit, terms
                 )
         logger.debug(
             "retrieve_lexical",
