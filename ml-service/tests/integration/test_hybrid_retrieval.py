@@ -103,3 +103,29 @@ async def test_dense_only_retrieval_would_have_returned_nothing_relevant(pg_pool
 
     assert {r.text for r in dense_only} == {c.text for c in decoys}
     assert _TARGET_TEXT not in {r.text for r in dense_only}
+
+
+async def test_or_fallback_ranks_by_distinct_term_coverage(pg_pool) -> None:
+    """When both AND queries match nothing, the coverage-ranked OR fallback must rank a chunk that
+    covers several query terms above one that merely repeats a single term (the price-list noise
+    problem). Uses invented tokens so no other test's rows interfere."""
+    repo = KnowledgeRepository(pg_pool)
+
+    covering_text = "Зорквакс плюмбур фриндол зетафілер"  # 3 distinctive terms + the shared filler
+    filler_text = "Зетафілер зетафілер зетафілер зетафілер зетафілер"  # one term repeated
+    await repo.upsert_chunks(
+        "doc_cover", [_chunk("doc_cover", covering_text, make_random_vec(), 900)]
+    )
+    await repo.upsert_chunks(
+        "doc_filler", [_chunk("doc_filler", filler_text, make_random_vec(), 901)]
+    )
+
+    # "квазументи" is in no chunk, so websearch/plainto (which AND every term) return nothing and
+    # the coverage-ranked OR fallback is exercised.
+    rows = await repo.retrieve_lexical(
+        "Зорквакс плюмбур фриндол зетафілер квазументи", None, 5
+    )
+
+    texts = [r.text for r in rows]
+    assert covering_text in texts and filler_text in texts, "OR fallback surfaces both (recall)"
+    assert texts[0] == covering_text, "multi-term chunk must outrank the single-repeated-term one"
