@@ -39,6 +39,7 @@ async function postItem(ingestRequest) {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
+      'X-Internal-Token': process.env.INTERNAL_TOKEN,
     },
     body: JSON.stringify(ingestRequest),
   });
