@@ -70,6 +70,27 @@ test('ingest mapper clamps a far-future ttl to 365 and forwards published_at', (
   assert.equal(output.request.ttl_days, 365); // 01.01.2030 would otherwise be ~1400 days
 });
 
+test('ingest mapper caps text at the RAG 50k contract to avoid a 422', () => {
+  const hugeBody = 'Житомир громада документ '.repeat(4000); // ~100k chars, well over 50k
+  const item = normalizeItem(
+    {
+      url: 'https://zt-rada.gov.ua/doc',
+      title: 'Довгий документ',
+      body: hugeBody,
+      publishedAt: '2026-01-15T00:00:00.000Z',
+      docType: 'instruction',
+      sourceKind: 'document',
+    },
+    { id: 'zt-rada' },
+    'web',
+  );
+
+  const output = toIngestRequest(item);
+
+  assert.equal(output.skipped, false);
+  assert.equal(output.request.text.length, 50000);
+});
+
 test('AI layer applies structured output, clamps ttl, and keeps deterministic text', async () => {
   await withEnv(
     { AI_LAYER_ENABLED: 'true', AI_PROVIDER: 'openai', OPENAI_API_KEY: 'test-key' },

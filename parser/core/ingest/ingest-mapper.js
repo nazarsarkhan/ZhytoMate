@@ -225,6 +225,22 @@ function buildText(item) {
   return cleanSourceText(combined);
 }
 
+// Mirrors ml-service IngestRequest.text max_length; a longer body is rejected there with HTTP 422,
+// which would otherwise wedge the delivery queue on retries. Long documents (e.g. zt-rada PDFs) are
+// truncated instead — the RAG chunks whatever it receives, so the leading content is still indexed.
+const MAX_INGEST_TEXT_CHARS = 50_000;
+
+function capIngestText(text, item) {
+  if (text.length <= MAX_INGEST_TEXT_CHARS) {
+    return text;
+  }
+
+  console.warn(
+    `Ingest text truncated to ${MAX_INGEST_TEXT_CHARS} chars (was ${text.length}): ${item.url || item.source}`,
+  );
+  return text.slice(0, MAX_INGEST_TEXT_CHARS);
+}
+
 function inferDocType(item) {
   if (item.docType === 'news' || item.docType === 'instruction') {
     return item.docType;
@@ -468,7 +484,7 @@ export function toIngestRequest(item) {
     reason: null,
     request: {
       document_id: `${item.source}_${item.id}`,
-      text,
+      text: capIngestText(text, item),
       doc_type: inferDocType(item),
       source: item.url || item.source,
       category,
