@@ -12,6 +12,13 @@ html {
     linear-gradient(135deg, #e9e7eb 0%, #faf9fc 45%, #eef3ff 100%);
 }
 
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
 body {
   min-width: 320px;
   min-height: 100dvh;
@@ -50,6 +57,16 @@ input {
   width: 100%;
   min-height: 100dvh;
   margin: 0 auto;
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+
+.pt-safe-top {
+  padding-top: var(--safe-top);
+}
+
+.pb-safe-bottom {
+  padding-bottom: var(--safe-bottom);
 }
 
 @media (min-width: 768px) {
