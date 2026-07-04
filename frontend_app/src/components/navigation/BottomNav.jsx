@@ -3,9 +3,9 @@ import Icon from "../ui/Icon.jsx";
 
 const navItems = [
   ["assistant", "/assistant", "smart_toy", "Main"],
-  ["map", "#", "location_on", "Map"],
+  ["services", "/services", "apps", "Services"],
   ["news", "/news", "newspaper", "News"],
-  ["profile", "#", "person", "Profile"],
+  ["profile", "/profile", "person", "Profile"],
 ];
 
 export default function BottomNav({ active = "assistant", dark = false }) {
@@ -21,11 +21,7 @@ export default function BottomNav({ active = "assistant", dark = false }) {
           </>
         );
 
-        return href === "#" ? (
-          <button key={key} className="relative flex w-16 flex-col items-center rounded-xl p-2 transition active:scale-95">{content}</button>
-        ) : (
-          <Link key={key} to={href} className="relative flex w-16 flex-col items-center rounded-xl p-2 transition active:scale-95">{content}</Link>
-        );
+        return <Link key={key} to={href} className="relative flex w-16 flex-col items-center rounded-xl p-2 transition active:scale-95">{content}</Link>;
       })}
     </nav>
   );
