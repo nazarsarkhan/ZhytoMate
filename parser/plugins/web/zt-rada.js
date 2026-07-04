@@ -7,7 +7,7 @@ const CONFIG = {
   enabled: true,
   schedule: "*/30 * * * *",
   useAi: false,
-  backfillMonths: 12,
+  backfillDays: 5,
   maxPages: 1500,
   maxItems: 2000,
   attachmentLimitPerPage: 5,
@@ -18,6 +18,54 @@ const CONFIG = {
 const baseUrl = "https://zt-rada.gov.ua/";
 const host = "zt-rada.gov.ua";
 const documentExtensions = new Set(["pdf", "doc", "docx", "txt"]);
+const imageExtensions = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
+const contentSelectors = [
+  "article",
+  "main",
+  ".content",
+  ".doc_page",
+  ".page",
+  "[class*=content]",
+  "[class*=article]",
+  "[class*=news]",
+];
+const noisySelectors = [
+  "script",
+  "style",
+  "noscript",
+  "svg",
+  "iframe",
+  "form",
+  "button",
+  "header",
+  "footer",
+  "nav",
+  ".header",
+  ".footer",
+  ".social-links",
+  ".breadcrumbs",
+  ".breadcrumb",
+  ".menu",
+  ".sidebar",
+  ".pagination",
+];
+const safeHtmlTags = new Set([
+  "p",
+  "br",
+  "h2",
+  "h3",
+  "h4",
+  "ul",
+  "ol",
+  "li",
+  "strong",
+  "em",
+  "a",
+  "blockquote",
+  "figure",
+  "figcaption",
+  "img",
+]);
 const staticSeeds = [
   "/?items=67",
   "/?items=73",
@@ -46,9 +94,8 @@ function getNumberEnv(name, fallback) {
 }
 
 function getBackfillCutoff() {
-  const months = getNumberEnv("ZT_RADA_BACKFILL_MONTHS", CONFIG.backfillMonths);
   const cutoff = new Date();
-  cutoff.setUTCMonth(cutoff.getUTCMonth() - months);
+  cutoff.setUTCDate(cutoff.getUTCDate() - CONFIG.backfillDays);
   return cutoff;
 }
 
@@ -84,12 +131,6 @@ function normalizeWhitespace(value) {
     .trim();
 }
 
-function stripUi($) {
-  $(
-    "script,style,noscript,svg,header,footer,nav,.header,.footer,.social-links,.breadcrumbs",
-  ).remove();
-}
-
 function toAbsoluteUrl(value, currentUrl = baseUrl) {
   if (
     !value ||
@@ -114,6 +155,30 @@ function toAbsoluteUrl(value, currentUrl = baseUrl) {
   }
 }
 
+function toAbsoluteAssetUrl(value, currentUrl = baseUrl) {
+  if (
+    !value ||
+    value.startsWith("data:") ||
+    value.startsWith("blob:") ||
+    value.startsWith("#")
+  ) {
+    return null;
+  }
+
+  try {
+    const url = new URL(value, currentUrl);
+
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return null;
+    }
+
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
 function getExtension(url) {
   try {
     const pathname = new URL(url).pathname.toLowerCase();
@@ -126,6 +191,10 @@ function getExtension(url) {
 
 function isDocumentUrl(url) {
   return documentExtensions.has(getExtension(url));
+}
+
+function isImageUrl(url) {
+  return imageExtensions.has(getExtension(url));
 }
 
 function shouldCrawlPage(url) {
@@ -225,7 +294,7 @@ function parseNumericDate(value) {
 
 // Search pages only list headlines. Rather than ingest title-only items (which carry no answerable
 // body and, as dated news, get born-expired and dropped by the RAG anyway), hand the article URLs
-// back to the crawler so each is fetched as a full page — real body via extractMainText. This is
+// back to the crawler so each is fetched as a full page with real extracted body text. This is
 // what gives the KB substantive content for topics that otherwise appear only as search results.
 function parseSearchResultUrls($, currentUrl) {
   const urls = new Set();
@@ -281,18 +350,199 @@ function buildTitle($, url) {
   return new URL(url).pathname.replace(/^\/+/, "") || "zt-rada.gov.ua";
 }
 
-function extractMainText($) {
-  stripUi($);
+function getImageSource($, element, currentUrl) {
+  const node = $(element);
+  const directSource =
+    node.attr("src") ||
+    node.attr("data-src") ||
+    node.attr("data-original") ||
+    node.attr("data-lazy-src");
+  const srcset = node.attr("srcset") || node.attr("data-srcset");
+  const srcsetSource = srcset?.split(",").at(0)?.trim()?.split(/\s+/).at(0);
 
-  const main = $("main, article, .content, .page, .doc_page, .container")
-    .filter((_, element) => {
-      const text = normalizeWhitespace($(element).text());
-      return text.length > 200;
-    })
-    .first();
+  return toAbsoluteAssetUrl(directSource || srcsetSource, currentUrl);
+}
 
-  const source = main.length > 0 ? main : $("body");
-  return normalizeWhitespace(source.text());
+function removeAllAttributes(node) {
+  for (const name of Object.keys(node.attr() || {})) {
+    node.removeAttr(name);
+  }
+}
+
+function scoreContentElement($, element) {
+  const candidate = $(element).clone();
+  candidate.find(noisySelectors.join(",")).remove();
+
+  const text = normalizeWhitespace(candidate.text());
+
+  if (text.length < 40) {
+    return 0;
+  }
+
+  const linkTextLength = normalizeWhitespace(candidate.find("a").text()).length;
+  const linkDensity = linkTextLength / Math.max(text.length, 1);
+  const paragraphScore = candidate.find("p, li").length * 80;
+  const headingScore = candidate.find("h1, h2, h3, h4").length * 50;
+  const imageScore = candidate.find("img").length * 30;
+  const className = String($(element).attr("class") || "").toLowerCase();
+  const noisePenalty = /menu|nav|sidebar|breadcrumb|footer|header|pagination/.test(
+    className,
+  )
+    ? 1000
+    : 0;
+
+  return text.length + paragraphScore + headingScore + imageScore - linkDensity * 300 - noisePenalty;
+}
+
+function selectMainContent($) {
+  let bestElement = null;
+  let bestScore = 0;
+
+  $(contentSelectors.join(",")).each((_, element) => {
+    const score = scoreContentElement($, element);
+
+    if (score > bestScore) {
+      bestElement = element;
+      bestScore = score;
+    }
+  });
+
+  return bestElement ? $(bestElement) : $("body");
+}
+
+function getMainContentHtml($) {
+  const main = selectMainContent($).clone();
+  main.find(noisySelectors.join(",")).remove();
+  return $.html(main);
+}
+
+function sanitizeContentHtml(html, currentUrl) {
+  const $ = load(html || "", null, false);
+
+  $(noisySelectors.join(",")).remove();
+
+  $("*").each((_, element) => {
+    const node = $(element);
+    const tagName = element.tagName?.toLowerCase();
+
+    if (!safeHtmlTags.has(tagName)) {
+      node.replaceWith(node.contents());
+      return;
+    }
+
+    if (tagName === "a") {
+      const href = toAbsoluteUrl(node.attr("href"), currentUrl);
+      const text = normalizeWhitespace(node.text());
+      removeAllAttributes(node);
+
+      if (!href || !text) {
+        node.replaceWith(node.contents());
+        return;
+      }
+
+      node.attr("href", href);
+      return;
+    }
+
+    if (tagName === "img") {
+      const src = getImageSource($, element, currentUrl);
+      const alt = normalizeWhitespace(node.attr("alt"));
+      removeAllAttributes(node);
+
+      if (!src || !isImageUrl(src)) {
+        node.remove();
+        return;
+      }
+
+      node.attr("src", src);
+
+      if (alt) {
+        node.attr("alt", alt);
+      }
+
+      return;
+    }
+
+    removeAllAttributes(node);
+  });
+
+  $("p,h2,h3,h4,li,figcaption,blockquote").each((_, element) => {
+    const node = $(element);
+
+    if (!normalizeWhitespace(node.text()) && node.find("img").length === 0) {
+      node.remove();
+    }
+  });
+
+  return normalizeWhitespace($.root().html());
+}
+
+function extractImagesFromHtml(html) {
+  const $ = load(html || "", null, false);
+  const seen = new Set();
+  const images = [];
+
+  $("img[src]").each((_, element) => {
+    const node = $(element);
+    const url = node.attr("src");
+
+    if (!url || seen.has(url)) {
+      return;
+    }
+
+    seen.add(url);
+    images.push({
+      url,
+      alt: normalizeWhitespace(node.attr("alt")),
+      caption: normalizeWhitespace(node.closest("figure").find("figcaption").first().text()),
+    });
+  });
+
+  return images;
+}
+
+function extractTextFromHtml(html) {
+  const $ = load(html || "", null, false);
+
+  $("br").replaceWith("\n");
+  $("p,h2,h3,h4,li,blockquote,figcaption").each((_, element) => {
+    $(element).append("\n");
+  });
+
+  return normalizeWhitespace($.root().text().replace(/ *\n */g, "\n"));
+}
+
+function extractMetaImage($, currentUrl) {
+  const candidates = [
+    $('meta[property="og:image"]').attr("content"),
+    $('meta[name="twitter:image"]').attr("content"),
+    $('link[rel="image_src"]').attr("href"),
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const url = toAbsoluteAssetUrl(candidate, currentUrl);
+
+    if (url && isImageUrl(url)) {
+      return url;
+    }
+  }
+
+  return null;
+}
+
+export function extractWebContent(html, currentUrl = baseUrl) {
+  const $ = load(html);
+  const bodyHtml = sanitizeContentHtml(getMainContentHtml($), currentUrl);
+  const images = extractImagesFromHtml(bodyHtml);
+  const body = extractTextFromHtml(bodyHtml);
+  const coverImageUrl = extractMetaImage($, currentUrl) || images[0]?.url || null;
+
+  return {
+    body,
+    bodyHtml: bodyHtml || null,
+    coverImageUrl,
+    images,
+  };
 }
 
 function extractLinks($, currentUrl) {
@@ -429,7 +679,8 @@ async function parsePage(
   const sourceKind = inferSourceKind(page.url);
   const title = buildTitle($, url);
   const publishedAt = inferPublishedAt($, new Date());
-  const pageText = extractMainText($);
+  const content = extractWebContent(page.text, page.url);
+  const pageText = content.body;
   const links = extractLinks($, page.url);
   const attachments = [];
   const maxAttachments =
@@ -464,6 +715,9 @@ async function parsePage(
     url: page.url,
     title,
     body: combineBody(pageText, attachments),
+    bodyHtml: content.bodyHtml,
+    coverImageUrl: content.coverImageUrl,
+    images: content.images,
     publishedAt,
     category:
       sourceKind === "document" || sourceKind === "document-index"

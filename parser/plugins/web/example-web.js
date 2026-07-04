@@ -16,7 +16,7 @@ export default {
    * Fetch items from a website, RSS feed, or API.
    *
    * Return shape:
-   * [{ url, title, body, publishedAt }]
+   * [{ url, title, body, bodyHtml, coverImageUrl, images, publishedAt }]
    */
   async fetch() {
     return [

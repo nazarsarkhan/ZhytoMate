@@ -488,6 +488,9 @@ function validateNewsItem(newsItem) {
     district: newsItem.district || null,
     event_date: newsItem.event_date || null,
     tags: Array.isArray(newsItem.tags) ? newsItem.tags : [],
+    body_html: newsItem.body_html || null,
+    cover_image_url: newsItem.cover_image_url || null,
+    images: Array.isArray(newsItem.images) ? newsItem.images : [],
   };
 }
 

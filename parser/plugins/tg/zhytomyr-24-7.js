@@ -3,7 +3,7 @@
 const CONFIG = {
   enabled: false,
   useAi: true,
-  backfillDays: 30,
+  backfillDays: 2,
   backfillLimit: 1000,
 };
 
