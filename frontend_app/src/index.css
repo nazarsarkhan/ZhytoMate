@@ -7,14 +7,18 @@
 }
 
 html {
-  background: #e9e7eb;
+  background:
+    radial-gradient(circle at top left, rgba(254, 183, 33, 0.18), transparent 30rem),
+    linear-gradient(135deg, #e9e7eb 0%, #faf9fc 45%, #eef3ff 100%);
 }
 
 body {
   min-width: 320px;
   min-height: 100dvh;
   margin: 0;
-  background: #e9e7eb;
+  background:
+    radial-gradient(circle at top left, rgba(254, 183, 33, 0.18), transparent 30rem),
+    linear-gradient(135deg, #e9e7eb 0%, #faf9fc 45%, #eef3ff 100%);
   color: #1b1b1e;
   font-family: "Plus Jakarta Sans", system-ui, sans-serif;
 }
@@ -45,15 +49,100 @@ input {
 .phone-shell {
   width: 100%;
   min-height: 100dvh;
+  margin: 0 auto;
 }
 
-@media (min-width: 480px) {
+@media (min-width: 768px) {
   .phone-shell {
-    max-width: 430px;
-    margin: 24px auto;
-    min-height: 884px;
-    overflow: hidden;
+    max-width: 1180px;
+    min-height: calc(100dvh - 32px);
+    margin: 16px auto;
+    overflow: clip;
+    border: 1px solid rgba(196, 198, 207, 0.45);
     border-radius: 28px;
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.18);
+    box-shadow: 0 24px 80px rgba(0, 26, 63, 0.14);
+  }
+}
+
+.motion-card {
+  animation: rise-in 520ms ease both;
+}
+
+.motion-card:nth-child(2) {
+  animation-delay: 80ms;
+}
+
+.motion-card:nth-child(3) {
+  animation-delay: 160ms;
+}
+
+.motion-card:nth-child(4) {
+  animation-delay: 220ms;
+}
+
+.interactive-card {
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.interactive-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 34px rgba(0, 26, 63, 0.1);
+}
+
+.pulse-dot {
+  animation: soft-pulse 1.7s ease-in-out infinite;
+}
+
+.float-soft {
+  animation: float-soft 5s ease-in-out infinite;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes soft-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.35);
+    opacity: 0.55;
+  }
+}
+
+@keyframes float-soft {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }
