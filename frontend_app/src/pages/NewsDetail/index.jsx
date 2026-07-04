@@ -1,16 +1,36 @@
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import Shell from "../../components/layout/Shell.jsx";
+import AppHeader from "../../components/layout/AppHeader.jsx";
 import BottomNav from "../../components/navigation/BottomNav.jsx";
+import Toast from "../../components/ui/Toast.jsx";
 import Icon from "../../components/ui/Icon.jsx";
 
 export default function NewsDetailPage() {
+  const { t } = useTranslation();
+  const [toast, setToast] = useState("");
+
+  const showToast = (message) => {
+    setToast(message);
+    window.setTimeout(() => setToast(""), 1600);
+  };
+
+  const handleShare = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "Фестиваль квітів у парку", url: window.location.href });
+      } else {
+        await navigator.clipboard?.writeText(window.location.href);
+      }
+      showToast(t("common.shared"));
+    } catch {
+      showToast(t("common.shared"));
+    }
+  };
+
   return (
-    <Shell className="bg-surface-bright pb-28 pt-16">
-      <header className="fixed left-1/2 top-0 z-50 flex h-16 w-full -translate-x-1/2 items-center justify-between bg-primary px-container-padding text-on-primary sm:max-w-[430px] sm:rounded-b-[28px] md:top-4 md:max-w-[1180px] md:rounded-b-none md:rounded-t-[28px] md:px-8">
-        <Link to="/news" className="flex h-10 w-10 items-center justify-center rounded-full transition hover:bg-white/10 active:scale-95"><Icon name="arrow_back" /></Link>
-        <h1 className="text-lg font-semibold md:text-xl">Новини</h1>
-        <button className="flex h-10 w-10 items-center justify-center rounded-full transition hover:bg-white/10 active:scale-95"><Icon name="share" /></button>
-      </header>
+    <Shell className="bg-surface-bright pb-28">
+      <AppHeader title={t("nav.news")} backTo="/news" rightIcon="share" rightLabel={t("common.share")} onRightClick={handleShare} />
       <main className="mx-auto w-full max-w-5xl px-container-padding pb-section-margin sm:px-6 md:px-8">
         <div className="motion-card relative mt-4 overflow-hidden rounded-2xl bg-surface-container-low shadow-soft md:mt-8 md:rounded-3xl">
           <img className="h-56 w-full object-cover md:h-[380px]" alt="" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBgOIV7klrkYl8iwf0E_3tTFOU07M2W8UV-t-aDqT-lk08ak4njeYvwwoFtbxzGF4K2pr0vLs0t__0FDu38Eqevt2UjELaNKz18jxr9E0h5eG0yzka6PTkyz-ufyG7d8HeH5agev96aTJlNsNyLxjOv9yd-MEw4mphTDIj-22I0nKQApPWUTSYyWH4TJ4MKSenIMkjLAcIOUeBvH2JSLHfUINMj1qBeCUNLQ-koeILjV7Ob6ALjXFyB" />
@@ -46,6 +66,7 @@ export default function NewsDetailPage() {
         </article>
       </main>
       <BottomNav active="news" />
+      <Toast message={toast} />
     </Shell>
   );
 }
