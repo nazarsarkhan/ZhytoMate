@@ -9,6 +9,7 @@ Must NOT import:  api/*, services/*, components/*, domain/*; any I/O or model li
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -24,6 +25,10 @@ class IngestRequest(BaseModel):
     category: str | None = None
     district: str | None = None  # raw surface form — canonicalized in the service (§2.6)
     ttl_days: int | None = Field(None, ge=1, le=365)
+    # Publication time. News expiry is anchored to this (published_at + ttl_days) so it stays
+    # deterministic across re-ingests and correct for backfilled items; when absent it falls back
+    # to ingest time (§2.5). Ignored for instructions.
+    published_at: datetime | None = None
 
     @model_validator(mode="after")
     def _ttl_required_for_news(self) -> IngestRequest:
@@ -34,7 +39,7 @@ class IngestRequest(BaseModel):
 
 
 class IngestResponse(BaseModel):
-    status: Literal["ingested", "duplicate"]
+    status: Literal["ingested", "duplicate", "expired"]
     document_id: str
     chunks_processed: int
 

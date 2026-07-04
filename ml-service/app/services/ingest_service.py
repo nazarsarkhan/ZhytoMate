@@ -19,6 +19,7 @@ from app.components.repository import ChunkRecord, KnowledgeRepository
 from app.config import Settings
 from app.domain.chunker import chunk_text
 from app.domain.districts import canonicalize_district
+from app.domain.retention import is_evergreen_news
 from app.domain.text import compute_content_hash, normalize_text
 from app.metrics import dedup_skips_total, district_unmapped, ingest_chunks_total
 from app.schemas.common import DocType
@@ -36,8 +37,8 @@ class IngestService:
         self._settings = settings
 
     async def ingest(self, request: IngestRequest) -> IngestResponse:
-        """Full idempotent pipeline (§2.4). Duplicate content short-circuits before any
-        embedding."""
+        """Full idempotent pipeline (§2.4). Duplicate content and already-expired news both
+        short-circuit before any embedding."""
         start = time.perf_counter()
 
         normalized = normalize_text(request.text)
@@ -50,6 +51,17 @@ class IngestService:
                 status="duplicate", document_id=request.document_id, chunks_processed=0
             )
 
+        expires_at = self._expires_at(request)
+        if expires_at is not None and expires_at <= datetime.now(UTC):
+            logger.info(
+                "ingest_skipped_expired",
+                doc=request.document_id,
+                expires_at=expires_at.isoformat(),
+            )
+            return IngestResponse(
+                status="expired", document_id=request.document_id, chunks_processed=0
+            )
+
         chunks = chunk_text(normalized, self._embedder.count_tokens)
         ingest_chunks_total.inc(len(chunks))
         embeddings = await self._embedder.encode_passages(chunks)  # shape (n, 1536)
@@ -60,8 +72,6 @@ class IngestService:
                 "ingest_unknown_district", raw=request.district, doc=request.document_id
             )
             district_unmapped.labels(boundary="ingest").inc()
-
-        expires_at = self._expires_at(request)
 
         records = [
             ChunkRecord(
@@ -101,9 +111,15 @@ class IngestService:
 
     @staticmethod
     def _expires_at(request: IngestRequest) -> datetime | None:
-        """news -> now()+ttl_days; instruction -> never expires (§2.5). ttl_days presence is
-        guaranteed for news by the schema validator."""
-        if request.doc_type is DocType.NEWS:
-            assert request.ttl_days is not None  # enforced by IngestRequest's model_validator
-            return datetime.now(UTC) + timedelta(days=request.ttl_days)
-        return None
+        """time-bound news -> published_at (or ingest time when absent) + ttl_days; instructions
+        and evergreen-category news (e.g. memorials) -> never expire, i.e. NULL (§2.5). Anchoring
+        to publication time rather than now() keeps expiry deterministic across re-ingests/retries
+        and correct for backfilled items. ttl_days presence is guaranteed for news by the schema
+        validator."""
+        if request.doc_type is not DocType.NEWS or is_evergreen_news(request.category):
+            return None
+        assert request.ttl_days is not None  # enforced by IngestRequest's model_validator
+        published = request.published_at or datetime.now(UTC)
+        if published.tzinfo is None:
+            published = published.replace(tzinfo=UTC)
+        return published + timedelta(days=request.ttl_days)

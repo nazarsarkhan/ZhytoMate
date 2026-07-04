@@ -11,6 +11,8 @@ Must NOT import:  real asyncpg, real openai
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from app.config import Settings
 from app.metrics import dedup_skips_total, ingest_chunks_total
 from app.schemas.common import DocType
@@ -72,3 +74,51 @@ async def test_successful_ingest_increments_ingest_chunks_total_by_the_real_chun
     assert response.chunks_processed >= 1
     assert _counter_value(ingest_chunks_total) == before + response.chunks_processed
     assert len(repo.upsert_calls) == 1
+
+
+async def test_news_expiry_is_anchored_to_published_at_not_ingest_time() -> None:
+    repo = FakeKnowledgeRepository(content_hash_exists=False)
+    embedder = FakeEmbedder()
+    service = IngestService(repo, embedder, _settings())
+    published = datetime.now(UTC)
+
+    response = await service.ingest(
+        _request(doc_type=DocType.NEWS, ttl_days=30, published_at=published)
+    )
+
+    assert response.status == "ingested"
+    _, records = repo.upsert_calls[0]
+    assert records[0].expires_at == published + timedelta(days=30)
+
+
+async def test_news_born_expired_is_skipped_before_embedding() -> None:
+    repo = FakeKnowledgeRepository(content_hash_exists=False)
+    embedder = FakeEmbedder()
+    service = IngestService(repo, embedder, _settings())
+    published = datetime(2020, 1, 1, tzinfo=UTC)  # published_at + ttl_days is far in the past
+
+    response = await service.ingest(
+        _request(doc_type=DocType.NEWS, ttl_days=2, published_at=published)
+    )
+
+    assert response.status == "expired"
+    assert response.chunks_processed == 0
+    assert embedder.encoded_passages == []  # never reaches the embedder
+    assert repo.upsert_calls == []
+
+
+async def test_evergreen_memorial_news_never_expires_and_is_not_skipped() -> None:
+    repo = FakeKnowledgeRepository(content_hash_exists=False)
+    embedder = FakeEmbedder()
+    service = IngestService(repo, embedder, _settings())
+    published = datetime(2020, 1, 1, tzinfo=UTC)  # old enough to be born-expired for normal news
+
+    response = await service.ingest(
+        _request(
+            doc_type=DocType.NEWS, category="memorial", ttl_days=14, published_at=published
+        )
+    )
+
+    assert response.status == "ingested"  # evergreen -> not skipped despite its age
+    _, records = repo.upsert_calls[0]
+    assert records[0].expires_at is None  # permanent record, like an instruction

@@ -14,6 +14,7 @@ Must NOT import:  services/*, api/*, pipeline/*, other components/*; FastAPI
 """
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -72,7 +73,7 @@ _DENSE_SQL = """
     SELECT id, text, source, doc_type, district,
            1 - (embedding <=> $1::vector) AS similarity
     FROM knowledge_base
-    WHERE (doc_type = 'instruction' OR expires_at > now())
+    WHERE (expires_at IS NULL OR expires_at > now())
       AND ($2::text IS NULL OR district = $2 OR district IS NULL)
     ORDER BY embedding <=> $1::vector
     LIMIT $3
@@ -85,9 +86,24 @@ _LEXICAL_SQL = """
            ts_rank_cd(tsv, query) AS rank
     FROM knowledge_base, {tsquery}('simple', $1) AS query
     WHERE tsv @@ query
-      AND (doc_type = 'instruction' OR expires_at > now())
+      AND (expires_at IS NULL OR expires_at > now())
       AND ($2::text IS NULL OR district = $2 OR district IS NULL)
     ORDER BY rank DESC
+    LIMIT $3
+"""
+
+# OR fallback ($1 = "a | b | c" tsquery, $4 = the same terms as an array). Ranks by how many
+# DISTINCT query terms a chunk covers, so a chunk mentioning several of the words beats one that
+# just repeats a single common word (e.g. a price list full of "послуга"); ts_rank_cd breaks ties.
+_OR_LEXICAL_SQL = """
+    SELECT id, text, source, doc_type, district,
+           (SELECT count(*) FROM unnest($4::text[]) AS term
+            WHERE tsv @@ plainto_tsquery('simple', term)) AS coverage
+    FROM knowledge_base, to_tsquery('simple', $1) AS query
+    WHERE tsv @@ query
+      AND (expires_at IS NULL OR expires_at > now())
+      AND ($2::text IS NULL OR district = $2 OR district IS NULL)
+    ORDER BY coverage DESC, ts_rank_cd(tsv, query) DESC
     LIMIT $3
 """
 
@@ -101,6 +117,22 @@ def _to_result(row: asyncpg.Record, similarity: float) -> RetrievalResult:
         district=row["district"],
         similarity=similarity,
     )
+
+
+# Letters-only tokens of length >= 3 — drops stopword-ish short words and digits. Letters only, so
+# the joined result is always a syntactically valid to_tsquery input (no operators to escape).
+_TSQUERY_WORD = re.compile(r"[^\W\d_]{3,}", re.UNICODE)
+
+
+def _significant_terms(query: str) -> list[str]:
+    """Distinct >=3-letter tokens from a query (drops short stopword-ish words and digits),
+    order-preserving. The raw material for the lexical OR fallback — filtered by corpus frequency
+    in KnowledgeRepository._distinctive_terms before use."""
+    seen: list[str] = []
+    for token in _TSQUERY_WORD.findall(query.lower()):
+        if token not in seen:
+            seen.append(token)
+    return seen[:12]
 
 
 class KnowledgeRepository:
@@ -135,7 +167,8 @@ class KnowledgeRepository:
         return len(records)
 
     async def delete_document(self, document_id: str) -> int:
-        """Delete all chunks for a document. Returns the number deleted (0 if document_id absent)."""
+        """Delete all chunks for a document. Returns the number deleted (0 if document_id
+        absent)."""
         start = time.perf_counter()
         rows = await self._pool.fetch(
             "DELETE FROM knowledge_base WHERE document_id = $1 RETURNING id", document_id
@@ -168,7 +201,7 @@ class KnowledgeRepository:
         self, query: str, district_slug: str | None, limit: int = 10
     ) -> list[RetrievalResult]:
         """Full-text leg (§2.8). websearch_to_tsquery primary; plainto_tsquery fallback on 0
-        rows."""
+        rows; coverage-ranked OR fallback when both AND queries are empty."""
         start = time.perf_counter()
         rows = await self._pool.fetch(
             _LEXICAL_SQL.format(tsquery="websearch_to_tsquery"), query, district_slug, limit
@@ -178,6 +211,15 @@ class KnowledgeRepository:
             rows = await self._pool.fetch(
                 _LEXICAL_SQL.format(tsquery="plainto_tsquery"), query, district_slug, limit
             )
+        if not rows:
+            # Both of the above AND every term, so a verbose question matches no single chunk. Fall
+            # back to an OR of the significant terms, ranked by how many DISTINCT terms each chunk
+            # covers so a chunk mentioning several of the words beats one repeating a common filler.
+            terms = _significant_terms(query)
+            if terms:
+                rows = await self._pool.fetch(
+                    _OR_LEXICAL_SQL, " | ".join(terms), district_slug, limit, terms
+                )
         logger.debug(
             "retrieve_lexical",
             rows=len(rows),

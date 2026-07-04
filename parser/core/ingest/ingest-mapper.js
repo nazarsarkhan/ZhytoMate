@@ -1,3 +1,5 @@
+import { clampTtlDays } from './ttl.js';
+
 const allowedLangs = new Set(['uk', 'ru']);
 
 const wordChars = '\\p{L}\\p{N}_';
@@ -208,12 +210,35 @@ function normalizeForSearch(value) {
   return (value || '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+function cleanSourceText(value) {
+  return (value || '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function buildText(item) {
-  if (item.title) {
-    return `${item.title}\n\n${item.body || ''}`;
+  const body = item.body || '';
+  const combined = item.title ? `${item.title}\n\n${body}` : body;
+  return cleanSourceText(combined);
+}
+
+// Mirrors ml-service IngestRequest.text max_length; a longer body is rejected there with HTTP 422,
+// which would otherwise wedge the delivery queue on retries. Long documents (e.g. zt-rada PDFs) are
+// truncated instead — the RAG chunks whatever it receives, so the leading content is still indexed.
+const MAX_INGEST_TEXT_CHARS = 50_000;
+
+function capIngestText(text, item) {
+  if (text.length <= MAX_INGEST_TEXT_CHARS) {
+    return text;
   }
 
-  return item.body || '';
+  console.warn(
+    `Ingest text truncated to ${MAX_INGEST_TEXT_CHARS} chars (was ${text.length}): ${item.url || item.source}`,
+  );
+  return text.slice(0, MAX_INGEST_TEXT_CHARS);
 }
 
 function inferDocType(item) {
@@ -459,12 +484,13 @@ export function toIngestRequest(item) {
     reason: null,
     request: {
       document_id: `${item.source}_${item.id}`,
-      text,
+      text: capIngestText(text, item),
       doc_type: inferDocType(item),
       source: item.url || item.source,
       category,
       district: inferDistrict(text),
-      ttl_days: inferTtlDays(text, category, item.publishedAt),
+      ttl_days: clampTtlDays(inferTtlDays(text, category, item.publishedAt)),
+      published_at: item.publishedAt,
     },
   };
 }
