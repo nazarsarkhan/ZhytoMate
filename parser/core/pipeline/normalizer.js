@@ -20,6 +20,15 @@ function toIsoOrFallback(value, fallback) {
 export function normalizeItem(rawItem, plugin, type) {
   const now = new Date().toISOString();
   const publishedAt = toIsoOrFallback(rawItem.publishedAt, now);
+  const images = Array.isArray(rawItem.images)
+    ? rawItem.images
+        .filter((image) => image && image.url)
+        .map((image) => ({
+          url: image.url,
+          alt: image.alt || '',
+          caption: image.caption || '',
+        }))
+    : [];
 
   return {
     id: uuidv4(),
@@ -28,6 +37,9 @@ export function normalizeItem(rawItem, plugin, type) {
     url: rawItem.url || '',
     title: rawItem.title ?? null,
     body: rawItem.body || '',
+    bodyHtml: rawItem.bodyHtml || null,
+    coverImageUrl: rawItem.coverImageUrl || null,
+    images,
     publishedAt,
     scrapedAt: now,
     lang: 'uk',
