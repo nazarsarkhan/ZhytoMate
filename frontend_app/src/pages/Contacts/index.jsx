@@ -1,12 +1,13 @@
 import Shell from "../../components/layout/Shell.jsx";
-import TopBar from "../../components/topbar/TopBar.jsx";
+import AppHeader from "../../components/layout/AppHeader.jsx";
+import BottomNav from "../../components/navigation/BottomNav.jsx";
 import Icon from "../../components/ui/Icon.jsx";
 import { emergencyServices, utilityContacts } from "../../consts/serviceData.js";
 
 export default function ContactsPage() {
   return (
-    <Shell className="bg-background pb-10">
-      <TopBar title="Контакти міста" backTo="/services" rightIcon="search" dark />
+    <Shell className="bg-background pb-28">
+      <AppHeader title="Контакти міста" backTo="/services" rightIcon="notifications" rightTo="/notifications" />
       <main className="mx-auto flex w-full max-w-5xl flex-col gap-section-margin px-container-padding py-section-margin sm:px-6 md:grid md:grid-cols-[360px_minmax(0,1fr)] md:items-start md:px-8">
         <section className="rounded-xl bg-secondary-container p-4 text-on-secondary-container shadow-sm md:sticky md:top-24">
           <div className="flex items-center gap-3">
@@ -20,9 +21,9 @@ export default function ContactsPage() {
           </div>
           <div className="mt-4 flex items-center justify-between rounded-lg bg-white/20 p-3">
             <span className="text-2xl font-bold">15-80</span>
-            <button className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-primary active:scale-95">
+            <a className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-primary active:scale-95" href="tel:1580">
               <Icon name="call" className="text-lg" /> Телефонувати
-            </button>
+            </a>
           </div>
         </section>
         <div className="space-y-section-margin">
@@ -36,7 +37,7 @@ export default function ContactsPage() {
                   </span>
                   <p className="text-sm text-on-surface-variant">{item.name}</p>
                   <p className="mt-1 text-lg font-bold text-primary-container">{item.phone}</p>
-                  <button className="mt-3 w-full rounded-full border border-error py-2 text-xs font-bold text-error active:scale-95">Виклик</button>
+                  <a className="mt-3 block w-full rounded-full border border-error py-2 text-xs font-bold text-error active:scale-95" href={`tel:${item.phone}`}>Виклик</a>
                 </article>
               ))}
             </div>
@@ -56,9 +57,9 @@ export default function ContactsPage() {
                         <p className="text-xs text-on-surface-variant">{item.phone}</p>
                       </div>
                     </div>
-                    <button className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-fixed/40 text-on-primary-fixed active:scale-95">
+                    <a className="flex h-10 w-10 items-center justify-center rounded-full bg-primary-fixed/40 text-on-primary-fixed active:scale-95" href={`tel:${item.phone.replaceAll(" ", "")}`}>
                       <Icon name="call" />
-                    </button>
+                    </a>
                   </div>
                 ))}
               </div>
@@ -66,6 +67,7 @@ export default function ContactsPage() {
           ))}
         </div>
       </main>
+      <BottomNav active="services" dark />
     </Shell>
   );
 }
