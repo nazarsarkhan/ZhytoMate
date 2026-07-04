@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import AssistantPage from "./pages/Assistant/index.jsx";
 import AppealsPage from "./pages/Appeals/index.jsx";
+import ChatConversationPage from "./pages/ChatConversation/index.jsx";
 import ChatHistoryPage from "./pages/ChatHistory/index.jsx";
 import ContactsPage from "./pages/Contacts/index.jsx";
 import NewsDetailPage from "./pages/NewsDetail/index.jsx";
@@ -20,6 +21,7 @@ export default function App() {
       <Route path="/" element={<Navigate to="/assistant" replace />} />
       <Route path="/assistant" element={<AssistantPage />} />
       <Route path="/chat-history" element={<ChatHistoryPage />} />
+      <Route path="/chat-history/:chatId" element={<ChatConversationPage />} />
       <Route path="/notifications" element={<NotificationsPage />} />
       <Route path="/news" element={<NewsPage />} />
       <Route path="/news/flower-festival" element={<NewsDetailPage />} />
