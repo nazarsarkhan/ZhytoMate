@@ -1,0 +1,151 @@
+{
+  "app": {
+    "city": "Zhytomyr",
+    "name": "Zhytomyr Assistant"
+  },
+  "common": {
+    "all": "All",
+    "cancel": "Cancel",
+    "close": "Close",
+    "filter": "Filter",
+    "filters": "Filters",
+    "open": "Open",
+    "remove": "Remove",
+    "save": "Save",
+    "saved": "Saved",
+    "search": "Search",
+    "share": "Share",
+    "shared": "Link copied",
+    "selected": "Selected",
+    "send": "Send",
+    "submit": "Submit",
+    "updated": "Updated"
+  },
+  "language": {
+    "label": "Language",
+    "uk": "Ukrainian",
+    "en": "English"
+  },
+  "nav": {
+    "main": "Main",
+    "services": "Services",
+    "news": "News",
+    "profile": "Profile"
+  },
+  "categories": {
+    "all": "All",
+    "utilities": "Utilities",
+    "transport": "Transport",
+    "official": "Official",
+    "events": "Events",
+    "infrastructure": "Infrastructure",
+    "ecology": "Ecology"
+  },
+  "news": {
+    "title": "Zhytomyr news and events",
+    "searchPlaceholder": "Search news...",
+    "details": "News details",
+    "empty": "No news found",
+    "filterTitle": "News filters"
+  },
+  "appeals": {
+    "title": "New appeal",
+    "subtitle": "Report a city issue and we will route it to the right department for resolution.",
+    "create": "Create appeal",
+    "history": "Appeal history",
+    "category": "Category",
+    "photos": "Photos",
+    "addPhoto": "Add photo",
+    "photoCount": "{{count}} photos selected",
+    "description": "Issue description",
+    "descriptionPlaceholder": "Describe the issue...",
+    "send": "Send appeal"
+  },
+  "services": {
+    "title": "Services",
+    "searchPlaceholder": "Search services...",
+    "empty": "No services found",
+    "cards": {
+      "contacts": { "title": "Contacts", "subtitle": "City departments" },
+      "polls": { "title": "Polls & Voting", "subtitle": "City decisions" },
+      "appeals": { "title": "Appeals", "subtitle": "Track issues" },
+      "transport": { "title": "Transport", "subtitle": "Routes & schedules" }
+    }
+  },
+  "transport": {
+    "title": "Transport",
+    "searchPlaceholder": "Search routes, stops, or addresses...",
+    "liveMap": "Live map",
+    "nearbyRoutes": "Nearby routes",
+    "updating": "Updating...",
+    "routeDetails": "Route details",
+    "mapTitle": "Live transport map",
+    "mapText": "An interactive transport map will be connected here.",
+    "empty": "No routes found",
+    "types": {
+      "all": "All",
+      "tram": "Trams",
+      "minibus": "Minibuses",
+      "trolleybus": "Trolleybuses",
+      "bus": "Buses"
+    },
+    "status": {
+      "onTime": "On time",
+      "delayed": "Delayed"
+    },
+    "towards": "Towards"
+  },
+  "profile": {
+    "title": "Profile",
+    "personalInformation": "Personal information",
+    "locationDetails": "Location details",
+    "preferences": "Preferences",
+    "fullName": "Full name",
+    "phone": "Phone number",
+    "email": "Email",
+    "security": "Security",
+    "changePassword": "Change password",
+    "utilityAlerts": "Utility alerts",
+    "utilityAlertsHint": "Push notifications for water, power and heat",
+    "cityNews": "City news",
+    "cityNewsHint": "Weekly digest of major events",
+    "logout": "Log out",
+    "editProfile": "Edit profile",
+    "editField": "Edit field",
+    "saveAddress": "Save address",
+    "editAddress": "Edit address",
+    "street": "Street",
+    "building": "Building / Apt",
+    "district": "District"
+  },
+  "polls": {
+    "title": "Polls",
+    "vote": "Vote",
+    "results": "View results",
+    "active": "Active",
+    "completed": "Completed",
+    "myVotes": "My votes",
+    "chooseOption": "Choose an implementation option:",
+    "anonymousStats": "Anonymous statistics",
+    "totalVotes": "{{count}} votes",
+    "scope": "Scope",
+    "updated": "Updated",
+    "leader": "Leading",
+    "privacy": "Only aggregated results are shown. Individual resident data is not displayed or shared in public statistics.",
+    "voteRecorded": "Your vote was counted confidentially",
+    "selectOption": "Select an option to vote",
+    "notFound": "Poll not found"
+  },
+  "chat": {
+    "history": "Chat history",
+    "searchPlaceholder": "Search messages...",
+    "assistant": "AI Assistant",
+    "openHistory": "Chat history",
+    "inputPlaceholder": "Ask the assistant...",
+    "ask": "Ask AI",
+    "listening": "Listening...",
+    "conversation": "Chat",
+    "empty": "No chats found",
+    "sentHint": "The answer is generated locally for the UI prototype."
+  }
+}
