@@ -1,33 +1,51 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import Shell from "../../components/layout/Shell.jsx";
+import AppHeader from "../../components/layout/AppHeader.jsx";
 import BottomNav from "../../components/navigation/BottomNav.jsx";
 import Icon from "../../components/ui/Icon.jsx";
-import { statusCards } from "../../consts/homeData.js";
+import { chatSuggestions, statusCards } from "../../consts/homeData.js";
+
+function buildAssistantReply(text) {
+  const normalized = text.toLowerCase();
+  if (normalized.includes("відключ") || normalized.includes("світ") || normalized.includes("елект")) {
+    return "Для вашої адреси перевірте чергу в профілі. Попередньо можливі відключення з 10:00 до 12:00 та з 18:00 до 20:00.";
+  }
+  if (normalized.includes("цнап")) {
+    return "Найближчий ЦНАП: майдан Польовий, 8. Сьогодні працює до 17:00, орієнтовне очікування 12 хвилин.";
+  }
+  if (normalized.includes("яма") || normalized.includes("звернення")) {
+    return "Можна створити звернення в сервісі «Звернення»: додайте фото, адресу, категорію та короткий опис проблеми.";
+  }
+  return "Я підготував коротку відповідь. Для точнішої підказки вкажіть адресу або оберіть відповідний сервіс.";
+}
 
 export default function AssistantPage() {
+  const { t } = useTranslation();
+  const [input, setInput] = useState("");
+  const [listening, setListening] = useState(false);
+  const [messages, setMessages] = useState([
+    { role: "assistant", text: "Вітаю. Можу підказати по транспорту, комунальних послугах, зверненнях або міських сервісах." },
+  ]);
+
+  const sendMessage = (textFromChip) => {
+    const text = (textFromChip || input).trim();
+    if (!text) return;
+    setMessages((current) => [...current, { role: "user", text }, { role: "assistant", text: buildAssistantReply(text) }]);
+    setInput("");
+  };
+
   return (
     <Shell className="bg-background pb-28">
-      <header className="relative z-10 h-[265px] rounded-b-3xl bg-primary-container px-4 pb-6 pt-12 text-on-primary shadow-header sm:px-6 md:h-[300px] md:rounded-b-[42px] md:px-8 lg:h-[310px] lg:px-10">
-        <div className="mx-auto max-w-6xl">
-          <div className="mb-6 flex items-center justify-between md:mb-8">
-            <div className="flex items-center gap-3">
-              <img className="h-12 w-12 rounded-full border-2 border-white/20 object-cover shadow-inner md:h-16 md:w-16" alt="" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB2E9jilZExfADABzvi5iNsDqUbEsEWRXK67mBTwLXkHMTHuJ4fJ12arV_62Fokw8GoeOKC7ZCcKaTjDNayaVcfrtWZoE3x0bbzXQDv_srhA6-Q78yiKq87rENP2xFvusa1F1-B9TVAVfpqOUk2ZK27qZ8dlWRbccwd6M6sDfjrtk0EdFcohEdRTFiJ7DQZLaoj7q3OQETeNhiggwAiqR73mB3sNe1gw-MTOzKVpiQHpktYi4cJSgPgHPAid3OKOC4zCD58aKL_vhI" />
-              <div>
-                <h1 className="text-base font-bold leading-tight md:text-xl">Вітаємо,</h1>
-                <p className="text-xl font-bold leading-tight md:text-3xl">Олександр</p>
-              </div>
-            </div>
-            <Link to="/notifications" className="relative flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/10 backdrop-blur-sm transition hover:bg-white/20 active:scale-95 md:h-12 md:w-12">
-              <Icon name="notifications" />
-              <span className="pulse-dot absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-primary-container bg-error" />
-            </Link>
-          </div>
-          <button className="flex max-w-[250px] items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium backdrop-blur-md transition hover:bg-white/20 active:scale-95 md:max-w-md md:px-5 md:py-3">
-            <span className="truncate">Житомир, вул. Театральна...</span>
-            <Icon name="edit" className="text-sm" />
-          </button>
-        </div>
-      </header>
+      <AppHeader
+        eyebrow={t("app.name")}
+        profile={{
+          name: "Олександр",
+          location: "Житомир, вул. Театральна",
+          avatar: "https://lh3.googleusercontent.com/aida-public/AB6AXuB2E9jilZExfADABzvi5iNsDqUbEsEWRXK67mBTwLXkHMTHuJ4fJ12arV_62Fokw8GoeOKC7ZCcKaTjDNayaVcfrtWZoE3x0bbzXQDv_srhA6-Q78yiKq87rENP2xFvusa1F1-B9TVAVfpqOUk2ZK27qZ8dlWRbccwd6M6sDfjrtk0EdFcohEdRTFiJ7DQZLaoj7q3OQETeNhiggwAiqR73mB3sNe1gw-MTOzKVpiQHpktYi4cJSgPgHPAid3OKOC4zCD58aKL_vhI",
+        }}
+      />
 
       <main className="relative z-20 -mt-8 space-y-section-margin md:mx-auto md:max-w-6xl md:px-8 lg:grid lg:grid-cols-[minmax(0,1fr)_430px] lg:items-start lg:gap-6 lg:space-y-0 lg:px-10">
         <section className="overflow-hidden md:overflow-visible">
@@ -54,32 +72,42 @@ export default function AssistantPage() {
 
         <section className="motion-card interactive-card mx-4 rounded-3xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-sm sm:mx-6 md:mx-0 md:p-6">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-on-surface">AI Асистент</h2>
+            <h2 className="text-lg font-bold text-on-surface">{t("chat.assistant")}</h2>
             <Link to="/chat-history" className="flex items-center gap-1 text-xs font-medium text-on-primary-container">
-              <Icon name="history" className="text-base" /> Історія чатів
+              <Icon name="history" className="text-base" /> {t("chat.openHistory")}
             </Link>
           </div>
-          <div className="mb-6 flex items-start gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-container shadow-sm">
-              <Icon name="smart_toy" className="text-lg text-on-primary" />
-            </div>
-            <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-outline-variant/20 bg-surface-container p-4 text-sm leading-5 text-on-surface-variant">
-              Ні. Нове відключення на вул. Малобердичівська. Як перевірити графік відключень строжизіння.
-            </div>
+          <div className="mb-6 max-h-64 space-y-3 overflow-y-auto pr-1">
+            {messages.map((message, index) => {
+              const isUser = message.role === "user";
+              return (
+                <div key={`${message.role}-${index}`} className={`flex items-start gap-3 ${isUser ? "justify-end" : ""}`}>
+                  {!isUser ? (
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-container shadow-sm">
+                      <Icon name="smart_toy" className="text-lg text-on-primary" />
+                    </div>
+                  ) : null}
+                  <div className={`max-w-[85%] rounded-2xl border p-4 text-sm leading-5 ${isUser ? "rounded-tr-sm border-primary-container/20 bg-primary-container text-on-primary" : "rounded-tl-sm border-outline-variant/20 bg-surface-container text-on-surface-variant"}`}>
+                    {message.text}
+                  </div>
+                </div>
+              );
+            })}
           </div>
           <div className="mb-6 flex flex-wrap gap-2">
-            {["Де ЦНАП?", "Перевірити графік відключень", "Створити звіт про яму"].map((label) => (
-              <button key={label} className="rounded-full border border-outline-variant/50 px-4 py-2 text-sm text-on-surface transition hover:border-primary-container hover:bg-primary-fixed/35 active:scale-95">{label}</button>
+            {chatSuggestions.map((label) => (
+              <button key={label} className="rounded-full border border-outline-variant/50 px-4 py-2 text-sm text-on-surface transition hover:border-primary-container hover:bg-primary-fixed/35 active:scale-95" type="button" onClick={() => sendMessage(label)}>{label}</button>
             ))}
           </div>
+          {listening ? <p className="mb-2 text-xs font-bold text-on-tertiary-fixed-variant">{t("chat.listening")}</p> : null}
           <div className="mb-4 flex h-14 items-center rounded-2xl border border-outline-variant/50 bg-surface shadow-sm focus-within:border-primary-container">
-            <input className="h-full min-w-0 flex-1 border-0 bg-transparent px-4 text-sm outline-none placeholder:text-outline" placeholder="Запитай асистента..." />
-            <button className="mr-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-fixed/60 text-on-primary-fixed active:scale-95">
+            <input className="h-full min-w-0 flex-1 border-0 bg-transparent px-4 text-sm outline-none placeholder:text-outline" placeholder={t("chat.inputPlaceholder")} value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") sendMessage(); }} />
+            <button className={`mr-2 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl active:scale-95 ${listening ? "bg-secondary-container text-on-secondary-container" : "bg-primary-fixed/60 text-on-primary-fixed"}`} type="button" onClick={() => setListening((current) => !current)}>
               <Icon name="mic" filled className="text-xl" />
             </button>
           </div>
-          <button className="flex h-14 w-full items-center justify-center gap-2 rounded-full bg-secondary-container text-lg font-bold text-on-secondary-container shadow-md transition hover:bg-secondary-fixed hover:shadow-lg active:scale-[0.98]">
-            Запитати AI <Icon name="arrow_forward" className="text-xl" />
+          <button className="flex h-14 w-full items-center justify-center gap-2 rounded-full bg-secondary-container text-lg font-bold text-on-secondary-container shadow-md transition hover:bg-secondary-fixed hover:shadow-lg active:scale-[0.98]" type="button" onClick={() => sendMessage()}>
+            {t("chat.ask")} <Icon name="arrow_forward" className="text-xl" />
           </button>
         </section>
       </main>
