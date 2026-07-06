@@ -21,12 +21,15 @@ Purpose:   RAGPipeline(ABC).run(ctx: RagContext) -> RagResult — the contract b
            heuristic, then an LLM classification pass) that SimpleRAGPipeline.run() calls first,
            before any retrieval/generation — an unsafe query short-circuits with a refusal, never
            reaching the KB or the main generation call. This safety gate and the answer-language
-           policy both apply unconditionally to every query, grounded or not.
+           policy both apply unconditionally to every query, grounded or not. The same call also
+           classifies action_intent — one of domain.actions.KNOWN_ACTIONS's names, or None — so a
+           later layer (not this one) can route a query like "create an appeal about a pothole"
+           into a slot-collection flow instead of an ordinary answer.
 Layer:     pipeline
 May import:   stdlib (abc, asyncio, json, time, collections.abc), structlog, pydantic,
-              app.protocols (Generator), schemas/*, domain/{confidence, context, language, opsec,
-              prompts}, app.metrics; openai (exception types only, for classifying a fallback
-              reason in _fallback_reason — never to make an API call directly)
+              app.protocols (Generator), schemas/*, domain/{actions, confidence, context, language,
+              opsec, prompts}, app.metrics; openai (exception types only, for classifying a
+              fallback reason in _fallback_reason — never to make an API call directly)
 Must NOT import:  api/*, services/*; concrete components/*; FastAPI, asyncpg, sentence-transformers;
               openai beyond the narrow exception-type import noted above
 """
@@ -42,6 +45,7 @@ import structlog
 from openai import APIError, APITimeoutError
 from pydantic import BaseModel, Field
 
+from app.domain.actions import KNOWN_ACTIONS
 from app.domain.confidence import ConfidenceBand, confidence_band
 from app.domain.context import CONTEXT_TOKEN_BUDGET, assemble_context
 from app.domain.language import detect_query_language, is_ukrainian, resolve_answer_lang
@@ -100,11 +104,13 @@ _TRANSLATE_TIMEOUT_S = 5.0
 _VALID_LANGS = frozenset({"uk", "ru", "en"})
 
 # OPSEC content-safety classification (layer 2 — see check_query_safety). A true/false
-# classification, not a user-facing answer: short, deterministic, cheap. 64 tokens (not the bare
-# minimum ~8 a clean {"safe": bool, "conversational": bool} needs) leaves real headroom now that
-# json_mode=True enforces valid JSON at the API level — see components.llm.OpenAILLMClient.
+# classification, not a user-facing answer: short, deterministic, cheap. 96 tokens (not the bare
+# minimum a clean {"safe": bool, "conversational": bool, "action_intent": str | null} needs) leaves
+# real headroom now that json_mode=True enforces valid JSON at the API level — see
+# components.llm.OpenAILLMClient. Bumped from 64: the JSON payload grew a third field plus room for
+# the longest registered action name.
 _SAFETY_CHECK_TEMPERATURE = 0.0
-_SAFETY_CHECK_MAX_TOKENS = 64
+_SAFETY_CHECK_MAX_TOKENS = 96
 _SAFETY_CHECK_TIMEOUT_S = 5.0
 
 
@@ -140,30 +146,37 @@ async def detect_and_translate(generator: Generator, query: str) -> tuple[str, s
     return resolve_answer_lang(lang), retrieval_query
 
 
-async def check_query_safety(generator: Generator, query: str) -> tuple[bool, str, bool]:
+async def check_query_safety(
+    generator: Generator, query: str
+) -> tuple[bool, str, bool, str | None]:
     """Two-layer wartime OPSEC content-safety gate. Layer 1 is the free, instant keyword heuristic
     (domain.opsec.contains_opsec_risk_terms) — if it flags the query, the LLM is never called.
     Layer 2, reached only if layer 1 passes, is an LLM classification pass that catches paraphrased
     or creative attempts the fixed phrase list cannot. Returns (is_safe, refusal_answer,
-    conversational); the refusal text is only meaningful when is_safe is False, and its language
-    is always resolve_answer_lang(detect_query_language(query)) so a refusal can never itself
-    violate the answer-language policy. FAIL CLOSED: any classifier exception (timeout, network
-    error, malformed JSON, missing/wrong-typed "safe" key) is treated as UNSAFE, not safe — an
-    unverifiable safety check must never let a query through; conversational is False in that case
-    too (an unverifiable query is refused, not routed to small talk). Only SimpleRAGPipeline calls
-    this, as the very first step, before any retrieval or generation work.
+    conversational, action_intent); the refusal text is only meaningful when is_safe is False, and
+    its language is always resolve_answer_lang(detect_query_language(query)) so a refusal can
+    never itself violate the answer-language policy. FAIL CLOSED: any classifier exception
+    (timeout, network error, malformed JSON, missing/wrong-typed "safe" key) is treated as UNSAFE,
+    not safe — an unverifiable safety check must never let a query through; conversational and
+    action_intent both default to their "nothing detected" value in that case too. Only
+    SimpleRAGPipeline calls this, as the very first step, before any retrieval or generation work.
 
     conversational piggybacks on this same call (see build_safety_check_prompt) to flag small
     talk/greetings that carry no real information need — run_shared_tail's force_ungrounded uses
     it to skip the grounded/RAG-prompt path even if retrieval's similarity gate accidentally
     passes on vocabulary/style noise alone (same-language conversational text scores above the
-    off-topic calibration floor regardless of topical relevance)."""
+    off-topic calibration floor regardless of topical relevance).
+
+    action_intent piggybacks on the same call too — one of domain.actions.KNOWN_ACTIONS's keys, or
+    None. A value outside that known set (a classifier hallucination) is treated as None, the same
+    fail-safe posture as everything else here. backend_app uses this to decide whether to start
+    collecting details for a registered action instead of answering as a normal query."""
     refusal_lang = resolve_answer_lang(detect_query_language(query))
     refusal = _REFUSAL_ANSWER_BY_LANG.get(refusal_lang, _REFUSAL_ANSWER_BY_LANG["uk"])
     if contains_opsec_risk_terms(query):
         queries_blocked_total.labels(layer="heuristic").inc()
         logger.warning("query_blocked", layer="heuristic")
-        return False, refusal, False
+        return False, refusal, False, None
     try:
         raw, _ = await generator.generate(
             build_safety_check_prompt(query),
@@ -178,14 +191,18 @@ async def check_query_safety(generator: Generator, query: str) -> tuple[bool, st
         # truthiness (e.g. bool("false") is True — a real footgun given the fail-closed policy).
         is_safe = parsed.get("safe") is True
         conversational = is_safe and parsed.get("conversational") is True
+        raw_action_intent = parsed.get("action_intent")
+        action_intent = (
+            raw_action_intent if is_safe and raw_action_intent in KNOWN_ACTIONS else None
+        )
     except Exception as exc:  # noqa: BLE001 — fail closed: an unverifiable safety check is unsafe
         logger.warning("query_safety_check_failed", err=type(exc).__name__)
         queries_blocked_total.labels(layer="llm_error").inc()
-        return False, refusal, False
+        return False, refusal, False, None
     if not is_safe:
         queries_blocked_total.labels(layer="llm").inc()
         logger.warning("query_blocked", layer="llm")
-    return is_safe, refusal, conversational
+    return is_safe, refusal, conversational, action_intent
 
 
 class RagContext(BaseModel):

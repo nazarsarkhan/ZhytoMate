@@ -146,3 +146,9 @@ def test_build_general_prompt_never_offers_a_russian_directive() -> None:
     ru = build_general_prompt("как дела", answer_lang="ru")
     assert "РОСІЙСЬКОЮ" not in ru
     assert ru.count("УКРАЇНСЬКОЮ") == 2
+
+
+def test_safety_check_prompt_includes_action_intent_contract() -> None:
+    prompt = build_safety_check_prompt("Створити звернення про яму")
+    assert "action_intent" in prompt
+    assert "create_appeal" in prompt

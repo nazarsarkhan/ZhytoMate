@@ -53,7 +53,7 @@ class SimpleRAGPipeline(RAGPipeline):
         # fail-closed policy. conversational feeds run_shared_tail's force_ungrounded below, so a
         # greeting doesn't get routed to the civic RAG prompt just because retrieval's similarity
         # gate happened to clear on vocabulary/style noise.
-        is_safe, refusal, conversational = await check_query_safety(
+        is_safe, refusal, conversational, action_intent = await check_query_safety(
             self._generator, ctx.user_query
         )
         if not is_safe:

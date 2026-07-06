@@ -27,12 +27,17 @@ Purpose:   LLM prompt templates. All prompts live here — never inline in servi
            explicitly permits ordinary conversation (greetings, small talk, general knowledge)
            instead of a flat refusal, while instructing the model to be honest rather than
            inventive about specific Zhytomyr civic facts it has no grounded answer for.
+           build_safety_check_prompt also asks the model to classify action_intent — one of
+           domain.actions.KNOWN_ACTIONS's names, or null — by interpolating that registry's trigger
+           descriptions into the instruction, so the action vocabulary has exactly one source.
 Layer:     domain (pure strings — no I/O)
-May import:   stdlib only
+May import:   stdlib, domain/actions (KNOWN_ACTIONS — another pure, no-I/O domain module)
 Must NOT import:  api/*, services/*, components/*, pipeline/*; any I/O or model lib (asyncpg,
               FastAPI)
 """
 from __future__ import annotations
+
+from app.domain.actions import KNOWN_ACTIONS
 
 _CHUNK_SEPARATOR = "\n\n---\n\n"
 
@@ -139,6 +144,10 @@ def build_detect_and_translate_prompt(text: str) -> str:
     return f"{_DETECT_TRANSLATE_INSTRUCTION}\n\n<text>\n{text}\n</text>"
 
 
+_ACTION_INTENT_LINES = "\n".join(
+    f'- "{name}": {description}' for name, description in KNOWN_ACTIONS.items()
+)
+
 _SAFETY_CHECK_INSTRUCTION = (
     "Ти — фільтр безпеки для асистента мешканців міста Житомир, який працює в умовах війни. "
     "Визнач, чи запит у блоці <text> (можливо українською, російською або англійською) є "
@@ -160,19 +169,25 @@ _SAFETY_CHECK_INSTRUCTION = (
     "запиту (привітання, 'як справи', подяка, прощання тощо), на відміну від справжнього "
     "питання про місто чи послуги (conversational: false), навіть якщо воно сформульоване "
     "неформально.\n"
-    'Поверни ВИКЛЮЧНО JSON без markdown: {"safe": true, "conversational": false} — з реальними '
-    "булевими значеннями для цього конкретного запиту."
+    "Окремо визнач намір розпочати дію (action_intent). Якщо запит ЯВНО відповідає одному з "
+    "цих намірів — поверни його назву рядком:\n"
+    f"{_ACTION_INTENT_LINES}\n"
+    "Якщо явного наміру немає (зокрема якщо це просто скарга чи проблема, згадана як звичайне "
+    "питання чи розповідь, без прохання щось створити чи подати) — поверни null. "
+    'Поверни ВИКЛЮЧНО JSON без markdown: {"safe": true, "conversational": false, '
+    '"action_intent": null} — з реальними значеннями для цього конкретного запиту.'
 )
 
 
 def build_safety_check_prompt(query: str) -> str:
     """Build the OPSEC content-safety classification prompt — layer 2 of 2 (layer 1 is the pure
     keyword heuristic in domain/opsec.py). The reply must be bare JSON
-    {"safe": bool, "conversational": bool} — pipeline/base.check_query_safety parses it the same
-    defensive brace-slice way as detect_and_translate (now additionally forced into valid JSON via
-    Generator.generate(json_mode=True), see components/llm.py), and per wartime fail-closed policy
-    treats ANY malformed reply or call failure as unsafe (conversational defaults to False in that
-    case — an unverifiable query is refused, not routed to small talk)."""
+    {"safe": bool, "conversational": bool, "action_intent": str | null} — pipeline/base.
+    check_query_safety parses it the same defensive brace-slice way as detect_and_translate (now
+    additionally forced into valid JSON via Generator.generate(json_mode=True), see
+    components/llm.py), and per wartime fail-closed policy treats ANY malformed reply or call
+    failure as unsafe (conversational and action_intent both default to their "nothing detected"
+    value in that case)."""
     return f"{_SAFETY_CHECK_INSTRUCTION}\n\n<text>\n{query}\n</text>"
 
 

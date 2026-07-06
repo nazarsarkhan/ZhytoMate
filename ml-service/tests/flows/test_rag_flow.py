@@ -312,6 +312,50 @@ async def test_safety_check_call_requests_json_mode() -> None:
     assert generator.generate_json_modes[0] is True  # the safety check call, always call #1
 
 
+async def test_check_query_safety_returns_action_intent_when_present() -> None:
+    from app.pipeline.base import check_query_safety
+
+    safe_with_action = json.dumps(
+        {"safe": True, "conversational": False, "action_intent": "create_appeal"}
+    )
+    generator = FakeGenerator(result=(safe_with_action, 0))
+
+    is_safe, _refusal, conversational, action_intent = await check_query_safety(
+        generator, "Створити звернення про яму"
+    )
+
+    assert is_safe is True
+    assert conversational is False
+    assert action_intent == "create_appeal"
+
+
+async def test_check_query_safety_rejects_unknown_action_intent() -> None:
+    from app.pipeline.base import check_query_safety
+
+    safe_with_unknown_action = json.dumps(
+        {"safe": True, "conversational": False, "action_intent": "delete_the_database"}
+    )
+    generator = FakeGenerator(result=(safe_with_unknown_action, 0))
+
+    _is_safe, _refusal, _conversational, action_intent = await check_query_safety(
+        generator, "щось"
+    )
+
+    assert action_intent is None
+
+
+async def test_check_query_safety_action_intent_defaults_to_none_on_failure() -> None:
+    from app.pipeline.base import check_query_safety
+
+    generator = FakeGenerator(error=TimeoutError("boom"))
+
+    is_safe, _refusal, conversational, action_intent = await check_query_safety(generator, "щось")
+
+    assert is_safe is False
+    assert conversational is False
+    assert action_intent is None
+
+
 # ---------------------------------------------------------------------------
 # Conversational routing — check_query_safety's `conversational` flag forces the ungrounded/
 # general-conversation path regardless of top1_sim (see run_shared_tail's force_ungrounded)
