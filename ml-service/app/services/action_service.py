@@ -5,17 +5,29 @@ Purpose:   ActionService.extract_slots — generic structured-extraction over a 
            (what an "appeal" is, what to do once slots are filled). Fails closed to
            is_unrelated=True on any parse/call failure, never silently inventing or dropping slot
            data — the caller's draft state must stay exactly as it was before a failed extraction.
+           That same guarantee is enforced against the model's own reply, not just call/parse
+           failures: an is_unrelated=true reply freezes `slots` to exactly current_slots regardless
+           of what that reply's `slots` object contains, so a model that sets is_unrelated but
+           still (incorrectly) changes a field can never sneak that change past the caller — the
+           prompt asks for this too, but code enforcement is the real guarantee (defense in depth,
+           the same posture as the OPSEC gate / never-answer-in-Russian policy elsewhere in this
+           service). Emits llm_calls/llm_latency_seconds the same way vision_service.py and
+           pipeline.base.run_shared_tail do (route="actions"), so this LLM-calling path is covered
+           by the same dashboards/alerts as every other one.
 Layer:     service
-May import:   domain/prompts, schemas/actions, app.protocols (Generator port), structlog
+May import:   domain/prompts, schemas/actions, app.protocols (Generator port), app.metrics,
+              structlog
 Must NOT import:  other services/*, api/*, FastAPI/Starlette, asyncpg, openai directly
 """
 from __future__ import annotations
 
 import json
+import time
 
 import structlog
 
 from app.domain.prompts import build_slot_extraction_prompt
+from app.metrics import llm_calls, llm_latency_seconds
 from app.protocols import Generator
 from app.schemas.actions import SlotExtractionRequest, SlotExtractionResponse
 
@@ -24,6 +36,7 @@ logger = structlog.get_logger(__name__)
 _EXTRACTION_TEMPERATURE = 0.0
 _EXTRACTION_MAX_TOKENS = 512
 _EXTRACTION_TIMEOUT_S = 8.0
+_METRICS_ROUTE = "actions"
 
 
 class ActionService:
@@ -36,6 +49,7 @@ class ActionService:
             slot_schema=request.slot_schema,
             current_slots=request.current_slots,
         )
+        llm_start = time.perf_counter()
         try:
             raw, _ = await self._generator.generate(
                 prompt,
@@ -48,14 +62,27 @@ class ActionService:
             extracted = parsed.get("slots")
             if not isinstance(extracted, dict):
                 raise ValueError("slots field missing or not an object")
-            merged = {**request.current_slots, **extracted}
+            # is_unrelated freezes slots to exactly current_slots — see the module docstring's
+            # defense-in-depth note. Computed before the merge so the freeze can short-circuit it.
+            is_unrelated = parsed.get("is_unrelated") is True
+            merged = (
+                dict(request.current_slots)
+                if is_unrelated
+                else {**request.current_slots, **extracted}
+            )
+            llm_calls.labels(route=_METRICS_ROUTE, outcome="ok").inc()
             return SlotExtractionResponse(
                 slots=merged,
                 wants_cancel=parsed.get("wants_cancel") is True,
-                is_unrelated=parsed.get("is_unrelated") is True,
+                is_unrelated=is_unrelated,
             )
         except Exception as exc:  # noqa: BLE001 — fail closed: never invent/drop slot data
             logger.warning("slot_extraction_failed", err=type(exc).__name__)
+            llm_calls.labels(route=_METRICS_ROUTE, outcome="fallback").inc()
             return SlotExtractionResponse(
                 slots=dict(request.current_slots), wants_cancel=False, is_unrelated=True
             )
+        finally:
+            # Timed around the whole try/except (mirrors run_shared_tail) — a failed/timed-out
+            # call's latency is just as operationally interesting as a successful one's.
+            llm_latency_seconds.observe(time.perf_counter() - llm_start)
