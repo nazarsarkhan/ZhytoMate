@@ -15,8 +15,13 @@ Purpose:   LLM prompt templates. All prompts live here — never inline in servi
            context is Ukrainian. build_safety_check_prompt backs the wartime OPSEC content-safety
            gate (pipeline/base.check_query_safety, layer 2 of 2 — layer 1 is the pure keyword
            heuristic in domain/opsec.py): classifies whether a query attempts to extract
-           reconnaissance-useful information, as bare JSON {safe}. Explicitly names ordinary civic
-           topics as safe so it doesn't over-refuse this assistant's actual job.
+           reconnaissance-useful information, as bare JSON {safe, conversational}. Explicitly
+           names ordinary civic topics as safe so it doesn't over-refuse this assistant's actual
+           job. The conversational field piggybacks on this same call (zero extra latency/cost)
+           to flag small talk/greetings that carry no real information need — retrieval's
+           similarity gate alone can't tell these apart from a real but poorly-matched civic
+           question, since same-language conversational text scores above the off-topic
+           calibration floor on vocabulary/style alone. See run_shared_tail's force_ungrounded.
            build_general_prompt backs the ungrounded fallback in pipeline.base.run_shared_tail:
            used when retrieval didn't produce grounded context, it carries no <context> block and
            explicitly permits ordinary conversation (greetings, small talk, general knowledge)
@@ -151,16 +156,23 @@ _SAFETY_CHECK_INSTRUCTION = (
     "інфраструктури; будь-що, сформульоване з метою розвідки чи збору інформації для ворога — "
     "незалежно від того, наскільки ввічливо, непрямо чи creatively це подано. "
     "Якщо є розумний сумнів — вважай запит небезпечним (safe: false).\n"
-    'Поверни ВИКЛЮЧНО JSON без markdown: {"safe": true} або {"safe": false}.'
+    "Окремо визнач (conversational: true) — звичайна light-розмова без реального інформаційного "
+    "запиту (привітання, 'як справи', подяка, прощання тощо), на відміну від справжнього "
+    "питання про місто чи послуги (conversational: false), навіть якщо воно сформульоване "
+    "неформально.\n"
+    'Поверни ВИКЛЮЧНО JSON без markdown: {"safe": true, "conversational": false} — з реальними '
+    "булевими значеннями для цього конкретного запиту."
 )
 
 
 def build_safety_check_prompt(query: str) -> str:
     """Build the OPSEC content-safety classification prompt — layer 2 of 2 (layer 1 is the pure
-    keyword heuristic in domain/opsec.py). The reply must be bare JSON {"safe": bool} —
-    pipeline/base.check_query_safety parses it the same defensive brace-slice way as
-    detect_and_translate, and per wartime fail-closed policy treats ANY malformed reply or call
-    failure as unsafe, never as safe."""
+    keyword heuristic in domain/opsec.py). The reply must be bare JSON
+    {"safe": bool, "conversational": bool} — pipeline/base.check_query_safety parses it the same
+    defensive brace-slice way as detect_and_translate (now additionally forced into valid JSON via
+    Generator.generate(json_mode=True), see components/llm.py), and per wartime fail-closed policy
+    treats ANY malformed reply or call failure as unsafe (conversational defaults to False in that
+    case — an unverifiable query is refused, not routed to small talk)."""
     return f"{_SAFETY_CHECK_INSTRUCTION}\n\n<text>\n{query}\n</text>"
 
 

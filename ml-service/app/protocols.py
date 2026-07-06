@@ -40,10 +40,19 @@ class Generator(ABC):
 
     @abstractmethod
     async def generate(
-        self, prompt: str, *, temperature: float, max_tokens: int, timeout_s: float
+        self,
+        prompt: str,
+        *,
+        temperature: float,
+        max_tokens: int,
+        timeout_s: float,
+        json_mode: bool = False,
     ) -> tuple[str, int]:
         """Returns (answer_text, retry_count). retry_count feeds the structured-log llm_retries
-        field."""
+        field. json_mode=True enforces valid-JSON output at the API level (OpenAI's
+        response_format={"type": "json_object"}) for callers that parse the reply as JSON
+        themselves (e.g. pipeline.base's safety check / detect_and_translate) — the prompt text
+        alone is not a reliable enough contract for those callers, see components.llm."""
         ...
 
 

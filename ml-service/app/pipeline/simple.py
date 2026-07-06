@@ -50,8 +50,12 @@ class SimpleRAGPipeline(RAGPipeline):
     async def run(self, ctx: RagContext) -> RagResult:
         # Wartime OPSEC gate first, before any retrieval/generation work — see
         # pipeline.base.check_query_safety for the two-layer (heuristic + LLM) design and the
-        # fail-closed policy.
-        is_safe, refusal = await check_query_safety(self._generator, ctx.user_query)
+        # fail-closed policy. conversational feeds run_shared_tail's force_ungrounded below, so a
+        # greeting doesn't get routed to the civic RAG prompt just because retrieval's similarity
+        # gate happened to clear on vocabulary/style noise.
+        is_safe, refusal, conversational = await check_query_safety(
+            self._generator, ctx.user_query
+        )
         if not is_safe:
             return RagResult(
                 answer=refusal, sources_used=[], confidence=0.0, route=ctx.route,
@@ -77,4 +81,5 @@ class SimpleRAGPipeline(RAGPipeline):
             question=ctx.user_query,
             route=ctx.route,
             answer_lang=answer_lang,
+            force_ungrounded=conversational,
         )

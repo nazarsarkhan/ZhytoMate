@@ -32,6 +32,7 @@ class FakeGenerator(Generator, VisionGenerator):
         )
         self._error = error
         self.generate_calls: list[str] = []
+        self.generate_json_modes: list[bool] = []
         self.analyze_calls: list[tuple[bytes, str, str]] = []
 
     @property
@@ -40,9 +41,16 @@ class FakeGenerator(Generator, VisionGenerator):
         return len(self.generate_calls) + len(self.analyze_calls)
 
     async def generate(
-        self, prompt: str, *, temperature: float, max_tokens: int, timeout_s: float
+        self,
+        prompt: str,
+        *,
+        temperature: float,
+        max_tokens: int,
+        timeout_s: float,
+        json_mode: bool = False,
     ) -> tuple[str, int]:
         self.generate_calls.append(prompt)
+        self.generate_json_modes.append(json_mode)
         return self._next_result()
 
     async def analyze_image(

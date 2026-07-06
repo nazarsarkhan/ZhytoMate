@@ -100,9 +100,11 @@ _TRANSLATE_TIMEOUT_S = 5.0
 _VALID_LANGS = frozenset({"uk", "ru", "en"})
 
 # OPSEC content-safety classification (layer 2 — see check_query_safety). A true/false
-# classification, not a user-facing answer: short, deterministic, cheap.
+# classification, not a user-facing answer: short, deterministic, cheap. 64 tokens (not the bare
+# minimum ~8 a clean {"safe": bool, "conversational": bool} needs) leaves real headroom now that
+# json_mode=True enforces valid JSON at the API level — see components.llm.OpenAILLMClient.
 _SAFETY_CHECK_TEMPERATURE = 0.0
-_SAFETY_CHECK_MAX_TOKENS = 32
+_SAFETY_CHECK_MAX_TOKENS = 64
 _SAFETY_CHECK_TIMEOUT_S = 5.0
 
 
@@ -138,43 +140,52 @@ async def detect_and_translate(generator: Generator, query: str) -> tuple[str, s
     return resolve_answer_lang(lang), retrieval_query
 
 
-async def check_query_safety(generator: Generator, query: str) -> tuple[bool, str]:
+async def check_query_safety(generator: Generator, query: str) -> tuple[bool, str, bool]:
     """Two-layer wartime OPSEC content-safety gate. Layer 1 is the free, instant keyword heuristic
     (domain.opsec.contains_opsec_risk_terms) — if it flags the query, the LLM is never called.
     Layer 2, reached only if layer 1 passes, is an LLM classification pass that catches paraphrased
-    or creative attempts the fixed phrase list cannot. Returns (is_safe, refusal_answer); the
-    refusal text is only meaningful when is_safe is False, and its language is always
-    resolve_answer_lang(detect_query_language(query)) so a refusal can never itself violate the
-    answer-language policy. FAIL CLOSED: any classifier exception (timeout, network error,
-    malformed JSON, missing/wrong-typed "safe" key) is treated as UNSAFE, not safe — an
-    unverifiable safety check must never let a query through. Only SimpleRAGPipeline calls this,
-    as the very first step, before any retrieval or generation work."""
+    or creative attempts the fixed phrase list cannot. Returns (is_safe, refusal_answer,
+    conversational); the refusal text is only meaningful when is_safe is False, and its language
+    is always resolve_answer_lang(detect_query_language(query)) so a refusal can never itself
+    violate the answer-language policy. FAIL CLOSED: any classifier exception (timeout, network
+    error, malformed JSON, missing/wrong-typed "safe" key) is treated as UNSAFE, not safe — an
+    unverifiable safety check must never let a query through; conversational is False in that case
+    too (an unverifiable query is refused, not routed to small talk). Only SimpleRAGPipeline calls
+    this, as the very first step, before any retrieval or generation work.
+
+    conversational piggybacks on this same call (see build_safety_check_prompt) to flag small
+    talk/greetings that carry no real information need — run_shared_tail's force_ungrounded uses
+    it to skip the grounded/RAG-prompt path even if retrieval's similarity gate accidentally
+    passes on vocabulary/style noise alone (same-language conversational text scores above the
+    off-topic calibration floor regardless of topical relevance)."""
     refusal_lang = resolve_answer_lang(detect_query_language(query))
     refusal = _REFUSAL_ANSWER_BY_LANG.get(refusal_lang, _REFUSAL_ANSWER_BY_LANG["uk"])
     if contains_opsec_risk_terms(query):
         queries_blocked_total.labels(layer="heuristic").inc()
         logger.warning("query_blocked", layer="heuristic")
-        return False, refusal
+        return False, refusal, False
     try:
         raw, _ = await generator.generate(
             build_safety_check_prompt(query),
             temperature=_SAFETY_CHECK_TEMPERATURE,
             max_tokens=_SAFETY_CHECK_MAX_TOKENS,
             timeout_s=_SAFETY_CHECK_TIMEOUT_S,
+            json_mode=True,
         )
         parsed = json.loads(raw[raw.find("{") : raw.rfind("}") + 1])
         # Strict identity check, not bool(...): a malformed reply (a stray string "false", a
         # missing key, a non-boolean value) must resolve to unsafe, never be coerced to safe by
         # truthiness (e.g. bool("false") is True — a real footgun given the fail-closed policy).
         is_safe = parsed.get("safe") is True
+        conversational = is_safe and parsed.get("conversational") is True
     except Exception as exc:  # noqa: BLE001 — fail closed: an unverifiable safety check is unsafe
         logger.warning("query_safety_check_failed", err=type(exc).__name__)
         queries_blocked_total.labels(layer="llm_error").inc()
-        return False, refusal
+        return False, refusal, False
     if not is_safe:
         queries_blocked_total.labels(layer="llm").inc()
         logger.warning("query_blocked", layer="llm")
-    return is_safe, refusal
+    return is_safe, refusal, conversational
 
 
 class RagContext(BaseModel):
@@ -215,6 +226,7 @@ async def run_shared_tail(
     question: str,
     route: QueryRoute,
     answer_lang: str = "uk",
+    force_ungrounded: bool = False,
 ) -> RagResult:
     """The ONE place the confidence-gate -> generate -> extractive-fallback tail lives (ADR-007).
     Both SimpleRAGPipeline and AgentRAGPipeline call this after producing their own
@@ -224,10 +236,15 @@ async def run_shared_tail(
     `grounded` (retrieval produced usable context) decides which prompt gets built, but the LLM is
     ALWAYS called either way — an ungrounded query gets a real, conversational answer via
     build_general_prompt instead of a canned refusal. Confidence is 0.0 for any ungrounded answer,
-    grounded or not: it signals "not verified city info", not "no answer was given"."""
+    grounded or not: it signals "not verified city info", not "no answer was given".
+
+    force_ungrounded=True (SimpleRAGPipeline passes check_query_safety's conversational flag)
+    skips the grounded path even if top1_sim happens to clear sim_gate — a greeting can cross the
+    numeric gate on same-language vocabulary/style noise alone, with no real topical match, and
+    would otherwise get stuffed with irrelevant civic context instead of a natural reply."""
     retrieval_top1_sim.observe(top1_sim)
     band = confidence_band(top1_sim, sim_gate, sim_high)
-    grounded = bool(retrieved) and band is not ConfidenceBand.NO_INFO
+    grounded = not force_ungrounded and bool(retrieved) and band is not ConfidenceBand.NO_INFO
     if not grounded:
         # Retrieval was insufficient to ground an answer - still an operationally interesting
         # signal (a KB coverage gap, or simply an off-topic/general query), even though the

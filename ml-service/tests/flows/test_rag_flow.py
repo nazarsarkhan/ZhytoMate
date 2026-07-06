@@ -294,3 +294,68 @@ async def test_safety_classifier_malformed_reply_fails_closed() -> None:
     result = await pipeline.run(_ctx(_QUERY))
 
     assert result.debug["blocked"] is True
+
+
+async def test_safety_check_call_requests_json_mode() -> None:
+    """Regression guard: the safety-check call must force API-level JSON mode
+    (Generator.generate(json_mode=True)) rather than relying on prompt text alone — a bare-JSON
+    request with no format enforcement and only a small token budget previously meant any preamble
+    or mid-object truncation from the model raised inside the brace-slice parse, which the
+    fail-closed policy then turned into a wrongly-blocked query. json_mode=True (backed by
+    OpenAI's response_format={"type": "json_object"}, see components.llm) closes that gap."""
+    retriever = FakeRetriever({_QUERY: RetrievalOutcome(dense=[], fused=[])})
+    generator = FakeGenerator(results=[(_SAFE_JSON, 0), ("answer", 0)])
+    pipeline = _pipeline(retriever, generator)
+
+    await pipeline.run(_ctx(_QUERY))
+
+    assert generator.generate_json_modes[0] is True  # the safety check call, always call #1
+
+
+# ---------------------------------------------------------------------------
+# Conversational routing — check_query_safety's `conversational` flag forces the ungrounded/
+# general-conversation path regardless of top1_sim (see run_shared_tail's force_ungrounded)
+# ---------------------------------------------------------------------------
+
+_GREETING = "Привіт, як справи?"
+
+
+async def test_conversational_greeting_skips_grounded_path_despite_passing_similarity() -> None:
+    """Reproduces a live bug: a greeting can score ABOVE sim_gate on same-language vocabulary/style
+    noise alone, with retrieved chunks that are necessarily topically irrelevant. Without the
+    conversational flag, run_shared_tail would call this `grounded` and stuff those irrelevant
+    chunks into build_rag_prompt, producing a nonsensical "no information" reply instead of natural
+    conversation. `conversational: true` (from the same safety-check call, no extra cost) must
+    force the general-conversation path even though this hit clears the gate."""
+    hit = _hit(1, similarity=0.75, text="Графік вивезення сміття у Богунському районі.")
+    retriever = FakeRetriever({_GREETING: RetrievalOutcome(dense=[hit], fused=[hit])})
+    safe_and_conversational = json.dumps({"safe": True, "conversational": True})
+    generator = FakeGenerator(
+        results=[(safe_and_conversational, 0), ("Привіт! Все добре, дякую, що запитали.", 0)]
+    )
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(_GREETING))
+
+    assert result.debug["grounded"] is False
+    answer_prompt = generator.generate_calls[1]
+    assert "<context>" not in answer_prompt
+    assert "звичайне спілкування" in answer_prompt
+
+
+async def test_non_conversational_query_still_grounds_on_passing_similarity() -> None:
+    """Control for the test above: the same passing similarity, but conversational: false (an
+    ordinary civic question) — must still ground normally. Proves force_ungrounded doesn't
+    accidentally suppress real grounded answers."""
+    hit = _hit(1, similarity=0.75, text="Графік вивезення сміття у Богунському районі.")
+    retriever = FakeRetriever({_QUERY: RetrievalOutcome(dense=[hit], fused=[hit])})
+    safe_not_conversational = json.dumps({"safe": True, "conversational": False})
+    generator = FakeGenerator(
+        results=[(safe_not_conversational, 0), ("Сміття вивозять щовівторка.", 0)]
+    )
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(_QUERY))
+
+    assert result.debug["grounded"] is True
+    assert result.answer == "Сміття вивозять щовівторка."
