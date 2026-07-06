@@ -1,0 +1,25 @@
+# .dockerignore (repo root) — this is the context for backend_app/Dockerfile's root-context
+# multi-stage build (see root docker-compose.yml: backend.build.context: "."). Docker only
+# auto-discovers .dockerignore at the build context root, so this is the one that's actually
+# read - a file placed inside backend_app/ or frontend_app/ alone would silently never apply.
+
+.git/
+.claude/
+.worktrees/
+.playwright-mcp/
+docs/
+*.md
+
+# Not needed to build or run backend_app/frontend_app - keeps the image build fast and small.
+ml-service/
+parser/
+
+backend_app/node_modules/
+backend_app/.env
+backend_app/.env.*
+backend_app/uploads/
+
+frontend_app/node_modules/
+frontend_app/dist/
+frontend_app/.env
+frontend_app/.env.*

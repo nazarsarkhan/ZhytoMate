@@ -3,6 +3,23 @@
     "city": "Житомир",
     "name": "Zhytomyr Assistant"
   },
+  "auth": {
+    "loginTitle": "Увійти",
+    "registerTitle": "Створити акаунт",
+    "loginField": "Email або логін",
+    "loginFieldPlaceholder": "you@example.com",
+    "username": "Логін",
+    "firstName": "Ім'я",
+    "lastName": "Прізвище",
+    "password": "Пароль",
+    "signIn": "Увійти",
+    "signingIn": "Вхід...",
+    "createAccount": "Створити акаунт",
+    "creatingAccount": "Створення акаунту...",
+    "noAccount": "Немає акаунту?",
+    "haveAccount": "Вже є акаунт?",
+    "genericError": "Щось пішло не так. Спробуйте ще раз."
+  },
   "common": {
     "all": "Усі",
     "cancel": "Скасувати",
@@ -30,7 +47,9 @@
     "main": "Головна",
     "services": "Сервіси",
     "news": "Новини",
-    "profile": "Профіль"
+    "profile": "Профіль",
+    "settings": "Налаштування",
+    "portal": "Портал міських сервісів"
   },
   "categories": {
     "all": "Усі",
@@ -54,22 +73,49 @@
     "create": "Створити звернення",
     "history": "Історія звернень",
     "category": "Категорія",
-    "photos": "Фотографії",
+    "address": "Адреса проблеми",
+    "addressPlaceholder": "напр. просп. Перемоги, 55",
+    "addressHint": "Вкажіть, де саме виникла проблема",
+    "photos": "Фото",
     "addPhoto": "Додати фото",
     "photoCount": "{{count}} фото обрано",
+    "analyzingPhoto": "AI аналізує фото...",
+    "notCivicIssueWarning": "Це може не бути міською проблемою — перевірте перед надсиланням.",
     "description": "Опис проблеми",
     "descriptionPlaceholder": "Опишіть проблему...",
-    "send": "Надіслати звернення"
+    "send": "Надіслати звернення",
+    "sending": "Надсилання...",
+    "empty": "Звернень за цим фільтром не знайдено",
+    "categories": {
+      "pothole": "Яма",
+      "roadDamage": "Пошкодження дороги",
+      "garbage": "Сміття",
+      "illegalDumping": "Стихійне сміттєзвалище",
+      "streetLighting": "Освітлення",
+      "waterLeak": "Витік води",
+      "fallenTree": "Впале дерево",
+      "vandalism": "Вандалізм",
+      "other": "Інше"
+    },
+    "status": {
+      "new": "Нове",
+      "in_progress": "В роботі",
+      "resolved": "Вирішено",
+      "rejected": "Відхилено"
+    }
   },
   "services": {
     "title": "Сервіси",
     "searchPlaceholder": "Пошук сервісів...",
     "empty": "Сервіси не знайдено",
+    "comingSoon": "Скоро",
     "cards": {
       "contacts": { "title": "Контакти", "subtitle": "Міські служби" },
       "polls": { "title": "Опитування", "subtitle": "Міські рішення" },
       "appeals": { "title": "Звернення", "subtitle": "Відстеження проблем" },
-      "transport": { "title": "Транспорт", "subtitle": "Маршрути та розклад" }
+      "transport": { "title": "Транспорт", "subtitle": "Маршрути та розклад" },
+      "utilities": { "title": "Комунальні платежі", "subtitle": "Тарифи та оплата" },
+      "healthcare": { "title": "Медицина", "subtitle": "Запис до лікаря" }
     }
   },
   "transport": {
@@ -105,6 +151,9 @@
     "email": "Email",
     "security": "Безпека",
     "changePassword": "Змінити пароль",
+    "currentPassword": "Поточний пароль",
+    "newPassword": "Новий пароль",
+    "confirmNewPassword": "Підтвердіть новий пароль",
     "utilityAlerts": "Сповіщення про комунальні послуги",
     "utilityAlertsHint": "Push для води, світла та тепла",
     "cityNews": "Новини міста",
@@ -114,9 +163,12 @@
     "editField": "Редагувати поле",
     "saveAddress": "Зберегти адресу",
     "editAddress": "Редагувати адресу",
+    "addAddress": "Додати адресу",
     "street": "Вулиця",
     "building": "Будинок / квартира",
-    "district": "Район"
+    "district": "Район",
+    "city": "Місто",
+    "passwordMismatch": "Нові паролі не збігаються"
   },
   "polls": {
     "title": "Опитування",
@@ -134,7 +186,10 @@
     "privacy": "Показані лише агреговані результати. Дані окремих мешканців не відображаються і не передаються у відкриту статистику.",
     "voteRecorded": "Ваш голос враховано конфіденційно",
     "selectOption": "Оберіть варіант, щоб проголосувати",
-    "notFound": "Опитування не знайдено"
+    "notFound": "Опитування не знайдено",
+    "ongoing": "Триває",
+    "daysLeft": "Залишилось {{count}} днів",
+    "voteCount": "{{count}} голосів"
   },
   "chat": {
     "history": "Історія чатів",
@@ -146,6 +201,8 @@
     "listening": "Слухаю запит...",
     "conversation": "Чат",
     "empty": "Чати не знайдено",
-    "sentHint": "Відповідь сформована локально для прототипу інтерфейсу."
+    "sentHint": "Відповідь сформована локально для прототипу інтерфейсу.",
+    "thinking": "AI обмірковує відповідь...",
+    "error": "Щось пішло не так. Спробуйте ще раз."
   }
 }

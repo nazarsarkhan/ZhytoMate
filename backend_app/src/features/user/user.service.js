@@ -1,11 +1,17 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import {
   createUser,
   findUserByEmailOrUsername,
+  findUserByIdAndUpdateAddress,
+  findUserByIdAndUpdateAvatar,
   findUserByIdAndUpdateName,
+  findUserByIdAndUpdatePassword,
   findUserById,
 } from "./user.repository.js";
 import { ApiError } from "../../shared/ApiError.js";
 import { toPublicUser } from "./user.model.js";
+import { UPLOAD_DIR } from "./user.upload.js";
 
 export function getUserById(id) {
   return findUserById(id);
@@ -42,11 +48,12 @@ export function createUserProfile({
   });
 }
 
-export async function updateUserName({ id, firstName, lastName }) {
+export async function updateUserName({ id, firstName, lastName, phone }) {
   const user = await findUserByIdAndUpdateName({
     id,
     firstName,
     lastName,
+    phone,
   });
 
   if (!user) {
@@ -56,10 +63,51 @@ export async function updateUserName({ id, firstName, lastName }) {
   return toPublicUser(user);
 }
 
+export async function updateUserAddress({ id, address }) {
+  const user = await findUserByIdAndUpdateAddress({ id, address });
+
+  if (!user) {
+    throw ApiError.notFound("User not found");
+  }
+
+  return toPublicUser(user);
+}
+
+export async function updateUserAvatarFromUpload({ userId, filename, hostUrl }) {
+  const previousUser = await findUserById(userId);
+  const avatarUrl = `${hostUrl}/uploads/avatars/${filename}`;
+  const user = await findUserByIdAndUpdateAvatar({ id: userId, avatarUrl });
+
+  if (!user) {
+    throw ApiError.notFound("User not found");
+  }
+
+  // Best-effort cleanup of the replaced avatar file - never blocks or fails the request over it.
+  if (previousUser?.avatarUrl) {
+    const previousFilename = path.basename(previousUser.avatarUrl);
+    fs.unlink(path.join(UPLOAD_DIR, previousFilename)).catch(() => {});
+  }
+
+  return toPublicUser(user);
+}
+
+export async function updateUserPassword({ id, password }) {
+  const user = await findUserByIdAndUpdatePassword({ id, password });
+
+  if (!user) {
+    throw ApiError.notFound("User not found");
+  }
+
+  return user;
+}
+
 export default {
   getUserById,
   getPublicUserById,
   getUserByEmailOrUsername,
   createUserProfile,
   updateUserName,
+  updateUserAddress,
+  updateUserAvatarFromUpload,
+  updateUserPassword,
 };

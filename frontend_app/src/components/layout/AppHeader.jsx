@@ -66,9 +66,20 @@ export default function AppHeader({
         {profile ? (
           <div className="mb-5 flex items-center gap-4">
             <div className="relative">
-              <img className="h-20 w-20 rounded-full border-2 border-white/20 object-cover shadow-inner" alt="" src={profile.avatar} />
+              {profile.avatarUrl ? (
+                <img className="h-20 w-20 rounded-full border-2 border-white/20 object-cover shadow-inner" alt="" src={profile.avatarUrl} />
+              ) : (
+                <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-white/20 bg-white/10 shadow-inner">
+                  <Icon name="person" filled className="text-4xl text-on-primary" />
+                </div>
+              )}
+              {profile.onEditAvatar ? (
+                <button aria-label="Змінити фото" className="absolute bottom-0 left-0 flex h-8 w-8 items-center justify-center rounded-full border-2 border-primary-container bg-secondary-container text-on-secondary-container active:scale-95" type="button" onClick={profile.onEditAvatar}>
+                  <Icon name="photo_camera" className="text-base" />
+                </button>
+              ) : null}
               {profile.onEdit ? (
-                <button className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full border-2 border-primary-container bg-secondary-container text-on-secondary-container active:scale-95" type="button" onClick={profile.onEdit}>
+                <button aria-label="Редагувати ім'я" className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full border-2 border-primary-container bg-secondary-container text-on-secondary-container active:scale-95" type="button" onClick={profile.onEdit}>
                   <Icon name="edit" className="text-base" />
                 </button>
               ) : null}

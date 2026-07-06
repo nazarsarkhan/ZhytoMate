@@ -1,6 +1,7 @@
 import { ApiError } from "../../shared/ApiError.js";
 import {
   countSurveys,
+  countVotesByOption,
   countVotesByUserId,
   createSurvey,
   findSurveyById,
@@ -29,6 +30,7 @@ export async function createSurveyForUsers({
   role,
   title,
   description,
+  category,
   options,
   startsAt,
   endsAt,
@@ -43,6 +45,7 @@ export async function createSurveyForUsers({
   const survey = await createSurvey({
     title,
     description,
+    category,
     options: options.map((label) => ({ label })),
     startsAt,
     endsAt,
@@ -58,9 +61,12 @@ export async function getSurveyHistory(userId) {
     findVotesByUserId(userId),
   ]);
   const votesBySurveyId = mapVotesBySurveyId(votes);
+  const tallies = await Promise.all(
+    surveys.map((survey) => countVotesByOption(survey._id.toString())),
+  );
 
-  return surveys.map((survey) =>
-    toPublicSurvey(survey, votesBySurveyId.get(survey._id.toString())),
+  return surveys.map((survey, index) =>
+    toPublicSurvey(survey, votesBySurveyId.get(survey._id.toString()), tallies[index]),
   );
 }
 
@@ -81,16 +87,17 @@ export async function getSurveyProgress(userId) {
 }
 
 export async function getSurveyForUser({ surveyId, userId }) {
-  const [survey, vote] = await Promise.all([
+  const [survey, vote, tallies] = await Promise.all([
     findSurveyById(surveyId),
     findVoteBySurveyAndUser({ surveyId, userId }),
+    countVotesByOption(surveyId),
   ]);
 
   if (!survey) {
     throw ApiError.notFound("Survey not found");
   }
 
-  return toPublicSurvey(survey, vote);
+  return toPublicSurvey(survey, vote, tallies);
 }
 
 export async function voteInSurvey({ surveyId, userId, optionId }) {

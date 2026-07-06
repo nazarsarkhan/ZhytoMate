@@ -1,5 +1,15 @@
 import mongoose from "mongoose";
 
+const addressSchema = new mongoose.Schema(
+  {
+    street: { type: String, trim: true, default: "" },
+    building: { type: String, trim: true, default: "" },
+    district: { type: String, trim: true, default: "" },
+    city: { type: String, trim: true, default: "" },
+  },
+  { _id: false },
+);
+
 const userSchema = new mongoose.Schema(
   {
     _id: { type: mongoose.Schema.Types.ObjectId, auto: true },
@@ -8,6 +18,9 @@ const userSchema = new mongoose.Schema(
     lastName: { type: String, required: true },
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
+    phone: { type: String, trim: true, default: "" },
+    address: { type: addressSchema, default: () => ({}) },
+    avatarUrl: { type: String, trim: true, default: "" },
     role: { type: String, enum: ["user", "admin"], default: "user" },
     refreshTokenVersion: { type: Number, default: 0 },
   },
@@ -23,6 +36,14 @@ export function toPublicUser(user) {
     firstName: user.firstName,
     lastName: user.lastName,
     email: user.email,
+    phone: user.phone,
+    address: {
+      street: user.address?.street || "",
+      building: user.address?.building || "",
+      district: user.address?.district || "",
+      city: user.address?.city || "",
+    },
+    avatarUrl: user.avatarUrl || "",
     role: user.role,
   };
 }

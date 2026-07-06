@@ -1,0 +1,7 @@
+# .dockerignore — keeps the build context small and secrets out of the image.
+.env
+.env.*
+node_modules/
+.git/
+*.md
+.pytest_cache/

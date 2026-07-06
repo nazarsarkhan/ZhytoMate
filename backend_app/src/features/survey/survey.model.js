@@ -11,6 +11,7 @@ const surveySchema = new mongoose.Schema(
   {
     title: { type: String, required: true, trim: true },
     description: { type: String, trim: true, default: "" },
+    category: { type: String, trim: true, default: "" },
     options: {
       type: [surveyOptionSchema],
       validate: {
@@ -68,17 +69,27 @@ export function isSurveyOpen(survey, now = new Date()) {
   return true;
 }
 
-export function toPublicSurvey(survey, vote = null) {
+export function toPublicSurvey(survey, vote = null, voteTallies = null) {
   const selectedOptionId = vote?.optionId?.toString() ?? null;
+  const tallies = voteTallies || new Map();
+  const totalVotes = Array.from(tallies.values()).reduce((sum, count) => sum + count, 0);
 
   return {
     id: survey._id.toString(),
     title: survey.title,
     description: survey.description,
-    options: survey.options.map((option) => ({
-      id: option._id.toString(),
-      label: option.label,
-    })),
+    category: survey.category,
+    options: survey.options.map((option) => {
+      const optionId = option._id.toString();
+      const votes = tallies.get(optionId) || 0;
+      return {
+        id: optionId,
+        label: option.label,
+        votes,
+        percent: totalVotes === 0 ? 0 : Math.round((votes / totalVotes) * 100),
+      };
+    }),
+    totalVotes,
     startsAt: survey.startsAt,
     endsAt: survey.endsAt,
     isActive: survey.isActive,

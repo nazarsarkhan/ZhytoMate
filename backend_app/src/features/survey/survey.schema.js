@@ -5,6 +5,7 @@ const objectId = Joi.string().hex().length(24);
 export const createSurveySchema = Joi.object({
   title: Joi.string().trim().min(3).max(160).required(),
   description: Joi.string().trim().max(1000).allow("").default(""),
+  category: Joi.string().trim().max(64).allow("").default(""),
   options: Joi.array()
     .items(Joi.string().trim().min(1).max(160).required())
     .min(2)

@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { Survey, SurveyVote } from "./survey.model.js";
 
 export function createSurvey({
@@ -55,6 +56,14 @@ export function upsertSurveyVote({ surveyId, userId, optionId }) {
   );
 }
 
+export async function countVotesByOption(surveyId) {
+  const results = await SurveyVote.aggregate([
+    { $match: { survey: new mongoose.Types.ObjectId(surveyId) } },
+    { $group: { _id: "$optionId", count: { $sum: 1 } } },
+  ]);
+  return new Map(results.map((row) => [row._id.toString(), row.count]));
+}
+
 export default {
   createSurvey,
   findSurveys,
@@ -64,4 +73,5 @@ export default {
   countVotesByUserId,
   findVoteBySurveyAndUser,
   upsertSurveyVote,
+  countVotesByOption,
 };

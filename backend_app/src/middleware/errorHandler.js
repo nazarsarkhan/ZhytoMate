@@ -22,6 +22,14 @@ export function errorHandler(err, req, res, next) {
     });
   }
 
+  if (err?.name === "MulterError") {
+    const messagesByCode = {
+      LIMIT_FILE_SIZE: "Photo is too large (max 4MB)",
+      LIMIT_UNEXPECTED_FILE: "Unsupported photo type (use JPEG, PNG, or WEBP)",
+    };
+    return res.status(400).json({ error: messagesByCode[err.code] || "Photo upload failed" });
+  }
+
   console.error("[error]", err);
   return res.status(500).json({
     error: "Internal server error",

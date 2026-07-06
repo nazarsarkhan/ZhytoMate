@@ -4,7 +4,9 @@ import Icon from "../../../components/ui/Icon.jsx";
 export default function RouteCard({ route, saved, onToggleSaved, onOpen }) {
   const { t } = useTranslation();
   const statusLabel = route.status ? t(`transport.status.${route.status}`) : "";
-  const statusClass = route.status === "delayed" ? "bg-orange-50 text-orange-700" : "bg-green-50 text-green-700";
+  const isDelayed = route.status === "delayed";
+  const statusClass = isDelayed ? "bg-orange-50 text-orange-700" : "bg-green-50 text-green-700";
+  const statusIcon = isDelayed ? "warning" : "check_circle";
 
   return (
     <article className="rounded-xl border border-surface-variant bg-surface-container-lowest p-4 shadow-soft">
@@ -21,19 +23,31 @@ export default function RouteCard({ route, saved, onToggleSaved, onOpen }) {
               <Icon name={saved ? "bookmark" : "bookmark_border"} filled={saved} className={saved ? "text-secondary-container" : "text-outline"} />
             </button>
           </div>
-          <button className="flex min-w-0 items-center gap-2 text-left text-xs text-on-surface-variant" type="button" onClick={onOpen}>
+          <button className="flex w-full min-w-0 max-w-full items-center gap-2 text-left text-xs text-on-surface-variant" type="button" onClick={onOpen}>
             <Icon name={route.icon} className="text-base" />
             <span>{t(`transport.types.${route.type}`)}</span>
             <span className="h-1 w-1 rounded-full bg-outline-variant" />
             <span className="truncate">{t("transport.towards")}: {route.direction}</span>
           </button>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            {route.times.map((time, index) => (
-              <span key={time} className={`rounded-md border px-3 py-1.5 text-xs ${index === 0 && route.status !== "delayed" ? "border-green-100 bg-green-50 font-bold text-green-700" : index === 1 && route.status === "delayed" ? "border-orange-100 bg-orange-50 font-bold text-orange-700" : "border-surface-variant bg-surface-container text-on-surface-variant"}`}>
-                {time}
+            {route.times.map((time, index) => {
+              const isNextArrival = index === 0 && !isDelayed;
+              const isDelayedHighlight = index === 1 && isDelayed;
+              let chipClass = "border-surface-variant bg-surface-container text-on-surface-variant";
+              if (isNextArrival) chipClass = "border-green-100 bg-green-50 font-bold text-green-700";
+              else if (isDelayedHighlight) chipClass = "border-orange-100 bg-orange-50 font-bold text-orange-700";
+              return (
+                <span key={time} className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs ${chipClass}`}>
+                  {isNextArrival ? <span className="pulse-dot h-1.5 w-1.5 shrink-0 rounded-full bg-green-600" /> : null}
+                  {time}
+                </span>
+              );
+            })}
+            {statusLabel ? (
+              <span className={`ml-auto flex items-center gap-1 rounded px-2 py-1 text-xs font-bold ${statusClass}`}>
+                <Icon name={statusIcon} filled className="text-sm" /> {statusLabel}
               </span>
-            ))}
-            {statusLabel ? <span className={`ml-auto rounded px-2 py-1 text-xs font-bold ${statusClass}`}>{statusLabel}</span> : null}
+            ) : null}
           </div>
         </div>
       </div>

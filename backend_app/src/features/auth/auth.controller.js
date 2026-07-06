@@ -1,4 +1,5 @@
 import {
+  changePassword,
   getCurrentUser,
   login,
   refreshAccessToken,
@@ -51,9 +52,24 @@ export async function me(req, res, next) {
   }
 }
 
+export async function changePasswordHandler(req, res, next) {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const result = await changePassword({
+      userId: req.user.id,
+      currentPassword,
+      newPassword,
+    });
+    return res.json(result);
+  } catch (err) {
+    return next(err);
+  }
+}
+
 export default {
   registerUser,
   loginUser,
   refreshToken,
   me,
+  changePasswordHandler,
 };

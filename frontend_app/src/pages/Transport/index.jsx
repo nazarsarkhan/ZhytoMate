@@ -67,7 +67,7 @@ export default function TransportPage() {
             <h2 className="text-lg font-bold text-on-surface">{t("transport.nearbyRoutes")}</h2>
             <span className="text-xs text-on-surface-variant">{t("transport.updating")}</span>
           </div>
-          <div className="grid gap-stack-gap lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-stack-gap lg:grid-cols-2">
             {filteredRoutes.map((route) => (
               <RouteCard
                 key={route.id}

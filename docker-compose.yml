@@ -1,0 +1,157 @@
+# Brings up the WHOLE ZhytoMate stack with one command: `docker compose up -d --build`.
+#
+# `postgres` + `ml` are hand-written here rather than pulled in via `include:` from
+# ml-service/docker-compose.yml - Compose's `include` cannot cleanly override or cherry-pick a
+# single service out of an included file (a same-named service collision is a warning, not a
+# merge), so ml-service/docker-compose.yml stays untouched and fully usable standalone
+# (see ml-service/README.md), and this file re-declares just the compose wiring for the same
+# two services, reusing ml-service/Dockerfile via a relative build context.
+#
+# `postgres`'s port is deliberately NOT published to the host - only `ml` needs to reach it,
+# over the internal Docker network by service name (postgres:5432), which sidesteps this
+# machine's documented host-port-5432 collision entirely without needing an override file.
+#
+# No top-level `networks:` block, matching ml-service/docker-compose.yml's own existing
+# convention - every service below only ever needs another service's name for DNS, which
+# Compose's implicit default network already provides.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-zhytomate}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+      POSTGRES_DB: ${POSTGRES_DB:-zhytomate}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zhytomate -d zhytomate"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  ml:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-zhytomate}:${POSTGRES_PASSWORD:-secret}@postgres:5432/${POSTGRES_DB:-zhytomate}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      EMBED_MODEL: ${EMBED_MODEL:-text-embedding-3-large}
+      # Calibrated on the seeded KB (see ml-service/CLAUDE.md) - do not revert to 0.70/0.80.
+      SIM_GATE: ${SIM_GATE:-0.50}
+      SIM_HIGH: ${SIM_HIGH:-0.62}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-10}
+      AGENT_RAG_ENABLED: ${AGENT_RAG_ENABLED:-false}
+      AGENT_MAX_SUBQUERIES: ${AGENT_MAX_SUBQUERIES:-3}
+      ANSWER_CACHE_TTL_SECONDS: ${ANSWER_CACHE_TTL_SECONDS:-120}
+      ANSWER_CACHE_MAXSIZE: ${ANSWER_CACHE_MAXSIZE:-200}
+      EMBED_CACHE_MAXSIZE: ${EMBED_CACHE_MAXSIZE:-1000}
+      RRF_K: ${RRF_K:-60}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health/ready').status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    ports:
+      - "8000:8000"   # kept published - the demo runbook (root CLAUDE.md) curls this directly
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongodata:/data/db
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend_app/Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongo:27017/zhytomate
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      ML_BASE_URL: http://ml:8000
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      ml:
+        condition: service_healthy
+    ports:
+      # Plain mapping - no machine-specific workaround baked into the committed file. If this
+      # collides locally, add your own untracked docker-compose.override.yml (same precedent
+      # ml-service/docker-compose.override.yml already sets for a different local collision).
+      - "3000:3000"
+    volumes:
+      - backend_uploads:/app/backend_app/uploads
+
+  # Optional: the real Collector stand-in (see parser/README.md). OFF by default - it needs real
+  # Telegram credentials most people won't have, and its job (populating the KB) is an occasional
+  # maintenance task, not something the live demo depends on running continuously.
+  # Opt in with: docker compose --profile collector up
+  parser:
+    profiles: ["collector"]
+    build:
+      context: ./parser
+      dockerfile: Dockerfile
+    restart: "no"
+    environment:
+      PORT: 3000
+      MONGO_URI: mongodb://mongo:27017/future_in_action_scraper
+      TG_API_ID: ${TG_API_ID}
+      TG_API_HASH: ${TG_API_HASH}
+      TG_SESSION: ${TG_SESSION}
+      DNS_SERVERS: ${DNS_SERVERS:-1.1.1.1,8.8.8.8}
+      SCRAPER_DEDUPE_RESERVATION_TTL_MINUTES: ${SCRAPER_DEDUPE_RESERVATION_TTL_MINUTES:-30}
+      AI_LAYER_ENABLED: ${AI_LAYER_ENABLED:-false}
+      AI_PROVIDER: ${AI_PROVIDER:-placeholder}
+      AI_MODEL: ${AI_MODEL:-gpt-4o-mini}
+      AI_TEMPERATURE: ${AI_TEMPERATURE:-0.1}
+      AI_MAX_TOKENS: ${AI_MAX_TOKENS:-900}
+      AI_FAIL_OPEN: ${AI_FAIL_OPEN:-true}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      RAG_URL: http://ml:8000/api/v1/knowledge/ingest
+      RAG_SEND_ENABLED: ${RAG_SEND_ENABLED:-false}
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      NEWS_API_URL: http://ml:8000/api/v1/news
+      NEWS_SEND_ENABLED: ${NEWS_SEND_ENABLED:-false}
+      ZT_RADA_MAX_PAGES: ${ZT_RADA_MAX_PAGES:-800}
+      ZT_RADA_MAX_ITEMS: ${ZT_RADA_MAX_ITEMS:-1200}
+      ZT_RADA_ATTACHMENT_LIMIT_PER_PAGE: ${ZT_RADA_ATTACHMENT_LIMIT_PER_PAGE:-5}
+      ZT_RADA_DOCUMENT_ATTACHMENT_LIMIT_PER_PAGE: ${ZT_RADA_DOCUMENT_ATTACHMENT_LIMIT_PER_PAGE:-20}
+      ZT_RADA_CONCURRENCY: ${ZT_RADA_CONCURRENCY:-3}
+      TG_BACKFILL_ON_START: ${TG_BACKFILL_ON_START:-true}
+      TG_BACKFILL_LIMIT: ${TG_BACKFILL_LIMIT:-1000}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      ml:
+        condition: service_healthy
+
+volumes:
+  pgdata: {}
+  mongodata: {}
+  backend_uploads: {}

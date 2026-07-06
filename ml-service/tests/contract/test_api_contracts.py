@@ -159,7 +159,11 @@ async def test_query_answer_cache_persists_across_separate_requests(test_app, cl
         id=1, text="Сміття вивозять щовівторка.", source="src", doc_type="instruction",
         district=None, similarity=0.9,
     )
-    generator = FakeGenerator(result=("Сміття вивозять щовівторка.", 0))
+    # Two scripted calls for the ONE pipeline run the cache should allow: the leading OPSEC safety
+    # check (pipeline.base.check_query_safety), then the actual answer generation. The query is
+    # Ukrainian, so detect_and_translate is skipped (no LLM call) — see is_ukrainian.
+    safe_json = json.dumps({"safe": True})
+    generator = FakeGenerator(results=[(safe_json, 0), ("Сміття вивозять щовівторка.", 0)])
     fake_repo = FakeKnowledgeRepository(dense=[hit], lexical=[hit])
     test_app.state.repo = fake_repo
     test_app.state.llm_client = generator
@@ -177,9 +181,10 @@ async def test_query_answer_cache_persists_across_separate_requests(test_app, cl
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json()["answer"] == first.json()["answer"]
-    # A second LLM call would mean the second request built its own fresh, empty cache instead of
-    # reusing the RagService (and its cache) built once above.
-    assert generator.call_count == 1
+    # The first request costs 2 LLM calls (safety check + answer generation); a cache hit on the
+    # second skips pipeline.run() entirely, so a THIRD call would mean the second request built its
+    # own fresh, empty cache instead of reusing the RagService (and its cache) built once above.
+    assert generator.call_count == 2
 
 
 async def test_vision_golden_response_shape(test_app, client) -> None:

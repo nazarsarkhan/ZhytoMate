@@ -5,3 +5,6 @@ npm-debug.log*
 docs/
 CLAUDE.md
 .worktrees/
+.playwright-mcp/
+backend_app/uploads/
+docker-compose.override.yml

@@ -30,17 +30,35 @@ export default function ServicesPage() {
       </PageHero>
       <main className="mx-auto w-full max-w-5xl px-container-padding py-section-margin sm:px-6 md:px-8">
         <section className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          {filteredCards.map((card) => (
-            <Link key={card.id} to={card.href} className="motion-card interactive-card flex min-h-40 flex-col items-center justify-center gap-3 rounded-2xl border border-surface-variant/60 bg-surface-container-lowest p-4 text-center shadow-soft transition active:scale-[0.98]">
-              <span className={`flex h-14 w-14 items-center justify-center rounded-full ${card.tone}`}>
-                <Icon name={card.icon} filled className="text-3xl" />
-              </span>
-              <span>
-                <span className="block text-base font-bold text-primary">{t(card.titleKey)}</span>
-                <span className="mt-1 block text-xs text-on-surface-variant">{t(card.subtitleKey)}</span>
-              </span>
-            </Link>
-          ))}
+          {filteredCards.map((card) => {
+            const cardBody = (
+              <>
+                <span className={`flex h-14 w-14 items-center justify-center rounded-full ${card.tone}`}>
+                  <Icon name={card.icon} filled className="text-3xl" />
+                </span>
+                <span>
+                  <span className="block text-base font-bold text-primary">{t(card.titleKey)}</span>
+                  <span className="mt-1 block text-xs text-on-surface-variant">{t(card.subtitleKey)}</span>
+                </span>
+              </>
+            );
+            const cardBaseClass = "motion-card flex min-h-40 flex-col items-center justify-center gap-3 rounded-2xl border border-surface-variant/60 bg-surface-container-lowest p-4 text-center shadow-soft";
+
+            if (card.comingSoon) {
+              return (
+                <div key={card.id} className={`${cardBaseClass} relative opacity-70`} aria-disabled="true">
+                  <span className="absolute right-3 top-3 rounded-full bg-surface-container-high px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-on-surface-variant">{t("services.comingSoon")}</span>
+                  {cardBody}
+                </div>
+              );
+            }
+
+            return (
+              <Link key={card.id} to={card.href} className={`${cardBaseClass} interactive-card transition active:scale-[0.98]`}>
+                {cardBody}
+              </Link>
+            );
+          })}
           {!filteredCards.length ? <p className="col-span-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-6 text-center text-sm text-on-surface-variant">{t("services.empty")}</p> : null}
         </section>
       </main>

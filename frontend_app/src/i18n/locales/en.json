@@ -3,6 +3,23 @@
     "city": "Zhytomyr",
     "name": "Zhytomyr Assistant"
   },
+  "auth": {
+    "loginTitle": "Sign in",
+    "registerTitle": "Create account",
+    "loginField": "Email or username",
+    "loginFieldPlaceholder": "you@example.com",
+    "username": "Username",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "password": "Password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in...",
+    "createAccount": "Create account",
+    "creatingAccount": "Creating account...",
+    "noAccount": "Don't have an account?",
+    "haveAccount": "Already have an account?",
+    "genericError": "Something went wrong. Please try again."
+  },
   "common": {
     "all": "All",
     "cancel": "Cancel",
@@ -30,7 +47,9 @@
     "main": "Main",
     "services": "Services",
     "news": "News",
-    "profile": "Profile"
+    "profile": "Profile",
+    "settings": "Settings",
+    "portal": "City Services Portal"
   },
   "categories": {
     "all": "All",
@@ -54,22 +73,49 @@
     "create": "Create appeal",
     "history": "Appeal history",
     "category": "Category",
-    "photos": "Photos",
+    "address": "Issue address",
+    "addressPlaceholder": "e.g. 55 Peremohy Ave",
+    "addressHint": "Tell us exactly where the issue is",
+    "photos": "Photo",
     "addPhoto": "Add photo",
     "photoCount": "{{count}} photos selected",
+    "analyzingPhoto": "AI is analyzing the photo...",
+    "notCivicIssueWarning": "This may not look like a civic issue — please double-check before sending.",
     "description": "Issue description",
     "descriptionPlaceholder": "Describe the issue...",
-    "send": "Send appeal"
+    "send": "Send appeal",
+    "sending": "Sending...",
+    "empty": "No appeals match this filter",
+    "categories": {
+      "pothole": "Pothole",
+      "roadDamage": "Road damage",
+      "garbage": "Garbage",
+      "illegalDumping": "Illegal dumping",
+      "streetLighting": "Street lighting",
+      "waterLeak": "Water leak",
+      "fallenTree": "Fallen tree",
+      "vandalism": "Vandalism",
+      "other": "Other"
+    },
+    "status": {
+      "new": "New",
+      "in_progress": "In progress",
+      "resolved": "Resolved",
+      "rejected": "Rejected"
+    }
   },
   "services": {
     "title": "Services",
     "searchPlaceholder": "Search services...",
     "empty": "No services found",
+    "comingSoon": "Coming soon",
     "cards": {
       "contacts": { "title": "Contacts", "subtitle": "City departments" },
       "polls": { "title": "Polls & Voting", "subtitle": "City decisions" },
       "appeals": { "title": "Appeals", "subtitle": "Track issues" },
-      "transport": { "title": "Transport", "subtitle": "Routes & schedules" }
+      "transport": { "title": "Transport", "subtitle": "Routes & schedules" },
+      "utilities": { "title": "Utilities & Payments", "subtitle": "Tariffs & bills" },
+      "healthcare": { "title": "Healthcare", "subtitle": "Book a doctor" }
     }
   },
   "transport": {
@@ -105,6 +151,9 @@
     "email": "Email",
     "security": "Security",
     "changePassword": "Change password",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmNewPassword": "Confirm new password",
     "utilityAlerts": "Utility alerts",
     "utilityAlertsHint": "Push notifications for water, power and heat",
     "cityNews": "City news",
@@ -114,9 +163,12 @@
     "editField": "Edit field",
     "saveAddress": "Save address",
     "editAddress": "Edit address",
+    "addAddress": "Add address",
     "street": "Street",
     "building": "Building / Apt",
-    "district": "District"
+    "district": "District",
+    "city": "City",
+    "passwordMismatch": "New passwords do not match"
   },
   "polls": {
     "title": "Polls",
@@ -134,7 +186,10 @@
     "privacy": "Only aggregated results are shown. Individual resident data is not displayed or shared in public statistics.",
     "voteRecorded": "Your vote was counted confidentially",
     "selectOption": "Select an option to vote",
-    "notFound": "Poll not found"
+    "notFound": "Poll not found",
+    "ongoing": "Ongoing",
+    "daysLeft": "{{count}} days left",
+    "voteCount": "{{count}} votes"
   },
   "chat": {
     "history": "Chat history",
@@ -146,6 +201,8 @@
     "listening": "Listening...",
     "conversation": "Chat",
     "empty": "No chats found",
-    "sentHint": "The answer is generated locally for the UI prototype."
+    "sentHint": "The answer is generated locally for the UI prototype.",
+    "thinking": "AI is thinking...",
+    "error": "Something went wrong. Please try again."
   }
 }

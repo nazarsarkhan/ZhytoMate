@@ -19,6 +19,12 @@ export const config = {
     process.env.JWT_ACCESS_EXPIRES_IN || process.env.ACCESS_TOKEN_TTL || "15m",
   jwtRefreshExpiresIn:
     process.env.JWT_REFRESH_EXPIRES_IN || process.env.REFRESH_TOKEN_TTL || "7d",
+  mlBaseUrl: process.env.ML_BASE_URL || "http://localhost:8000",
+  internalToken: process.env.INTERNAL_TOKEN || "",
+  corsOrigins: (process.env.CORS_ORIGINS || "http://localhost:5173")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
 };
 
 export default config;

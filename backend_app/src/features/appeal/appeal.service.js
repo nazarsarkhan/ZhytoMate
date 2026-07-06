@@ -1,25 +1,44 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import { ApiError } from "../../shared/ApiError.js";
+import { analyzeVision } from "../../shared/mlClient.js";
 import {
   createAppeal,
   findAppealById,
   findAppealsByUserId,
 } from "./appeal.repository.js";
 import { toPublicAppeal } from "./appeal.model.js";
+import { UPLOAD_DIR } from "./appeal.upload.js";
 
 export async function createUserAppeal({
   userId,
   imageUrl,
+  category,
   description,
   address,
 }) {
   const appeal = await createAppeal({
     userId,
     imageUrl,
+    category,
     description,
     address,
   });
 
   return toPublicAppeal(appeal);
+}
+
+export async function analyzeAppealPhoto({ filename, mimeType, hostUrl }) {
+  const fileBuffer = await fs.readFile(path.join(UPLOAD_DIR, filename));
+  const triage = await analyzeVision({
+    imageBase64: fileBuffer.toString("base64"),
+    mimeType,
+  });
+
+  return {
+    imageUrl: `${hostUrl}/uploads/appeals/${filename}`,
+    triage,
+  };
 }
 
 export async function getUserAppeals(userId) {
