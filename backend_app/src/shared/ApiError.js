@@ -22,6 +22,12 @@ export class ApiError extends Error {
   static conflict(message) {
     return new ApiError(409, message);
   }
+  static badGateway(message = "Upstream service error") {
+    return new ApiError(502, message);
+  }
+  static gatewayTimeout(message = "Upstream service timed out") {
+    return new ApiError(504, message);
+  }
 }
 
 export default ApiError;

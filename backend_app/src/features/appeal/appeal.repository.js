@@ -1,9 +1,10 @@
 import Appeal from "./appeal.model.js";
 
-export function createAppeal({ userId, imageUrl, description, address }) {
+export function createAppeal({ userId, imageUrl, category, description, address }) {
   return Appeal.create({
     user: userId,
     imageUrl,
+    category,
     description,
     address,
   });

@@ -9,16 +9,19 @@ const username = "nazar_dev";
 const demoAppeals = [
   {
     imageUrl: "https://example.com/demo/appeals/broken-street-light.jpg",
+    category: "street_lighting",
     description: "Broken street light near the main entrance.",
     address: "Kyivska St, 12",
   },
   {
     imageUrl: "https://example.com/demo/appeals/pothole.jpg",
+    category: "pothole",
     description: "Large pothole on the road after heavy rain.",
     address: "Peremohy Square, 4",
   },
   {
     imageUrl: "https://example.com/demo/appeals/trash-bin.jpg",
+    category: "garbage",
     description: "Overflowing trash bins near the playground.",
     address: "Shevchenka Blvd, 18",
   },

@@ -1,5 +1,21 @@
 import mongoose from "mongoose";
 
+// Must stay in sync with ml-service's vision-analyze category taxonomy
+// (ml-service/app/schemas/vision.py) - duplicated here on purpose since the two services are
+// separate languages/repos; kept in sync by convention, the same way docs/NODE_SYSTEM_DESIGN.md's
+// own DB CHECK constraint duplicates it.
+export const APPEAL_CATEGORIES = [
+  "pothole",
+  "road_damage",
+  "garbage",
+  "illegal_dumping",
+  "street_lighting",
+  "water_leak",
+  "fallen_tree",
+  "vandalism",
+  "other",
+];
+
 const appealSchema = new mongoose.Schema(
   {
     user: {
@@ -9,6 +25,7 @@ const appealSchema = new mongoose.Schema(
       index: true,
     },
     imageUrl: { type: String, required: true, trim: true },
+    category: { type: String, enum: APPEAL_CATEGORIES, required: true },
     description: { type: String, required: true, trim: true },
     address: { type: String, required: true, trim: true },
     status: {
@@ -30,6 +47,7 @@ export function toPublicAppeal(appeal) {
     id: appeal._id.toString(),
     userId: appeal.user.toString(),
     imageUrl: appeal.imageUrl,
+    category: appeal.category,
     description: appeal.description,
     address: appeal.address,
     status: appeal.status,

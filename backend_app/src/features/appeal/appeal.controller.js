@@ -1,4 +1,6 @@
+import { ApiError } from "../../shared/ApiError.js";
 import {
+  analyzeAppealPhoto,
   createUserAppeal,
   getUserAppealById,
   getUserAppeals,
@@ -9,11 +11,30 @@ export async function createAppeal(req, res, next) {
     const appeal = await createUserAppeal({
       userId: req.user.id,
       imageUrl: req.body.imageUrl,
+      category: req.body.category,
       description: req.body.description,
       address: req.body.address,
     });
 
     return res.status(201).json({ appeal });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function uploadPhoto(req, res, next) {
+  try {
+    if (!req.file) {
+      throw ApiError.badRequest("A photo file is required");
+    }
+
+    const result = await analyzeAppealPhoto({
+      filename: req.file.filename,
+      mimeType: req.file.mimetype,
+      hostUrl: `${req.protocol}://${req.get("host")}`,
+    });
+
+    return res.json(result);
   } catch (err) {
     return next(err);
   }
@@ -44,6 +65,7 @@ export async function getAppealById(req, res, next) {
 
 export default {
   createAppeal,
+  uploadPhoto,
   getMyAppeals,
   getAppealById,
 };

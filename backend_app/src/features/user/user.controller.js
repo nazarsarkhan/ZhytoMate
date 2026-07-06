@@ -1,4 +1,10 @@
-import { getPublicUserById, updateUserName } from "./user.service.js";
+import { ApiError } from "../../shared/ApiError.js";
+import {
+  getPublicUserById,
+  updateUserAddress,
+  updateUserAvatarFromUpload,
+  updateUserName,
+} from "./user.service.js";
 
 export async function getCurrentUser(req, res, next) {
   try {
@@ -21,11 +27,43 @@ export async function getUserById(req, res, next) {
 
 export async function updateCurrentUserName(req, res, next) {
   try {
-    const { firstName, lastName } = req.body;
+    const { firstName, lastName, phone } = req.body;
     const user = await updateUserName({
       id: req.user.id,
       firstName,
       lastName,
+      phone,
+    });
+
+    return res.json({ user });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function updateCurrentUserAddress(req, res, next) {
+  try {
+    const user = await updateUserAddress({
+      id: req.user.id,
+      address: req.body,
+    });
+
+    return res.json({ user });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function uploadCurrentUserAvatar(req, res, next) {
+  try {
+    if (!req.file) {
+      throw ApiError.badRequest("A photo file is required");
+    }
+
+    const user = await updateUserAvatarFromUpload({
+      userId: req.user.id,
+      filename: req.file.filename,
+      hostUrl: `${req.protocol}://${req.get("host")}`,
     });
 
     return res.json({ user });
@@ -38,4 +76,6 @@ export default {
   getCurrentUser,
   getUserById,
   updateCurrentUserName,
+  updateCurrentUserAddress,
+  uploadCurrentUserAvatar,
 };

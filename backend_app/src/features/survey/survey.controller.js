@@ -12,6 +12,7 @@ export async function createSurvey(req, res, next) {
       role: req.user.role,
       title: req.body.title,
       description: req.body.description,
+      category: req.body.category,
       options: req.body.options,
       startsAt: req.body.startsAt,
       endsAt: req.body.endsAt,

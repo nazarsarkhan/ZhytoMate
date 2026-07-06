@@ -6,6 +6,7 @@ import {
   createUserProfile,
   getUserById,
   getUserByEmailOrUsername,
+  updateUserPassword,
 } from "../user/user.service.js";
 import { toPublicUser } from "../user/user.model.js";
 
@@ -120,9 +121,32 @@ export async function getCurrentUser(userId) {
   return toPublicUser(user);
 }
 
+export async function changePassword({ userId, currentPassword, newPassword }) {
+  const user = await getUserById(userId);
+  if (!user) {
+    throw ApiError.unauthorized("User not found");
+  }
+
+  const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+  if (!isCurrentPasswordValid) {
+    throw ApiError.unauthorized("Current password is incorrect");
+  }
+
+  const password = await bcrypt.hash(newPassword, 12);
+  const updatedUser = await updateUserPassword({ id: userId, password });
+
+  // The refreshTokenVersion bump inside updateUserPassword already invalidated every existing
+  // refresh token (including this session's) - re-issue a fresh pair so the caller stays logged in.
+  return {
+    user: toPublicUser(updatedUser),
+    ...issueTokens(updatedUser),
+  };
+}
+
 export default {
   register,
   login,
   refreshAccessToken,
   getCurrentUser,
+  changePassword,
 };

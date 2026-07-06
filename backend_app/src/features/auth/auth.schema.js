@@ -18,8 +18,14 @@ export const refreshSchema = Joi.object({
   refreshToken: Joi.string().required(),
 });
 
+export const changePasswordSchema = Joi.object({
+  currentPassword: Joi.string().required(),
+  newPassword: Joi.string().min(8).max(128).required(),
+});
+
 export default {
   registerSchema,
   loginSchema,
   refreshSchema,
+  changePasswordSchema,
 };
