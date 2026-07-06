@@ -18,6 +18,8 @@ Must NOT import:  (nothing in app/* may import tests/* — tests are leaves)
 """
 from __future__ import annotations
 
+import json
+
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
@@ -96,7 +98,17 @@ def test_app(pg_pool, _reset_contract_tables) -> FastAPI:  # noqa: F811 — same
     app.state.pool = pg_pool
     app.state.repo = KnowledgeRepository(pg_pool)
     app.state.embedder = FakeEmbedder()
-    app.state.llm_client = FakeGenerator()
+    # SimpleRAGPipeline.run() now calls the generator for an OPSEC safety check before anything
+    # else (pipeline.base.check_query_safety, fail-closed) — a fresh FakeGenerator()'s old default
+    # ("stubbed answer", not JSON) would make every contract test's query get silently blocked.
+    # Scripting {"safe": true} as the FIRST call keeps this fixture's out-of-the-box behavior
+    # "query succeeds" (the pre-existing default for every other test in this file); any further
+    # call (detect/translate, or the grounded/ungrounded answer itself) falls back to the plain
+    # "stubbed answer" placeholder — kept distinct from the safety JSON so a test that ends up
+    # exercising one more call than expected doesn't get the literal string '{"safe": true}' back
+    # as its "answer" text, which would be a confusing coincidence to debug. Tests exercising the
+    # safety gate itself override `test_app.state.llm_client` with their own scripted FakeGenerator.
+    app.state.llm_client = FakeGenerator(results=[(json.dumps({"safe": True}), 0)])
     app.state.rag_service = RagService(
         repo=app.state.repo,
         embedder=app.state.embedder,

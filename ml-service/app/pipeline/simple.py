@@ -1,16 +1,31 @@
 """
-Purpose:   SimpleRAGPipeline(RAGPipeline): single-shot path for SIMPLE queries — embed the query (no
-           prefix; OpenAI embeddings are prefix-free, unlike the old e5 setup) -> hybrid retrieve
-           (dense+lexical, RRF) via the injected Retriever port -> shared tail (confidence gate;
-           generate or no-info; extractive fallback on LLM error) via pipeline.base.run_shared_tail.
-           One Generator call max.
+Purpose:   SimpleRAGPipeline(RAGPipeline): single-shot path for SIMPLE queries — OPSEC content-
+           safety gate first (check_query_safety; an unsafe query short-circuits with a refusal,
+           never reaching retrieval or generation) -> detect language + translate the query to
+           Ukrainian for retrieval if needed (detect_and_translate; skipped for Ukrainian queries)
+           -> embed the query (no prefix; OpenAI embeddings are prefix-free, unlike the old e5
+           setup) -> hybrid retrieve (dense+lexical, RRF) via the injected Retriever port -> shared
+           tail (confidence gate decides grounded vs ungrounded; ALWAYS generates either way;
+           fallback on LLM error) via pipeline.base.run_shared_tail. At most one safety-check
+           call, plus one generation call, plus at most one detect+translate call for a non-
+           Ukrainian query. Generation receives the ORIGINAL query and the policy-resolved
+           answer_lang, so the answer keeps the user's language — except Russian, which this
+           assistant never answers in (wartime policy; see domain.language.resolve_answer_lang).
 Layer:     pipeline
 May import:   pipeline/base, protocols (Embedder/Retriever/Generator)
 Must NOT import:  api/*, services/*; concrete components/*; FastAPI, asyncpg, sentence-transformers
 """
 from __future__ import annotations
 
-from app.pipeline.base import RETRIEVE_LIMIT, RagContext, RAGPipeline, RagResult, run_shared_tail
+from app.pipeline.base import (
+    RETRIEVE_LIMIT,
+    RagContext,
+    RAGPipeline,
+    RagResult,
+    check_query_safety,
+    detect_and_translate,
+    run_shared_tail,
+)
 from app.protocols import Embedder, Generator, Retriever
 
 
@@ -33,9 +48,24 @@ class SimpleRAGPipeline(RAGPipeline):
         self._sim_high = sim_high
 
     async def run(self, ctx: RagContext) -> RagResult:
-        query_vec = await self._embedder.encode_query(ctx.user_query)
+        # Wartime OPSEC gate first, before any retrieval/generation work — see
+        # pipeline.base.check_query_safety for the two-layer (heuristic + LLM) design and the
+        # fail-closed policy.
+        is_safe, refusal = await check_query_safety(self._generator, ctx.user_query)
+        if not is_safe:
+            return RagResult(
+                answer=refusal, sources_used=[], confidence=0.0, route=ctx.route,
+                debug={"blocked": True},
+            )
+
+        # The KB is Ukrainian; for a RU/EN query, detect its language and translate it to Ukrainian
+        # for retrieval in one call (a Ukrainian query skips it). Generation still gets the ORIGINAL
+        # query and answers in answer_lang, so the reply comes back in the user's language (never
+        # Russian — answer_lang is already policy-resolved by detect_and_translate).
+        answer_lang, retrieval_query = await detect_and_translate(self._generator, ctx.user_query)
+        query_vec = await self._embedder.encode_query(retrieval_query)
         outcome = await self._retriever.retrieve(
-            ctx.user_query, query_vec, ctx.district_slug, k=RETRIEVE_LIMIT
+            retrieval_query, query_vec, ctx.district_slug, k=RETRIEVE_LIMIT
         )
         return await run_shared_tail(
             generator=self._generator,
@@ -46,4 +76,5 @@ class SimpleRAGPipeline(RAGPipeline):
             top1_sim=outcome.dense_top1_sim,
             question=ctx.user_query,
             route=ctx.route,
+            answer_lang=answer_lang,
         )

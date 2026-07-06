@@ -4,8 +4,10 @@ Purpose:   Flow (AgentRAGPipeline, fake Embedder/Retriever/Generator): a multi-i
            when 2+ sub-queries are dry (below sim_gate), only the FIRST one (by list order) is
            rewritten and re-retried — a single shared re-query budget for the whole request, not one
            per dry sub-query. Also proves the shared tail holds through the agent path: all-empty
-           retrieval => the synthesis Generator call is skipped (no-info); a Generator error at
-           synthesis => the same extractive fallback as the simple path. Also covers the two Phase-4
+           retrieval => the synthesis Generator call still happens, answering ungrounded via
+           build_general_prompt instead of a canned refusal; a Generator error at synthesis =>
+           the same extractive (or, if ungrounded, double) fallback as the simple path. Also
+           covers the two Phase-4
            review fixes: per-sub-query fused lists are rank-interleaved before assemble_context
            runs, so a globally relevant single-chunk sub-query isn't starved out of the token budget
            by a multi-chunk sub-query that merely arrived first in decomposition order; and a
@@ -129,20 +131,24 @@ async def test_only_the_first_dry_subquery_is_rewritten_and_reretried() -> None:
     assert result.confidence == 0.95  # max dense top-1 across sub-queries (rewritten світло wins)
 
 
-async def test_all_subqueries_dry_returns_no_info_without_synthesis_call() -> None:
+async def test_all_subqueries_dry_falls_back_to_ungrounded_synthesis_answer() -> None:
     decompose_json = json.dumps([_TRASH_Q])
     retriever = FakeRetriever({})  # every query_text is un-scripted -> empty outcome
-    generator = FakeGenerator(results=[(decompose_json, 0), ("рерайт", 0)])
+    ungrounded_answer = "Наразі не маю точних даних, але радо поспілкуюся!"
+    generator = FakeGenerator(
+        results=[(decompose_json, 0), ("рерайт", 0), (ungrounded_answer, 0)]
+    )
     pipeline = _pipeline(retriever, generator)
 
     result = await pipeline.run(
         RagContext(user_query=_TRASH_Q, district_slug=None, route=QueryRoute.SIMPLE)
     )
 
-    # decompose + the single shared rewrite attempt both happen; synthesis never runs
-    # (no-info gate).
-    assert generator.call_count == 2
-    assert result.debug["no_info"] is True
+    # decompose + the single shared rewrite attempt + the synthesis call all happen — the shared
+    # tail's ungrounded path answers via build_general_prompt instead of skipping synthesis.
+    assert generator.call_count == 3
+    assert result.answer == ungrounded_answer
+    assert result.debug["grounded"] is False
     assert result.sources_used == []
 
 
@@ -218,7 +224,7 @@ async def test_one_subquery_retrieval_failure_is_isolated_and_treated_as_dry() -
 
     # (a) the request completes and produces the synthesized answer rather than raising/500ing.
     assert result.answer == "Зведена відповідь."
-    assert result.debug["no_info"] is False
+    assert result.debug["grounded"] is True
 
     # (b) sub-query A's result was unaffected by B's failure, and B's recovered (post-rewrite)
     # result reached the final context too — the failure of the first attempt didn't drop it.

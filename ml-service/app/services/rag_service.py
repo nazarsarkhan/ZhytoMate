@@ -149,17 +149,32 @@ class RagService:
             confidence=result.confidence,
             route=result.route,
         )
-        if result.debug.get("no_info"):
-            # No-info answers are never cached — cheap to recompute (no LLM call was made), and
-            # caching one for the TTL window would risk serving a stale "no info" after the KB
-            # picks up new content that would have answered this same query.
+        if result.debug.get("blocked"):
+            # Refused by the OPSEC content-safety gate (pipeline.base.check_query_safety) before
+            # any retrieval/generation ran. Never cached — same staleness reasoning as no-info
+            # below, plus a false-positive block on a legitimate civic question must never persist
+            # for the whole TTL window just because it was asked once.
             logger.info(
-                "query_no_info",
+                "query_blocked",
+                user=user_hash,
+                district=district_slug,
+                route=route.value,
+                took_ms=round(self._elapsed_ms(start), 1),
+            )
+        elif not result.debug.get("grounded"):
+            # Ungrounded answers (real, conversational responses that weren't anchored to
+            # specific KB chunks) are never cached — not because they're cheap to recompute
+            # (they aren't anymore, an LLM call was made), but because an ungrounded reply isn't
+            # tied to any particular retrieved content: caching it for the TTL window risks
+            # serving a stale ungrounded answer even after the KB picks up content that would
+            # have grounded this same query moments later.
+            logger.info(
+                "query_ungrounded",
                 user=user_hash,
                 district=district_slug,
                 route=route.value,
                 # debug is dict[str, object] (heterogeneous by design); top1_sim is always the
-                # float set by pipeline.base's run_shared_tail/no-info branch.
+                # float set by pipeline.base's run_shared_tail.
                 top1_sim=round(cast(float, result.debug.get("top1_sim", 0.0)), 3),
                 took_ms=round(self._elapsed_ms(start), 1),
             )

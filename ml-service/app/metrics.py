@@ -24,7 +24,9 @@ retrieval_top1_sim = Histogram(
     buckets=[0.5, 0.6, 0.7, 0.75, 0.78, 0.82, 0.85, 0.9, 0.95, 1.0],
 )
 
-# Queries with no result above sim_gate (the no-info path; the LLM is not called).
+# Queries with no result above sim_gate — retrieval was insufficient to ground an answer, so the
+# pipeline answers via the ungrounded/general-conversation fallback instead of a grounded one (the
+# LLM is still called either way; this metric tracks retrieval coverage, not whether it answered).
 retrieval_empty = Counter(
     "zhytomate_retrieval_empty_total",
     "Queries that returned no results above sim_gate",
@@ -89,4 +91,9 @@ ingest_chunks_total = Counter(
 # Ingest requests short-circuited by a duplicate content hash.
 dedup_skips_total = Counter(
     "zhytomate_dedup_skips_total", "Ingest requests short-circuited by a duplicate content hash"
+)
+
+# Queries refused by the OPSEC content-safety gate. layer: heuristic | llm | llm_error
+queries_blocked_total = Counter(
+    "zhytomate_queries_blocked_total", "Queries refused by the OPSEC content-safety gate", ["layer"]
 )
