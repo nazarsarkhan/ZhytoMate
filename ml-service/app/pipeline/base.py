@@ -218,12 +218,15 @@ class RagResult(BaseModel):
     logging (top1_sim, band, n_chunks, llm_ok, llm_retries, grounded) without widening the
     pydantic schema for values that are never part of the HTTP contract. `grounded` is False for
     both an ungrounded-but-answered response and an OPSEC-blocked refusal — callers distinguish
-    the latter via the separate `blocked` key, which only a blocked result sets."""
+    the latter via the separate `blocked` key, which only a blocked result sets. `action_intent`
+    IS part of the HTTP contract (backend_app reads it to decide whether to start collecting
+    details for a registered action), so unlike the debug fields it gets its own top-level field."""
 
     answer: str
     sources_used: list[SourceUsed]
     confidence: float
     route: QueryRoute
+    action_intent: str | None = None
     debug: dict[str, object] = Field(default_factory=dict)
 
 

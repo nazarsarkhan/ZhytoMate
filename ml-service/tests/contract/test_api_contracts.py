@@ -135,6 +135,19 @@ async def test_query_golden_response_shape_on_an_empty_knowledge_base(client) ->
     assert body["route"] == "SIMPLE"
 
 
+async def test_query_response_includes_action_intent_field(client) -> None:
+    response = await client.post(
+        "/api/v1/chat/query",
+        headers=AUTH,
+        json={"user_query": "Коли вивезуть сміття?", "user_id": "contract-user-2"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "action_intent" in body
+    assert body["action_intent"] is None
+
+
 async def test_query_answer_cache_persists_across_separate_requests(test_app, client) -> None:
     """Regression test for the bug where app.deps.get_rag_service built a brand-new RagService (and
     therefore a brand-new, empty answer cache) on every call — FastAPI invokes a

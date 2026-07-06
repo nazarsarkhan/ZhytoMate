@@ -71,7 +71,7 @@ class SimpleRAGPipeline(RAGPipeline):
         outcome = await self._retriever.retrieve(
             retrieval_query, query_vec, ctx.district_slug, k=RETRIEVE_LIMIT
         )
-        return await run_shared_tail(
+        result = await run_shared_tail(
             generator=self._generator,
             sim_gate=self._sim_gate,
             sim_high=self._sim_high,
@@ -83,3 +83,4 @@ class SimpleRAGPipeline(RAGPipeline):
             answer_lang=answer_lang,
             force_ungrounded=conversational,
         )
+        return result.model_copy(update={"action_intent": action_intent})

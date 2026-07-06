@@ -32,3 +32,4 @@ class QueryResponse(BaseModel):
     sources_used: list[SourceUsed]
     confidence: float = Field(..., ge=0.0, le=1.0)
     route: QueryRoute | None = None  # observability only — the classifier's decision
+    action_intent: str | None = None  # one of domain.actions.KNOWN_ACTIONS's keys, or None

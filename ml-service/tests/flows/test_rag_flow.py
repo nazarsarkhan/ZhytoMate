@@ -356,6 +356,29 @@ async def test_check_query_safety_action_intent_defaults_to_none_on_failure() ->
     assert action_intent is None
 
 
+async def test_action_intent_flows_through_to_rag_result() -> None:
+    action_json = json.dumps(
+        {"safe": True, "conversational": False, "action_intent": "create_appeal"}
+    )
+    retriever = FakeRetriever({_QUERY: RetrievalOutcome(dense=[], fused=[])})
+    generator = FakeGenerator(results=[(action_json, 0), ("Гаразд, зберемо деталі.", 0)])
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(_QUERY))
+
+    assert result.action_intent == "create_appeal"
+
+
+async def test_action_intent_is_none_for_ordinary_queries() -> None:
+    retriever = FakeRetriever({_QUERY: RetrievalOutcome(dense=[], fused=[])})
+    generator = FakeGenerator(results=[(_SAFE_JSON, 0), ("Сміття вивозять щовівторка.", 0)])
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(_QUERY))
+
+    assert result.action_intent is None
+
+
 # ---------------------------------------------------------------------------
 # Conversational routing — check_query_safety's `conversational` flag forces the ungrounded/
 # general-conversation path regardless of top1_sim (see run_shared_tail's force_ungrounded)
