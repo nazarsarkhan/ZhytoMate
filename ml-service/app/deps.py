@@ -1,12 +1,12 @@
 """
 Purpose:   FastAPI dependencies: the X-Internal-Token auth guard (constant-time) + service factories
-           built from app.state (pool/embedder/settings wired in the lifespan). get_ingest_service
-           and get_vision_service build a fresh, stateless service on every call; get_rag_service is
-           the one exception — it returns the single RagService built once in app.main's lifespan,
-           because RagService owns the answer cache as internal state and a fresh instance per
-           request would never let a cached answer survive to a later request. Concrete service +
-           repository classes for the per-request factories are imported inside their bodies to
-           avoid import cycles.
+           built from app.state (pool/embedder/settings wired in the lifespan). get_action_service,
+           get_ingest_service, and get_vision_service build a fresh, stateless service on every
+           call; get_rag_service is the one exception — it returns the single RagService built once
+           in app.main's lifespan, because RagService owns the answer cache as internal state and a
+           fresh instance per request would never let a cached answer survive to a later request.
+           Concrete service + repository classes for the per-request factories are imported inside
+           their bodies to avoid import cycles.
 Layer:     api
 May import:   FastAPI, app.config, app.errors, services/* + components/* (inside factory bodies)
 Must NOT import:  api/v1/* routers (avoid cycles); domain/* directly; the hosted-LLM SDK, asyncpg
@@ -21,6 +21,7 @@ from fastapi import Request
 from app.errors import UnauthorizedError
 
 if TYPE_CHECKING:
+    from app.services.action_service import ActionService
     from app.services.ingest_service import IngestService
     from app.services.rag_service import RagService
     from app.services.vision_service import VisionService
@@ -35,6 +36,14 @@ def verify_internal_token(request: Request) -> None:
     provided = request.headers.get(_INTERNAL_TOKEN_HEADER)
     if provided is None or not hmac.compare_digest(provided, expected):
         raise UnauthorizedError("Missing or invalid internal token")
+
+
+def get_action_service(request: Request) -> ActionService:
+    """Build ActionService from app.state. Imported here (not at module top) to dodge import
+    cycles."""
+    from app.services.action_service import ActionService
+
+    return ActionService(generator=request.app.state.llm_client)
 
 
 def get_ingest_service(request: Request) -> IngestService:

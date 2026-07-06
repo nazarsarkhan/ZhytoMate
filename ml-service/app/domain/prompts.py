@@ -30,14 +30,25 @@ Purpose:   LLM prompt templates. All prompts live here — never inline in servi
            build_safety_check_prompt also asks the model to classify action_intent — one of
            domain.actions.KNOWN_ACTIONS's names, or null — by interpolating that registry's trigger
            descriptions into the instruction, so the action vocabulary has exactly one source.
+           build_slot_extraction_prompt backs the generic slot-extraction endpoint
+           (services/action_service.py, POST /api/v1/assistant/extract-slots): given a
+           caller-supplied slot schema (field name/description/enum values) and the
+           currently-filled slots, asks the model to merge new information from the message into
+           those slots, as bare JSON {slots, wants_cancel, is_unrelated}. Domain-agnostic — the
+           field descriptions come entirely from the caller (backend_app); this function and the
+           model it prompts never learn what a slot means beyond that description string.
 Layer:     domain (pure strings — no I/O)
-May import:   stdlib, domain/actions (KNOWN_ACTIONS — another pure, no-I/O domain module)
+May import:   stdlib, domain/actions (KNOWN_ACTIONS — another pure, no-I/O domain module),
+              schemas/actions (SlotFieldSchema — a pure pydantic type, no I/O)
 Must NOT import:  api/*, services/*, components/*, pipeline/*; any I/O or model lib (asyncpg,
               FastAPI)
 """
 from __future__ import annotations
 
+import json
+
 from app.domain.actions import KNOWN_ACTIONS
+from app.schemas.actions import SlotFieldSchema
 
 _CHUNK_SEPARATOR = "\n\n---\n\n"
 
@@ -189,6 +200,45 @@ def build_safety_check_prompt(query: str) -> str:
     failure as unsafe (conversational and action_intent both default to their "nothing detected"
     value in that case)."""
     return f"{_SAFETY_CHECK_INSTRUCTION}\n\n<text>\n{query}\n</text>"
+
+
+def build_slot_extraction_prompt(
+    message: str, slot_schema: list[SlotFieldSchema], current_slots: dict[str, str]
+) -> str:
+    """Build the generic slot-extraction prompt used by the assistant actions framework
+    (services/action_service.py). Domain-agnostic: the caller (backend_app) supplies which fields
+    exist and their descriptions/enum values; this function and the model it prompts never learn
+    what those fields mean beyond the text given. The reply must be bare JSON
+    {"slots": {...}, "wants_cancel": bool, "is_unrelated": bool} — parsed the same defensive
+    brace-slice way as check_query_safety/detect_and_translate, forced into valid JSON via
+    Generator.generate(json_mode=True)."""
+    fields_desc = "\n".join(_describe_field(field) for field in slot_schema)
+    current_desc = (
+        json.dumps(current_slots, ensure_ascii=False)
+        if current_slots
+        else "(ще нічого не заповнено)"
+    )
+    return (
+        "Ти допомагаєш зібрати інформацію для наступних полів на основі повідомлення "
+        f"користувача:\n{fields_desc}\n\n"
+        f"Вже заповнені поля: {current_desc}\n\n"
+        f"<text>\n{message}\n</text>\n\n"
+        "Онови поля новою інформацією з повідомлення користувача. НЕ видаляй вже заповнені поля, "
+        "якщо повідомлення їх не змінює чи не уточнює.\n"
+        "Якщо користувач явно хоче скасувати (напр. 'скасуй', 'не треба', 'відміна') — постав "
+        "wants_cancel: true.\n"
+        "Якщо повідомлення не стосується жодного з цих полів (це інше питання чи звичайна "
+        "розмова) — постав is_unrelated: true, а slots поверни БЕЗ ЗМІН (ті самі вже заповнені "
+        "поля, нічого не додавай і не вигадуй).\n"
+        'Поверни ВИКЛЮЧНО JSON без markdown: {"slots": {"поле": "значення"}, "wants_cancel": '
+        'false, "is_unrelated": false}.'
+    )
+
+
+def _describe_field(field: SlotFieldSchema) -> str:
+    """Render one slot field as a bullet line, appending its enum values (if any) as a hint."""
+    enum_hint = f" (можливі значення: {', '.join(field.enum_values)})" if field.enum_values else ""
+    return f"- {field.name}: {field.description}{enum_hint}"
 
 
 _DECOMPOSE_INSTRUCTION = (

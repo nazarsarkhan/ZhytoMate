@@ -24,6 +24,7 @@ from app.domain.prompts import (
     build_rag_prompt,
     build_rewrite_prompt,
     build_safety_check_prompt,
+    build_slot_extraction_prompt,
 )
 
 
@@ -152,3 +153,25 @@ def test_safety_check_prompt_includes_action_intent_contract() -> None:
     prompt = build_safety_check_prompt("Створити звернення про яму")
     assert "action_intent" in prompt
     assert "create_appeal" in prompt
+
+
+def test_slot_extraction_prompt_includes_fields_and_current_slots() -> None:
+    from app.schemas.actions import SlotFieldSchema
+
+    prompt = build_slot_extraction_prompt(
+        message="Величезна яма на вул. Київській",
+        slot_schema=[
+            SlotFieldSchema(
+                name="category",
+                description="Категорія проблеми",
+                enum_values=["pothole", "garbage"],
+            ),
+            SlotFieldSchema(name="address", description="Адреса проблеми"),
+        ],
+        current_slots={"category": "pothole"},
+    )
+    assert "category" in prompt
+    assert "address" in prompt
+    assert "pothole" in prompt  # already-filled slot surfaced back to the model
+    assert "wants_cancel" in prompt
+    assert "is_unrelated" in prompt

@@ -235,6 +235,38 @@ async def test_query_answer_cache_persists_across_separate_requests(test_app, cl
     assert generator.call_count == 2
 
 
+async def test_extract_slots_endpoint_returns_the_contract_shape(client) -> None:
+    """Contract-level shape check only — tests.conftest's default test_app fixture scripts a
+    generator reply for the safety-check JSON contract, not this endpoint's {"slots", ...} shape,
+    so this specific call falls through ActionService's fail-closed path (is_unrelated=True,
+    current_slots preserved unchanged — here, empty). Richer extraction/merge behavior is
+    unit-tested against a purpose-scripted FakeGenerator in tests/unit/test_action_service.py —
+    this test only proves the HTTP contract (status code, response keys) end-to-end through the
+    real FastAPI route."""
+    response = await client.post(
+        "/api/v1/assistant/extract-slots",
+        headers=AUTH,
+        json={
+            "message": "Величезна яма на вул. Київській",
+            "slot_schema": [
+                {
+                    "name": "category",
+                    "description": "Категорія проблеми",
+                    "enum_values": ["pothole", "garbage"],
+                },
+                {"name": "address", "description": "Адреса"},
+            ],
+            "current_slots": {},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["slots"] == {}
+    assert body["wants_cancel"] is False
+    assert body["is_unrelated"] is True
+
+
 async def test_vision_golden_response_shape(test_app, client) -> None:
     scripted = {
         "is_valid": True,
