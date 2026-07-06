@@ -70,6 +70,14 @@ def test_flags_explicit_reconnaissance_phrasing(text: str) -> None:
         "Перелік закладів охорони здоров'я без вихідних.",
         # shares "графік" and "маршрут" as bare words too, in an ordinary transit/utility context
         "Графік і маршрут руху сміттєвоза цього тижня.",
+        # "exact address/location" alone, with no sensitive target — one of the most common
+        # civic questions this assistant gets (CNAP, pharmacy, aid point, ...); only the
+        # coordinates/troop-position variant paired with a military target should ever flag
+        "Яка точна адреса ЦНАПу?",
+        "Точна адреса найближчої аптеки, будь ласка.",
+        "What's the exact location of the nearest vaccination point?",
+        "Какой точный адрес у пункту видачі гуманітарної допомоги?",
+        "Підкажіть координати пункту видачі допомоги ВПО.",
     ],
 )
 def test_does_not_flag_ordinary_civic_questions(text: str) -> None:

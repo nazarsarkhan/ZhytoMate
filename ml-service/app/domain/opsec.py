@@ -15,6 +15,16 @@ Purpose:   Pure, fast, deterministic first-pass content-safety heuristic for war
            on the INTENT phrasing itself keeps false positives low while still catching blunt
            attempts.
 
+           The "coordinates / exact location" phrases are a special case: unlike every other
+           category here, "координати"/"точна адреса"/"exact location" etc. are NOT
+           intent-flavored on their own — "what's the exact address of the CNAP/pharmacy/aid
+           point" is one of the most common ordinary civic questions this assistant gets. So
+           these phrases only flag when the SAME query also names a sensitive target (military/
+           checkpoint/guard-post flavored) via _SENSITIVE_TARGET_TERMS — see
+           _mentions_location_of_sensitive_target. Every other category's phrases already bake
+           the sensitive target into the phrase itself (e.g. "troop count", "guard schedule") so
+           they stay unconditional substring matches.
+
            This is layer 1 of 2 (see pipeline/base.check_query_safety): layer 2 is an LLM
            classification pass that catches paraphrased/creative attempts this fixed phrase list
            cannot. This list is a starting point — extend it as new risk phrasing is identified;
@@ -25,9 +35,10 @@ Must NOT import:  api/*, services/*, components/*, pipeline/*; asyncpg, openai, 
 """
 from __future__ import annotations
 
-_OPSEC_INTENT_PHRASES = frozenset(
+# Coordinates / exact-location phrases — conditional, see module docstring. Require co-occurrence
+# with _SENSITIVE_TARGET_TERMS, since "exact address of X" is ordinary civic phrasing on its own.
+_OPSEC_LOCATION_PHRASES = frozenset(
     {
-        # coordinates / exact location of something sensitive
         "координати",
         "координаты",
         "coordinates",
@@ -36,6 +47,34 @@ _OPSEC_INTENT_PHRASES = frozenset(
         "exact location",
         "точна адреса",
         "точный адрес",
+    }
+)
+
+# Military/security-flavored nouns that turn a bare location phrase into a real OPSEC risk. Kept
+# narrow and specific (not bare words like "охорони"/"guard" alone, which "заклад охорони
+# здоров'я" — healthcare facility — would false-positive on).
+_SENSITIVE_TARGET_TERMS = frozenset(
+    {
+        "блокпост",
+        "checkpoint",
+        "гарнізон",
+        "garrison",
+        "військ",
+        "войск",
+        "military",
+        "зсу",
+        "вcу",
+        "ппо",
+        "пво",
+        "air defense",
+        "air defence",
+        "застав",
+        "outpost",
+    }
+)
+
+_OPSEC_INTENT_PHRASES = frozenset(
+    {
         # security vulnerabilities / weak points
         "вразливість",
         "вразливості",
@@ -92,9 +131,20 @@ _OPSEC_INTENT_PHRASES = frozenset(
 )
 
 
+def _mentions_location_of_sensitive_target(lowered: str) -> bool:
+    """True if `lowered` pairs a coordinates/exact-location phrase with a sensitive target — e.g.
+    "exact coordinates of the checkpoint", not just "exact address" on its own. See module
+    docstring for why this category needs co-occurrence instead of a bare substring match."""
+    has_location_phrase = any(phrase in lowered for phrase in _OPSEC_LOCATION_PHRASES)
+    has_sensitive_target = any(term in lowered for term in _SENSITIVE_TARGET_TERMS)
+    return has_location_phrase and has_sensitive_target
+
+
 def contains_opsec_risk_terms(text: str) -> bool:
     """True if the text contains an explicit reconnaissance-flavored phrase. Case-insensitive
     substring match — deliberately simple and fast; see module docstring for what it does and does
     not cover, and why."""
     lowered = text.lower()
-    return any(phrase in lowered for phrase in _OPSEC_INTENT_PHRASES)
+    if any(phrase in lowered for phrase in _OPSEC_INTENT_PHRASES):
+        return True
+    return _mentions_location_of_sensitive_target(lowered)
