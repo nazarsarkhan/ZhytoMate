@@ -1,5 +1,7 @@
+// Weather used to be a hardcoded placeholder card here too - it's now a real widget
+// (components/widgets/SinoptikWeatherWidget.jsx) rendered separately in Assistant/index.jsx.
+// Air-raid alert and service status stay as placeholders, deliberately not built out yet.
 export const statusCards = [
-  { label: "Погода", icon: "sunny", title: "18°C", text: "Сонячно", tone: "text-secondary-container" },
   { label: "Повітряна тривога", icon: "security", title: "Тривоги немає", text: "Безпечно", tone: "text-green-600" },
   { label: "Статус послуг", icon: "bolt", title: "Електрика", text: "Графік відключень", tone: "text-secondary" },
 ];
@@ -8,63 +10,6 @@ export const chatSuggestions = [
   "Де ЦНАП?",
   "Перевірити графік відключень",
   "Створити звернення про яму",
-];
-
-export const chats = [
-  {
-    id: "power-outage",
-    title: "Графік відключень на завтра",
-    date: "Сьогодні, 14:30",
-    active: true,
-    preview: "Пояснив, як перевірити чергу та отримати push-нагадування.",
-    messages: [
-      { role: "user", text: "Чи буде завтра відключення електрики на Театральній?" },
-      { role: "assistant", text: "Для вул. Театральної зараз прив'язана черга 3. Планові відключення очікуються з 10:00 до 12:00 та з 18:00 до 20:00, якщо ліміти не зміняться." },
-      { role: "assistant", card: { icon: "bolt", title: "Корисно", text: "Увімкніть push-нагадування в профілі, щоб отримати сповіщення за 30 хвилин до можливого відключення." } },
-    ],
-  },
-  {
-    id: "nearest-cnap",
-    title: "Де знаходиться найближчий ЦНАП?",
-    date: "Вчора, 09:15",
-    active: true,
-    preview: "Найближчий ЦНАП та години роботи.",
-    messages: [
-      { role: "user", text: "Де знаходиться найближчий ЦНАП?" },
-      { role: "assistant", text: "Найближчий ЦНАП: майдан Польовий, 8. Сьогодні працює до 17:00. Орієнтовний час очікування: 12 хвилин." },
-      { role: "assistant", card: { icon: "account_balance", title: "Документи", text: "Для більшості адміністративних послуг потрібні паспорт, РНОКПП та заява." } },
-    ],
-  },
-  {
-    id: "pay-utilities",
-    title: "Як оплатити комуналку онлайн?",
-    date: "12 Травня, 18:42",
-    preview: "Покрокова інструкція для оплати послуг.",
-    messages: [
-      { role: "user", text: "Як оплатити комуналку онлайн?" },
-      { role: "assistant", text: "Відкрийте сервіс постачальника, введіть особовий рахунок, перевірте суму та підтвердьте оплату карткою. Збережіть квитанцію до зарахування платежу." },
-    ],
-  },
-  {
-    id: "appeal-status",
-    title: "Статус заявки на ремонт дороги",
-    date: "10 Травня, 11:20",
-    preview: "Пояснив статус звернення та наступний крок.",
-    messages: [
-      { role: "user", text: "Що зі зверненням про яму на Перемоги?" },
-      { role: "assistant", text: "Звернення №1245 зараз у статусі «В роботі». Відповідальна служба має оновити статус до кінця робочого тижня." },
-    ],
-  },
-  {
-    id: "trolleybus-3",
-    title: "Розклад руху тролейбуса №3",
-    date: "05 Травня, 08:05",
-    preview: "Найближчі прибуття та напрямок маршруту.",
-    messages: [
-      { role: "user", text: "Коли буде тролейбус №3?" },
-      { role: "assistant", text: "Найближчі прибуття на вашу зупинку: 6 хв, 18 хв, 31 хв. Напрямок: Вокзал." },
-    ],
-  },
 ];
 
 export const notifications = [
