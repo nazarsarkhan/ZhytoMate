@@ -24,7 +24,10 @@ const appealSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    imageUrl: { type: String, required: true, trim: true },
+    // Optional: chat-created appeals (assistant actions framework) publish without a photo.
+    // Form-created appeals (POST /appeals) still require one via createAppealSchema's Joi
+    // validation at the HTTP layer - this relaxation is DB-level only.
+    imageUrl: { type: String, trim: true, default: "" },
     category: { type: String, enum: APPEAL_CATEGORIES, required: true },
     description: { type: String, required: true, trim: true },
     address: { type: String, required: true, trim: true },
