@@ -5,7 +5,7 @@ import { normalizeItem } from '../pipeline/normalizer.js';
 import { enqueueItem, enqueueItems } from '../delivery/sender.js';
 
 let client;
-const defaultBackfillDays = 2;
+const defaultBackfillDays = 30;
 const defaultBackfillLimit = 1000;
 
 function getRequiredEnv(name) {
@@ -137,7 +137,10 @@ async function resolvePluginEntity(plugin) {
 }
 
 async function backfillTelegramPlugin(plugin) {
-  const backfillDays = plugin.settings?.backfillDays || defaultBackfillDays;
+  const backfillDays = getEnvNumber(
+    `TG_${plugin.id.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_BACKFILL_DAYS`,
+    plugin.settings?.backfillDays || getEnvNumber('TG_BACKFILL_DAYS', defaultBackfillDays),
+  );
   const backfillLimit = getEnvNumber(
     `TG_${plugin.id.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_BACKFILL_LIMIT`,
     plugin.settings?.backfillLimit || getEnvNumber('TG_BACKFILL_LIMIT', defaultBackfillLimit),
