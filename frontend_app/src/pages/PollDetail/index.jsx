@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import Shell from "../../components/layout/Shell.jsx";
 import AppHeader from "../../components/layout/AppHeader.jsx";
 import BottomNav from "../../components/navigation/BottomNav.jsx";
@@ -10,22 +9,21 @@ import { useSurvey, useVoteSurvey } from "../../hooks/useSurveys.js";
 import { formatDate } from "../../lib/formatDate.js";
 import { formatTimeLeft } from "../../lib/formatTimeLeft.js";
 
-function ResultsPanel({ poll, locale }) {
-  const { t } = useTranslation();
+function ResultsPanel({ poll }) {
   const leader = useMemo(() => [...poll.options].sort((a, b) => b.percent - a.percent)[0], [poll.options]);
 
   return (
     <section className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-soft">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-on-surface">{t("polls.anonymousStats")}</h2>
-          <p className="mt-1 text-xs leading-5 text-on-surface-variant">{t("polls.privacy")}</p>
+          <h2 className="text-lg font-bold text-on-surface">Анонімна статистика</h2>
+          <p className="mt-1 text-xs leading-5 text-on-surface-variant">Показані лише агреговані результати. Дані окремих мешканців не відображаються і не передаються у відкриту статистику.</p>
         </div>
-        <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">{t("polls.totalVotes", { count: poll.totalVotes })}</span>
+        <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">{poll.totalVotes} голосів</span>
       </div>
       <div className="mb-4 grid gap-2 text-xs text-on-surface-variant sm:grid-cols-2">
-        <span className="rounded-lg bg-surface-container-low px-3 py-2"><b>{t("polls.updated")}:</b> {formatDate(poll.updatedAt, locale)}</span>
-        {leader ? <span className="rounded-lg bg-surface-container-low px-3 py-2"><b>{t("polls.leader")}:</b> {leader.label}</span> : null}
+        <span className="rounded-lg bg-surface-container-low px-3 py-2"><b>Оновлено:</b> {formatDate(poll.updatedAt)}</span>
+        {leader ? <span className="rounded-lg bg-surface-container-low px-3 py-2"><b>Лідирує:</b> {leader.label}</span> : null}
       </div>
       <div className="space-y-3">
         {poll.options.map((option) => {
@@ -40,8 +38,8 @@ function ResultsPanel({ poll, locale }) {
                 <div className="h-full rounded-full bg-secondary-container" style={{ width: `${option.percent}%` }} />
               </div>
               <div className="mt-2 flex items-center justify-between gap-3 text-xs text-on-surface-variant">
-                <span>{t("polls.voteCount", { count: option.votes })}</span>
-                {isMine ? <span className="font-bold text-on-secondary-container">{t("polls.voteRecorded")}</span> : null}
+                <span>{option.votes} голосів</span>
+                {isMine ? <span className="font-bold text-on-secondary-container">Ваш голос враховано конфіденційно</span> : null}
               </div>
             </div>
           );
@@ -52,7 +50,6 @@ function ResultsPanel({ poll, locale }) {
 }
 
 export default function PollDetailPage() {
-  const { t, i18n } = useTranslation();
   const { pollId } = useParams();
   const pollQuery = useSurvey(pollId);
   const poll = pollQuery.data;
@@ -80,20 +77,20 @@ export default function PollDetailPage() {
     try {
       if (navigator.share) await navigator.share(shareData);
       else await navigator.clipboard?.writeText(window.location.href);
-      showToast(t("common.shared"));
+      showToast("Посилання скопійовано");
     } catch {
-      showToast(t("common.shared"));
+      showToast("Посилання скопійовано");
     }
   };
 
   const handleVote = async () => {
     if (!selectedOptionId) {
-      showToast(t("polls.selectOption"));
+      showToast("Оберіть варіант, щоб проголосувати");
       return;
     }
     try {
       await voteSurvey.mutateAsync(selectedOptionId);
-      showToast(t("polls.voteRecorded"));
+      showToast("Ваш голос враховано конфіденційно");
     } catch (err) {
       showToast(err.message);
     }
@@ -101,7 +98,7 @@ export default function PollDetailPage() {
 
   return (
     <Shell className="bg-background pb-44">
-      <AppHeader title={t("polls.title")} backTo="/services/polls" rightIcon="share" rightLabel={t("common.share")} onRightClick={handleShare} />
+      <AppHeader title="Опитування" backTo="/services/polls" rightIcon="share" rightLabel="Поділитися" onRightClick={handleShare} />
       <main className="mx-auto w-full max-w-2xl space-y-section-margin px-container-padding py-section-margin sm:px-6 md:px-8">
         <div className="flex flex-wrap justify-between gap-2">
           {poll.category ? (
@@ -110,7 +107,7 @@ export default function PollDetailPage() {
             </span>
           ) : <span />}
           <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-bold ${poll.isOpen ? "bg-error-container text-error" : "bg-green-100 text-green-700"}`}>
-            <Icon name={poll.isOpen ? "schedule" : "check_circle"} className="text-base" /> {formatTimeLeft(poll, t)}
+            <Icon name={poll.isOpen ? "schedule" : "check_circle"} className="text-base" /> {formatTimeLeft(poll)}
           </span>
         </div>
         <section>
@@ -119,7 +116,7 @@ export default function PollDetailPage() {
         </section>
         {!voted && poll.isOpen ? (
           <section>
-            <h2 className="mb-3 text-lg font-bold text-primary">{t("polls.chooseOption")}</h2>
+            <h2 className="mb-3 text-lg font-bold text-primary">Оберіть варіант реалізації:</h2>
             <form className="space-y-stack-gap">
               {poll.options.map((option) => (
                 <label key={option.id} className="flex cursor-pointer items-start rounded-xl border border-outline-variant/50 bg-surface-container-lowest p-4 transition has-[:checked]:border-secondary-container has-[:checked]:bg-secondary-container/10">
@@ -130,7 +127,7 @@ export default function PollDetailPage() {
             </form>
           </section>
         ) : (
-          <ResultsPanel poll={poll} locale={i18n.resolvedLanguage} />
+          <ResultsPanel poll={poll} />
         )}
       </main>
       {poll.isOpen && !voted ? (
@@ -141,7 +138,7 @@ export default function PollDetailPage() {
             type="button"
             onClick={handleVote}
           >
-            {t("polls.vote")} {selectedOption ? <span className="hidden text-sm sm:inline">- {selectedOption.label}</span> : null}
+            Проголосувати {selectedOption ? <span className="hidden text-sm sm:inline">- {selectedOption.label}</span> : null}
           </button>
         </div>
       ) : null}

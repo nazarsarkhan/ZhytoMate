@@ -32,7 +32,7 @@ export default function App() {
       <Route path="/chat-history/:chatId" element={<RequireAuth><ChatConversationPage /></RequireAuth>} />
       <Route path="/notifications" element={<RequireAuth><NotificationsPage /></RequireAuth>} />
       <Route path="/news" element={<RequireAuth><NewsPage /></RequireAuth>} />
-      <Route path="/news/flower-festival" element={<RequireAuth><NewsDetailPage /></RequireAuth>} />
+      <Route path="/news/:newsId" element={<RequireAuth><NewsDetailPage /></RequireAuth>} />
       <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
       <Route path="/services" element={<RequireAuth><ServicesPage /></RequireAuth>} />
       <Route path="/services/contacts" element={<RequireAuth><ContactsPage /></RequireAuth>} />

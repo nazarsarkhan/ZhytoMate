@@ -7,6 +7,7 @@ import {
   findUserByIdAndUpdateAvatar,
   findUserByIdAndUpdateName,
   findUserByIdAndUpdatePassword,
+  findUserByIdAndUpdatePreferences,
   findUserById,
 } from "./user.repository.js";
 import { ApiError } from "../../shared/ApiError.js";
@@ -73,6 +74,16 @@ export async function updateUserAddress({ id, address }) {
   return toPublicUser(user);
 }
 
+export async function updateUserPreferences({ id, preferences }) {
+  const user = await findUserByIdAndUpdatePreferences({ id, preferences });
+
+  if (!user) {
+    throw ApiError.notFound("User not found");
+  }
+
+  return toPublicUser(user);
+}
+
 export async function updateUserAvatarFromUpload({ userId, filename, hostUrl }) {
   const previousUser = await findUserById(userId);
   const avatarUrl = `${hostUrl}/uploads/avatars/${filename}`;
@@ -108,6 +119,7 @@ export default {
   createUserProfile,
   updateUserName,
   updateUserAddress,
+  updateUserPreferences,
   updateUserAvatarFromUpload,
   updateUserPassword,
 };

@@ -1,11 +1,9 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import Icon from "../ui/Icon.jsx";
 import { adminNavItem, navItems } from "../../consts/navItems.js";
 import { useCurrentUser } from "../../hooks/useCurrentUser.js";
 
 export default function SideNav() {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   const currentUser = useCurrentUser();
   const visibleItems = currentUser.data?.role === "admin" ? [...navItems, adminNavItem] : navItems;
@@ -17,12 +15,12 @@ export default function SideNav() {
           <Icon name="location_city" filled className="text-[24px]" />
         </span>
         <span className="min-w-0">
-          <span className="block text-sm font-bold leading-tight">{t("app.name")}</span>
-          <span className="block truncate text-xs text-white/50">{t("nav.portal")}</span>
+          <span className="block text-sm font-bold leading-tight">Zhytomyr Assistant</span>
+          <span className="block truncate text-xs text-white/50">Портал міських сервісів</span>
         </span>
       </div>
       <nav className="flex flex-1 flex-col gap-1.5">
-        {visibleItems.map(({ key, href, icon, labelKey, label }) => (
+        {visibleItems.map(({ key, href, icon, label }) => (
           <NavLink
             key={key}
             to={href}
@@ -33,7 +31,7 @@ export default function SideNav() {
             {({ isActive }) => (
               <>
                 <Icon name={icon} filled={isActive} className="text-[22px]" />
-                {labelKey ? t(labelKey) : label}
+                {label}
               </>
             )}
           </NavLink>
@@ -41,10 +39,10 @@ export default function SideNav() {
       </nav>
       <div className="border-t border-white/10 pt-4">
         <Link className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-white/70 transition hover:bg-white/5 hover:text-white" to="/profile">
-          <Icon name="settings" className="text-[22px]" /> {t("nav.settings")}
+          <Icon name="settings" className="text-[22px]" /> Налаштування
         </Link>
         <button className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-white/70 transition hover:bg-white/5 hover:text-white" type="button" onClick={() => navigate("/assistant")}>
-          <Icon name="logout" className="text-[22px]" /> {t("profile.logout")}
+          <Icon name="logout" className="text-[22px]" /> Вийти
         </button>
       </div>
     </aside>

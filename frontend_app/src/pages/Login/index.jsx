@@ -1,12 +1,10 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { useAuth } from "../../hooks/useAuth.jsx";
 import { ApiError } from "../../lib/apiClient.js";
 import Icon from "../../components/ui/Icon.jsx";
 
 export default function LoginPage() {
-  const { t } = useTranslation();
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -26,7 +24,7 @@ export default function LoginPage() {
       await login({ login: login_.trim(), password });
       navigate(location.state?.from?.pathname || "/assistant", { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("auth.genericError"));
+      setError(err instanceof ApiError ? err.message : "Щось пішло не так. Спробуйте ще раз.");
     } finally {
       setIsSubmitting(false);
     }
@@ -39,23 +37,23 @@ export default function LoginPage() {
           <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-container text-on-primary">
             <Icon name="location_city" filled className="text-[28px]" />
           </span>
-          <h1 className="text-xl font-bold text-on-surface">{t("auth.loginTitle")}</h1>
-          <p className="mt-1 text-sm text-on-surface-variant">{t("app.name")}</p>
+          <h1 className="text-xl font-bold text-on-surface">Увійти</h1>
+          <p className="mt-1 text-sm text-on-surface-variant">Zhytomyr Assistant</p>
         </div>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <label className="block">
-            <span className="mb-1.5 ml-1 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">{t("auth.loginField")}</span>
+            <span className="mb-1.5 ml-1 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">Email або логін</span>
             <input
               autoComplete="username"
               className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-4 text-sm outline-none focus:border-secondary-container"
-              placeholder={t("auth.loginFieldPlaceholder")}
+              placeholder="you@example.com"
               type="text"
               value={login_}
               onChange={(event) => setLogin(event.target.value)}
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 ml-1 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">{t("auth.password")}</span>
+            <span className="mb-1.5 ml-1 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">Пароль</span>
             <input
               autoComplete="current-password"
               className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-4 text-sm outline-none focus:border-secondary-container"
@@ -71,11 +69,11 @@ export default function LoginPage() {
             disabled={!canSubmit}
             type="submit"
           >
-            {isSubmitting ? t("auth.signingIn") : t("auth.signIn")}
+            {isSubmitting ? "Вхід..." : "Увійти"}
           </button>
         </form>
         <p className="mt-5 text-center text-sm text-on-surface-variant">
-          {t("auth.noAccount")} <Link className="font-bold text-on-tertiary-fixed-variant" to="/register">{t("auth.createAccount")}</Link>
+          Немає акаунту? <Link className="font-bold text-on-tertiary-fixed-variant" to="/register">Створити акаунт</Link>
         </p>
       </div>
     </div>

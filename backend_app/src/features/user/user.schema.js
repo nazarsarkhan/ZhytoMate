@@ -13,7 +13,13 @@ export const updateAddressSchema = Joi.object({
   city: Joi.string().trim().max(120).allow("").optional(),
 });
 
+export const updatePreferencesSchema = Joi.object({
+  utilityAlerts: Joi.boolean().required(),
+  cityNews: Joi.boolean().required(),
+});
+
 export default {
   updateNameSchema,
   updateAddressSchema,
+  updatePreferencesSchema,
 };

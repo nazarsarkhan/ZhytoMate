@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import ActionCard from "../../components/assistant/ActionCard.jsx";
 import Shell from "../../components/layout/Shell.jsx";
 import AppHeader from "../../components/layout/AppHeader.jsx";
@@ -13,7 +12,6 @@ import { useCurrentUser } from "../../hooks/useCurrentUser.js";
 import { chatSuggestions, statusCards } from "../../consts/homeData.js";
 
 export default function AssistantPage() {
-  const { t } = useTranslation();
   const currentUser = useCurrentUser();
   const assistantChat = useAssistantChat();
   const confirmAction = useConfirmAction();
@@ -55,7 +53,7 @@ export default function AssistantPage() {
         { role: "assistant", text: result.answer, actionCard: result.actionCard || null },
       ]);
     } catch {
-      setMessages((current) => [...current, { role: "assistant", text: t("chat.error"), isError: true }]);
+      setMessages((current) => [...current, { role: "assistant", text: "Щось пішло не так. Спробуйте ще раз.", isError: true }]);
     }
   };
 
@@ -74,12 +72,12 @@ export default function AssistantPage() {
   return (
     <Shell className="bg-background pb-28">
       <AppHeader
-        eyebrow={t("app.name")}
+        eyebrow="Zhytomyr Assistant"
         profile={
           currentUser.data
             ? {
                 name: currentUser.data.firstName,
-                location: t("app.city"),
+                location: "Житомир",
                 avatarUrl: currentUser.data.avatarUrl,
               }
             : undefined
@@ -113,9 +111,9 @@ export default function AssistantPage() {
 
         <section className="motion-card interactive-card mx-4 rounded-3xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-sm sm:mx-6 md:mx-0 md:p-6">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-on-surface">{t("chat.assistant")}</h2>
+            <h2 className="text-lg font-bold text-on-surface">AI Асистент</h2>
             <Link to="/chat-history" className="flex items-center gap-1 text-xs font-medium text-on-primary-container">
-              <Icon name="history" className="text-base" /> {t("chat.openHistory")}
+              <Icon name="history" className="text-base" /> Історія чатів
             </Link>
           </div>
           <div className="mb-6 max-h-64 space-y-3 overflow-y-auto pr-1">
@@ -165,12 +163,12 @@ export default function AssistantPage() {
               <button key={label} className="rounded-full border border-outline-variant/50 px-4 py-2 text-sm text-on-surface transition hover:border-primary-container hover:bg-primary-fixed/35 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50" disabled={isBusy} type="button" onClick={() => sendMessage(label)}>{label}</button>
             ))}
           </div>
-          {listening ? <p className="mb-2 text-xs font-bold text-on-tertiary-fixed-variant">{t("chat.listening")}</p> : null}
+          {listening ? <p className="mb-2 text-xs font-bold text-on-tertiary-fixed-variant">Слухаю запит...</p> : null}
           <div className="mb-4 flex h-14 items-center rounded-2xl border border-outline-variant/50 bg-surface shadow-sm focus-within:border-primary-container">
             <input
               className="h-full min-w-0 flex-1 border-0 bg-transparent px-4 text-sm outline-none placeholder:text-outline disabled:cursor-not-allowed"
               disabled={isBusy}
-              placeholder={isBusy ? t("chat.thinking") : t("chat.inputPlaceholder")}
+              placeholder={isBusy ? "AI обмірковує відповідь..." : "Запитай асистента..."}
               value={input}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => { if (event.key === "Enter") sendMessage(); }}
@@ -185,7 +183,7 @@ export default function AssistantPage() {
             type="button"
             onClick={() => sendMessage()}
           >
-            {isBusy ? t("chat.thinking") : t("chat.ask")} <Icon name="arrow_forward" className="text-xl" />
+            {isBusy ? "AI обмірковує відповідь..." : "Запитати AI"} <Icon name="arrow_forward" className="text-xl" />
           </button>
         </section>
       </main>

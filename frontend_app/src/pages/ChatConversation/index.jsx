@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Navigate, useParams } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import ActionCard from "../../components/assistant/ActionCard.jsx";
 import Shell from "../../components/layout/Shell.jsx";
 import AppHeader from "../../components/layout/AppHeader.jsx";
@@ -59,7 +58,6 @@ function MessageBubble({ message, index, conversationId, confirmAction, cancelAc
 }
 
 export default function ChatConversationPage() {
-  const { t, i18n } = useTranslation();
   const { chatId } = useParams();
   const conversation = useConversation(chatId);
   const assistantChat = useAssistantChat();
@@ -123,7 +121,7 @@ export default function ChatConversationPage() {
         { role: "assistant", text: result.answer, actionCard: result.actionCard || null },
       ]);
     } catch {
-      setMessages((current) => [...current, { role: "assistant", text: t("chat.error"), isError: true }]);
+      setMessages((current) => [...current, { role: "assistant", text: "Щось пішло не так. Спробуйте ще раз.", isError: true }]);
     }
   };
 
@@ -142,11 +140,11 @@ export default function ChatConversationPage() {
 
   return (
     <Shell className="bg-surface-container-low pb-40">
-      <AppHeader title={t("chat.conversation")} backTo="/chat-history" rightIcon="notifications" rightTo="/notifications" />
+      <AppHeader title="Чат" backTo="/chat-history" rightIcon="notifications" rightTo="/notifications" />
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-3 px-container-padding py-section-margin sm:px-6 md:px-8">
         <div className="mb-2">
           <h1 className="text-2xl font-bold text-primary">{conversation.data.title}</h1>
-          <p className="mt-1 text-sm text-on-surface-variant">{formatDate(conversation.data.createdAt, i18n.resolvedLanguage)}</p>
+          <p className="mt-1 text-sm text-on-surface-variant">{formatDate(conversation.data.createdAt)}</p>
         </div>
         {messages.map((message, index) => (
           <MessageBubble
@@ -162,12 +160,12 @@ export default function ChatConversationPage() {
         <div ref={messagesEndRef} className="scroll-mb-40" />
       </main>
       <div className="fixed inset-x-0 bottom-[calc(72px+var(--safe-bottom))] z-40 mx-auto w-full max-w-[1180px] border-t border-outline-variant/20 bg-surface/95 px-container-padding py-3 backdrop-blur-md sm:px-6 md:px-8">
-        {listening ? <p className="mx-auto mb-2 max-w-3xl text-xs font-bold text-on-tertiary-fixed-variant">{t("chat.listening")}</p> : null}
+        {listening ? <p className="mx-auto mb-2 max-w-3xl text-xs font-bold text-on-tertiary-fixed-variant">Слухаю запит...</p> : null}
         <div className="mx-auto flex h-14 max-w-3xl items-center rounded-2xl border border-outline-variant/50 bg-surface-container-lowest shadow-sm focus-within:border-primary-container">
           <input
             className="h-full min-w-0 flex-1 border-0 bg-transparent px-4 text-sm outline-none placeholder:text-outline disabled:cursor-not-allowed"
             disabled={isBusy}
-            placeholder={isBusy ? t("chat.thinking") : t("chat.inputPlaceholder")}
+            placeholder={isBusy ? "AI обмірковує відповідь..." : "Запитай асистента..."}
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={(event) => { if (event.key === "Enter") sendMessage(); }}

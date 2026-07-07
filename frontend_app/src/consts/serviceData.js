@@ -1,10 +1,10 @@
 export const serviceCards = [
-  { id: "contacts", titleKey: "services.cards.contacts.title", subtitleKey: "services.cards.contacts.subtitle", icon: "contacts", tone: "bg-primary-fixed text-primary-container", href: "/services/contacts" },
-  { id: "polls", titleKey: "services.cards.polls.title", subtitleKey: "services.cards.polls.subtitle", icon: "poll", tone: "bg-green-100 text-green-700", href: "/services/polls" },
-  { id: "appeals", titleKey: "services.cards.appeals.title", subtitleKey: "services.cards.appeals.subtitle", icon: "report", tone: "bg-orange-100 text-orange-700", href: "/services/appeals" },
-  { id: "transport", titleKey: "services.cards.transport.title", subtitleKey: "services.cards.transport.subtitle", icon: "directions_bus", tone: "bg-primary-fixed text-primary-container", href: "/services/transport" },
-  { id: "utilities", titleKey: "services.cards.utilities.title", subtitleKey: "services.cards.utilities.subtitle", icon: "payments", tone: "bg-surface-container-high text-on-surface-variant", href: null, comingSoon: true },
-  { id: "healthcare", titleKey: "services.cards.healthcare.title", subtitleKey: "services.cards.healthcare.subtitle", icon: "health_and_safety", tone: "bg-blue-100 text-blue-700", href: null, comingSoon: true },
+  { id: "contacts", title: "Контакти", subtitle: "Міські служби", icon: "contacts", tone: "bg-primary-fixed text-primary-container", href: "/services/contacts" },
+  { id: "polls", title: "Опитування", subtitle: "Міські рішення", icon: "poll", tone: "bg-green-100 text-green-700", href: "/services/polls" },
+  { id: "appeals", title: "Звернення", subtitle: "Відстеження проблем", icon: "report", tone: "bg-orange-100 text-orange-700", href: "/services/appeals" },
+  { id: "transport", title: "Транспорт", subtitle: "Маршрути та розклад", icon: "directions_bus", tone: "bg-primary-fixed text-primary-container", href: "/services/transport" },
+  { id: "utilities", title: "Комунальні платежі", subtitle: "Тарифи та оплата", icon: "payments", tone: "bg-surface-container-high text-on-surface-variant", href: null, comingSoon: true },
+  { id: "healthcare", title: "Медицина", subtitle: "Запис до лікаря", icon: "health_and_safety", tone: "bg-blue-100 text-blue-700", href: null, comingSoon: true },
 ];
 
 export const emergencyServices = [

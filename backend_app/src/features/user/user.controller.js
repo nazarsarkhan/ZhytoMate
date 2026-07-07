@@ -4,6 +4,7 @@ import {
   updateUserAddress,
   updateUserAvatarFromUpload,
   updateUserName,
+  updateUserPreferences,
 } from "./user.service.js";
 
 export async function getCurrentUser(req, res, next) {
@@ -54,6 +55,19 @@ export async function updateCurrentUserAddress(req, res, next) {
   }
 }
 
+export async function updateCurrentUserPreferences(req, res, next) {
+  try {
+    const user = await updateUserPreferences({
+      id: req.user.id,
+      preferences: req.body,
+    });
+
+    return res.json({ user });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 export async function uploadCurrentUserAvatar(req, res, next) {
   try {
     if (!req.file) {
@@ -77,5 +91,6 @@ export default {
   getUserById,
   updateCurrentUserName,
   updateCurrentUserAddress,
+  updateCurrentUserPreferences,
   uploadCurrentUserAvatar,
 };

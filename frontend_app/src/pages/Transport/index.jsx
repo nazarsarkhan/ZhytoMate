@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
 import Shell from "../../components/layout/Shell.jsx";
 import AppHeader from "../../components/layout/AppHeader.jsx";
 import BottomNav from "../../components/navigation/BottomNav.jsx";
@@ -10,8 +9,15 @@ import SearchInput from "../../components/ui/SearchInput.jsx";
 import { routes } from "../../consts/serviceData.js";
 import RouteCard from "./components/RouteCard.jsx";
 
+const transportTypeLabels = {
+  all: "Усі",
+  tram: "Трамваї",
+  minibus: "Маршрутки",
+  trolleybus: "Тролейбуси",
+  bus: "Автобуси",
+};
+
 export default function TransportPage() {
-  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [selectedTypes, setSelectedTypes] = useState([]);
   const [mapOpen, setMapOpen] = useState(false);
@@ -19,8 +25,8 @@ export default function TransportPage() {
   const [savedRoutes, setSavedRoutes] = useState(() => new Set(routes.filter((route) => route.saved).map((route) => route.id)));
 
   const typeChips = useMemo(
-    () => ["all", "tram", "minibus", "trolleybus", "bus"].map((value) => ({ value, label: t(`transport.types.${value}`) })),
-    [t],
+    () => ["all", "tram", "minibus", "trolleybus", "bus"].map((value) => ({ value, label: transportTypeLabels[value] })),
+    [],
   );
 
   const filteredRoutes = useMemo(() => {
@@ -43,9 +49,9 @@ export default function TransportPage() {
 
   return (
     <Shell className="bg-surface pb-28">
-      <AppHeader title={t("transport.title")}>
+      <AppHeader title="Транспорт">
         <div className="mx-auto max-w-3xl">
-          <SearchInput dark placeholder={t("transport.searchPlaceholder")} value={query} onChange={setQuery} />
+          <SearchInput dark placeholder="Пошук маршрутів, зупинок або адрес..." value={query} onChange={setQuery} />
           <div className="mt-4">
             <FilterChips dark items={typeChips} selectedValues={selectedTypes} onChange={setSelectedTypes} />
           </div>
@@ -57,15 +63,15 @@ export default function TransportPage() {
           <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/40 to-transparent" />
           <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
             <div className="flex items-center gap-2 text-lg font-bold text-primary-container">
-              <Icon name="map" filled /> {t("transport.liveMap")}
+              <Icon name="map" filled /> Жива мапа
             </div>
-            <button className="rounded-lg bg-primary-container px-4 py-2 text-xs font-bold text-on-primary active:scale-95" type="button" onClick={() => setMapOpen(true)}>{t("common.open")}</button>
+            <button className="rounded-lg bg-primary-container px-4 py-2 text-xs font-bold text-on-primary active:scale-95" type="button" onClick={() => setMapOpen(true)}>Відкрити</button>
           </div>
         </section>
         <section>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-on-surface">{t("transport.nearbyRoutes")}</h2>
-            <span className="text-xs text-on-surface-variant">{t("transport.updating")}</span>
+            <h2 className="text-lg font-bold text-on-surface">Найближчі маршрути</h2>
+            <span className="text-xs text-on-surface-variant">Оновлюється...</span>
           </div>
           <div className="grid grid-cols-1 gap-stack-gap lg:grid-cols-2">
             {filteredRoutes.map((route) => (
@@ -77,18 +83,18 @@ export default function TransportPage() {
                 onToggleSaved={() => toggleSaved(route.id)}
               />
             ))}
-            {!filteredRoutes.length ? <p className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-6 text-center text-sm text-on-surface-variant lg:col-span-2">{t("transport.empty")}</p> : null}
+            {!filteredRoutes.length ? <p className="rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-6 text-center text-sm text-on-surface-variant lg:col-span-2">Маршрути не знайдено</p> : null}
           </div>
         </section>
       </main>
       <BottomNav active="services" dark />
-      <Modal open={mapOpen} title={t("transport.mapTitle")} sheet onClose={() => setMapOpen(false)}>
+      <Modal open={mapOpen} title="Жива мапа транспорту" sheet onClose={() => setMapOpen(false)}>
         <div className="rounded-xl border border-outline-variant/40 bg-surface-container-low p-6 text-center">
           <Icon name="map" filled className="text-5xl text-primary-container" />
-          <p className="mt-3 text-sm leading-6 text-on-surface-variant">{t("transport.mapText")}</p>
+          <p className="mt-3 text-sm leading-6 text-on-surface-variant">Тут буде підключена інтерактивна мапа транспорту.</p>
         </div>
       </Modal>
-      <Modal open={Boolean(selectedRoute)} title={t("transport.routeDetails")} sheet onClose={() => setSelectedRoute(null)}>
+      <Modal open={Boolean(selectedRoute)} title="Деталі маршруту" sheet onClose={() => setSelectedRoute(null)}>
         {selectedRoute ? (
           <article>
             <div className="flex items-start gap-4">
@@ -97,7 +103,7 @@ export default function TransportPage() {
                 <h3 className="text-xl font-bold text-on-surface">{selectedRoute.title}</h3>
                 <p className="mt-1 flex items-center gap-2 text-sm text-on-surface-variant">
                   <Icon name={selectedRoute.icon} className="text-base" />
-                  {t(`transport.types.${selectedRoute.type}`)} · {t("transport.towards")}: {selectedRoute.direction}
+                  {transportTypeLabels[selectedRoute.type]} · Напрямок: {selectedRoute.direction}
                 </p>
               </div>
             </div>
