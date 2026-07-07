@@ -50,23 +50,28 @@ function extractPendingAction(claimedConversation) {
   return { type, status, slots };
 }
 
-function findInvalidEnumFields(action, slots) {
-  return action.slotSchema.filter(
-    (field) => field.enumValues && !field.enumValues.includes(slots[field.name]),
-  );
+function findInvalidFields(action, slots) {
+  return action.slotSchema.filter((field) => {
+    const value = slots[field.name];
+    if (field.enumValues && !field.enumValues.includes(value)) return true;
+    if (field.minLength !== undefined && (typeof value !== "string" || value.length < field.minLength)) return true;
+    if (field.maxLength !== undefined && typeof value === "string" && value.length > field.maxLength) return true;
+    return false;
+  });
 }
 
 // ml-service's slot-extraction endpoint is generic/domain-agnostic - it has no idea e.g.
-// `category` must be one of APPEAL_CATEGORIES, so nothing upstream enforces this before
-// execute() runs. A malformed/out-of-enum extraction reaching here shouldn't 500 or silently
-// publish garbage: restore the draft to "collecting" and name exactly what needs correcting. The
-// user's next chat message goes through the normal extraction flow, which already overwrites
-// slots on new-value-wins-collision, so there's nothing else to clear here.
+// `category` must be one of APPEAL_CATEGORIES or that `description`/`address` have length
+// bounds, so nothing upstream enforces this before execute() runs. A malformed/out-of-enum or
+// too-short/too-long extraction reaching here shouldn't 500 or silently publish garbage: restore
+// the draft to "collecting" and name exactly what needs correcting. The user's next chat message
+// goes through the normal extraction flow, which already overwrites slots on new-value-wins-
+// collision, so there's nothing else to clear here.
 async function reviseInvalidSlots(conversationId, userId, pendingAction, invalidFields) {
   await restorePendingAction(conversationId, { ...pendingAction, status: "collecting" });
 
   const asks = invalidFields
-    .map((field) => `${field.description} (${field.enumValues.join(", ")})`)
+    .map((field) => (field.enumValues ? `${field.description} (${field.enumValues.join(", ")})` : field.description))
     .join("; ");
   const text = `Уточніть, будь ласка: ${asks}.`;
 
@@ -87,7 +92,7 @@ export async function confirmPendingAction({ conversationId, userId }) {
     return { answer: UNKNOWN_ACTION_MESSAGE };
   }
 
-  const invalidFields = findInvalidEnumFields(action, pendingAction.slots);
+  const invalidFields = findInvalidFields(action, pendingAction.slots);
   if (invalidFields.length > 0) {
     return reviseInvalidSlots(conversationId, userId, pendingAction, invalidFields);
   }
