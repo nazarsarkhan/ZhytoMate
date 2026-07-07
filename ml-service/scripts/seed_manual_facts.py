@@ -1,9 +1,12 @@
 """
 Purpose:   Offline tool (NOT served): re-ingest a small set of manually-curated, static civic facts
-           (CNAP address/hours/contacts, emergency phone numbers) that the parser's web/Telegram
-           crawl does not reliably capture as clean, directly-answerable content — the source pages
-           exist (e.g. zt-rada.gov.ua's own CNAP department page) but the parser only ever sees them
-           buried in unrelated report/statistics documents, if at all. Idempotent: POSTs to the
+           (CNAP address/hours/contacts, emergency phone numbers, current city-council leadership)
+           that the parser's web/Telegram crawl does not reliably capture as clean, directly-
+           answerable content — the source pages exist (e.g. zt-rada.gov.ua's own CNAP department
+           page) but the parser only ever sees them buried in unrelated report/statistics documents,
+           if at all. The leadership document is wartime-specific and more likely to go stale than
+           the others (see its own comment below) — re-verify it periodically, not just after a
+           reseed. Idempotent: POSTs to the
            already-running ml-service's own ingest endpoint (doc_type="instruction", so no ttl_days,
            no expiry) using document_id values stable across runs, so ingest_service's existing
            content-hash dedup makes a re-run a safe no-op unless the text actually changed. Exists
@@ -56,12 +59,31 @@ _EMERGENCY_TEXT = (
     "стаціонарного телефону."
 )
 
+# Wartime-specific and the most likely of these three to go stale: no elected mayor currently
+# (martial law suspends elections), so this describes an acting arrangement, not a normal term of
+# office. User-supplied and dated 2026-07 for exactly that reason — re-verify before reusing this
+# past a change in the war's legal status or a reported personnel change.
+_LEADERSHIP_TEXT = (
+    "У Житомирі немає офіційно обраного міського голови. Попередній очільник міста Сергій "
+    "Іванович Сухомлин достроково склав повноваження у вересні 2024 року та був призначений "
+    "на посаду голови Державного агентства відновлення та розвитку інфраструктури України.\n\n"
+    "Оскільки в умовах воєнного стану чергові вибори мера не проводяться, обов'язки міського "
+    "голови виконує секретар міської ради Галина Степанівна Шиманська. До обрання секретарем "
+    "міськради у 2024 році вона працювала завідувачкою житомирських дитячих садків.\n\n"
+    "Перший заступник міського голови - Світлана Григорівна Ольшанська, курує питання "
+    "бюджету, фінансів та економіки.\n\n"
+    "Виконавчий комітет та депутатський корпус Житомирської міської ради продовжують "
+    "повноцінно працювати для забезпечення життєдіяльності громади: затверджують бюджети, "
+    "координують підтримку військових та роботу комунальних служб."
+)
+
 # document_id stays stable across runs — ingest_service's dedup is keyed on content hash per
 # document_id, so re-running this script after an edit to the text above correctly re-ingests only
 # the changed document, and re-running it unchanged is a safe no-op (status: "duplicate").
 _DOCUMENTS = [
     ("manual-cnap-facts-2026-07", _CNAP_TEXT),
     ("manual-emergency-numbers-2026-07", _EMERGENCY_TEXT),
+    ("manual-city-leadership-2026-07", _LEADERSHIP_TEXT),
 ]
 
 
