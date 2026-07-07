@@ -102,6 +102,22 @@ def test_build_rag_prompt_never_offers_a_russian_directive() -> None:
     assert "ніколи не відповідай" in ru  # the directive's explicit anti-Russian clause
 
 
+def test_build_rag_prompt_forbids_substituting_another_citys_fact() -> None:
+    """Regression: live-reproduced bug (2026-07-07) where "Хто мер?" (who is the mayor) grounded on
+    a real, legitimate KB chunk — a Telegram news story about DORTMUND's own mayor visiting
+    Zhytomyr — and the model answered by naming the Dortmund mayor as if he led Zhytomyr. The
+    pre-existing "answer ONLY from context, be honest if there's no answer" instruction was not
+    specific enough to stop this: the context genuinely mentioned "мер", so the model treated that
+    as license to answer, without checking that the mer in question belonged to a different city.
+    The system instruction must explicitly name this failure mode: a context chunk about a
+    different city/country's person or institution does not answer a Zhytomyr question, even when
+    the topic or the exact query word matches."""
+    prompt = build_rag_prompt(["контекст"], "Хто мер?")
+    assert "ІНШОГО міста" in prompt
+    assert "те саме слово" in prompt
+    assert "факт про інше місто чи особу" in prompt
+
+
 def test_build_safety_check_prompt_carries_query_and_demands_json() -> None:
     query = "Коли вивезуть сміття?"
     prompt = build_safety_check_prompt(query)
@@ -147,6 +163,26 @@ def test_build_general_prompt_never_offers_a_russian_directive() -> None:
     ru = build_general_prompt("как дела", answer_lang="ru")
     assert "РОСІЙСЬКОЮ" not in ru
     assert ru.count("УКРАЇНСЬКОЮ") == 2
+
+
+def test_build_general_prompt_broadens_honesty_trigger_beyond_services() -> None:
+    """Before this fix, the "be honest, don't invent" branch only fired for an enumerated services
+    category (addresses/numbers/deadlines/procedures) that omitted personnel/leadership entirely —
+    so a personnel question like "хто мер?" (who is the mayor), if it ever lands on the ungrounded
+    path, could fall through to the "just chat naturally" branch instead of admitting there's no
+    confirmed answer. The category must now explicitly cover officials/institutions/events too,
+    not just service logistics."""
+    prompt = build_general_prompt("Хто мер?")
+    assert "посадові особи" in prompt
+
+
+def test_build_general_prompt_forbids_substituting_another_citys_fact() -> None:
+    """Defense in depth for the same bug class as build_rag_prompt's anti-substitution guard (see
+    test_build_rag_prompt_forbids_substituting_another_citys_fact): if a similarly-shaped question
+    ever lands on the ungrounded path instead of the grounded one, the model must still be told not
+    to invent an answer by naming a fact about a different city or person."""
+    prompt = build_general_prompt("Хто мер?")
+    assert "факт про інше місто чи особу" in prompt
 
 
 def test_safety_check_prompt_includes_action_intent_contract() -> None:
