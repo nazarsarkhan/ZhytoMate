@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import Icon from "../ui/Icon.jsx";
 
 export default function ActionCard({ actionCard, onConfirm, onCancel }) {
+  const { t } = useTranslation();
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState(null);
 
@@ -12,7 +14,7 @@ export default function ActionCard({ actionCard, onConfirm, onCancel }) {
     try {
       await fn();
     } catch (err) {
-      setError(err?.message || "Щось пішло не так. Спробуйте ще раз.");
+      setError(err?.message || t("chat.error"));
     } finally {
       setIsPending(false);
     }
@@ -29,7 +31,7 @@ export default function ActionCard({ actionCard, onConfirm, onCancel }) {
           onClick={() => handle(onConfirm)}
           className="flex flex-1 items-center justify-center gap-1 rounded-full bg-secondary-container px-3 py-2 text-sm font-bold text-on-secondary-container disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <Icon name="check" className="text-base" /> Підтвердити
+          <Icon name="check" className="text-base" /> {t("chat.confirm")}
         </button>
         <button
           type="button"
@@ -37,7 +39,7 @@ export default function ActionCard({ actionCard, onConfirm, onCancel }) {
           onClick={() => handle(onCancel)}
           className="flex flex-1 items-center justify-center gap-1 rounded-full border border-outline-variant/50 px-3 py-2 text-sm font-bold text-on-surface disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <Icon name="close" className="text-base" /> Скасувати
+          <Icon name="close" className="text-base" /> {t("common.cancel")}
         </button>
       </div>
     </div>

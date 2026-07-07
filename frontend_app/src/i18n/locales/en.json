@@ -203,6 +203,7 @@
     "empty": "No chats found",
     "sentHint": "The answer is generated locally for the UI prototype.",
     "thinking": "AI is thinking...",
-    "error": "Something went wrong. Please try again."
+    "error": "Something went wrong. Please try again.",
+    "confirm": "Confirm"
   }
 }
