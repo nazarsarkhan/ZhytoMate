@@ -18,6 +18,10 @@ export default function AssistantPage() {
   const assistantChat = useAssistantChat();
   const confirmAction = useConfirmAction();
   const cancelAction = useCancelAction();
+  // A pending confirm/cancel and a pending chat turn both mutate the same conversation's
+  // pendingAction server-side - letting the composer send a new message while either is in flight
+  // would race the atomic confirm/cancel claim against a chat turn that can also rewrite the draft.
+  const isBusy = assistantChat.isPending || confirmAction.isPending || cancelAction.isPending;
   const [input, setInput] = useState("");
   const [listening, setListening] = useState(false);
   const [messages, setMessages] = useState([
@@ -29,16 +33,25 @@ export default function AssistantPage() {
   const [conversationId, setConversationId] = useState(null);
   const messagesEndRef = useAutoScrollToBottom(messages);
 
+  // A fresh confirming card always supersedes whatever was shown before - there is exactly one
+  // pendingAction per conversation server-side, so a NEW actionCard means any earlier one is now
+  // stale. A plain reply that carries no actionCard (e.g. an unrelated question the backend
+  // answered without touching the draft) must leave earlier cards untouched - the design spec
+  // requires the draft to survive an off-topic interruption, so collapsing on every reply would
+  // wrongly kill the user's ability to confirm/cancel a draft that's still alive server-side.
+  const collapseEarlierActionCards = (current) =>
+    current.map((message) => (message.actionCard ? { ...message, actionCard: null } : message));
+
   const sendMessage = async (textFromChip) => {
     const text = (textFromChip || input).trim();
-    if (!text || assistantChat.isPending) return;
+    if (!text || isBusy) return;
     setMessages((current) => [...current, { role: "user", text }]);
     setInput("");
     try {
       const result = await assistantChat.mutateAsync({ userQuery: text, conversationId });
       if (result.conversationId) setConversationId(result.conversationId);
       setMessages((current) => [
-        ...current,
+        ...(result.actionCard ? collapseEarlierActionCards(current) : current),
         { role: "assistant", text: result.answer, actionCard: result.actionCard || null },
       ]);
     } catch {
@@ -49,12 +62,12 @@ export default function AssistantPage() {
   // Once an action card is resolved, it must stop being interactive - otherwise a later re-click
   // would still reach the backend (safely, but as a confusing "No action awaiting confirmation"
   // error with no visible cause) since the card itself has no notion of its own past outcome.
-  const applyActionResult = (index, result) => {
+  const applyActionResult = (index, actionResult) => {
     setMessages((current) => [
       ...current.map((message, messageIndex) =>
         messageIndex === index ? { ...message, actionCard: null } : message,
       ),
-      { role: "assistant", text: result.answer },
+      { role: "assistant", text: actionResult.answer },
     ]);
   };
 
@@ -106,6 +119,10 @@ export default function AssistantPage() {
             </Link>
           </div>
           <div className="mb-6 max-h-64 space-y-3 overflow-y-auto pr-1">
+            {/* Keyed by role+index, not a stable id - relies on messages staying strictly
+                append-only. An action-card message now carries meaningful local state inside
+                ActionCard (its own isPending/error), so reordering or removing a message would
+                silently hand that state to the wrong list item. */}
             {messages.map((message, index) => {
               const isUser = message.role === "user";
               return (
@@ -145,15 +162,15 @@ export default function AssistantPage() {
           </div>
           <div className="mb-6 flex flex-wrap gap-2">
             {chatSuggestions.map((label) => (
-              <button key={label} className="rounded-full border border-outline-variant/50 px-4 py-2 text-sm text-on-surface transition hover:border-primary-container hover:bg-primary-fixed/35 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50" disabled={assistantChat.isPending} type="button" onClick={() => sendMessage(label)}>{label}</button>
+              <button key={label} className="rounded-full border border-outline-variant/50 px-4 py-2 text-sm text-on-surface transition hover:border-primary-container hover:bg-primary-fixed/35 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50" disabled={isBusy} type="button" onClick={() => sendMessage(label)}>{label}</button>
             ))}
           </div>
           {listening ? <p className="mb-2 text-xs font-bold text-on-tertiary-fixed-variant">{t("chat.listening")}</p> : null}
           <div className="mb-4 flex h-14 items-center rounded-2xl border border-outline-variant/50 bg-surface shadow-sm focus-within:border-primary-container">
             <input
               className="h-full min-w-0 flex-1 border-0 bg-transparent px-4 text-sm outline-none placeholder:text-outline disabled:cursor-not-allowed"
-              disabled={assistantChat.isPending}
-              placeholder={assistantChat.isPending ? t("chat.thinking") : t("chat.inputPlaceholder")}
+              disabled={isBusy}
+              placeholder={isBusy ? t("chat.thinking") : t("chat.inputPlaceholder")}
               value={input}
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={(event) => { if (event.key === "Enter") sendMessage(); }}
@@ -164,11 +181,11 @@ export default function AssistantPage() {
           </div>
           <button
             className="flex h-14 w-full items-center justify-center gap-2 rounded-full bg-secondary-container text-lg font-bold text-on-secondary-container shadow-md transition hover:bg-secondary-fixed hover:shadow-lg active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={assistantChat.isPending}
+            disabled={isBusy}
             type="button"
             onClick={() => sendMessage()}
           >
-            {assistantChat.isPending ? t("chat.thinking") : t("chat.ask")} <Icon name="arrow_forward" className="text-xl" />
+            {isBusy ? t("chat.thinking") : t("chat.ask")} <Icon name="arrow_forward" className="text-xl" />
           </button>
         </section>
       </main>
