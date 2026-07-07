@@ -76,8 +76,9 @@ function buildQuery(options) {
     return {};
   }
 
+  const sinceDate = options.since.slice(0, 10);
   return {
-    published_at: { $gte: options.since },
+    publishedDate: { $gte: sinceDate },
   };
 }
 
