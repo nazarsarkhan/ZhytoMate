@@ -18,6 +18,11 @@ export const APPEAL_CATEGORIES = [
 
 export const APPEAL_STATUSES = ["new", "in_progress", "resolved", "rejected"];
 
+export const APPEAL_DESCRIPTION_MIN_LENGTH = 10;
+export const APPEAL_DESCRIPTION_MAX_LENGTH = 2000;
+export const APPEAL_ADDRESS_MIN_LENGTH = 3;
+export const APPEAL_ADDRESS_MAX_LENGTH = 500;
+
 const appealSchema = new mongoose.Schema(
   {
     user: {
