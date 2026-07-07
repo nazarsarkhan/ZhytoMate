@@ -72,11 +72,16 @@ async function postNewsItem(newsItem) {
     return;
   }
 
+  const internalToken = process.env.INTERNAL_TOKEN?.trim();
+  if (!internalToken) {
+    throw new Error('INTERNAL_TOKEN must be set when NEWS_SEND_ENABLED=true');
+  }
+
   const response = await fetch(getNewsUrl(), {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      'X-Internal-Token': process.env.INTERNAL_TOKEN,
+      'X-Internal-Token': internalToken,
     },
     body: JSON.stringify(newsItem),
   });
