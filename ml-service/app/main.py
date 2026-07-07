@@ -5,7 +5,8 @@ Purpose:   FastAPI composition root. Lifespan: run idempotent migrations, open t
            owns the answer cache, so it must be built once here rather than per-request — see
            app.deps.get_rag_service), wire app.state, start the TTL reaper; tear all down gracefully
            on shutdown. Registers the error-envelope handlers, the Prometheus instrumentator
-           (/metrics), and mounts the health, knowledge-ingest, chat-query, and vision routers.
+           (/metrics), and mounts the health, knowledge-ingest, chat-query, vision, and assistant
+           slot-extraction routers.
 Layer:     infra (composition root — the only module that wires across layers)
 May import:   app.config, app.components/*, app.services.rag_service, app.background/*, app.api/*,
               app.metrics, app.middleware, app.observability.logging, db.migrations.runner, FastAPI,
@@ -22,7 +23,7 @@ from fastapi import FastAPI
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from app import metrics  # noqa: F401 — import registers the custom counters at startup
-from app.api.v1 import health, ingest, query, vision
+from app.api.v1 import actions, health, ingest, query, vision
 from app.background.reaper import ttl_reaper
 from app.components.embedder import Embedder
 from app.components.llm import OpenAILLMClient
@@ -99,3 +100,4 @@ app.include_router(health.router)
 app.include_router(ingest.router)
 app.include_router(query.router)
 app.include_router(vision.router)
+app.include_router(actions.router)

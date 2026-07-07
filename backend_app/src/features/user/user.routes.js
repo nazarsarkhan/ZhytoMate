@@ -7,9 +7,10 @@ import {
   previewCurrentUserAddress,
   updateCurrentUserAddress,
   updateCurrentUserName,
+  updateCurrentUserPreferences,
   uploadCurrentUserAvatar,
 } from "./user.controller.js";
-import { updateAddressSchema, updateNameSchema } from "./user.schema.js";
+import { updateAddressSchema, updateNameSchema, updatePreferencesSchema } from "./user.schema.js";
 import { uploadAvatarPhoto } from "./user.upload.js";
 
 const router = Router();
@@ -26,6 +27,12 @@ router.patch(
   authenticate,
   validate(updateAddressSchema),
   updateCurrentUserAddress,
+);
+router.patch(
+  "/me/preferences",
+  authenticate,
+  validate(updatePreferencesSchema),
+  updateCurrentUserPreferences,
 );
 router.post(
   "/me/address/preview",

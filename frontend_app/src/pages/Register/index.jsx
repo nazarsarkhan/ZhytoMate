@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import { useAuth } from "../../hooks/useAuth.jsx";
 import { ApiError } from "../../lib/apiClient.js";
 import Icon from "../../components/ui/Icon.jsx";
@@ -8,7 +7,6 @@ import Icon from "../../components/ui/Icon.jsx";
 const initialForm = { username: "", firstName: "", lastName: "", email: "", password: "" };
 
 export default function RegisterPage() {
-  const { t } = useTranslation();
   const { register } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState(initialForm);
@@ -40,18 +38,18 @@ export default function RegisterPage() {
       });
       navigate("/assistant", { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("auth.genericError"));
+      setError(err instanceof ApiError ? err.message : "Щось пішло не так. Спробуйте ще раз.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const fields = [
-    { key: "username", label: t("auth.username"), autoComplete: "username", type: "text" },
-    { key: "firstName", label: t("auth.firstName"), autoComplete: "given-name", type: "text" },
-    { key: "lastName", label: t("auth.lastName"), autoComplete: "family-name", type: "text" },
-    { key: "email", label: t("profile.email"), autoComplete: "email", type: "email" },
-    { key: "password", label: t("auth.password"), autoComplete: "new-password", type: "password" },
+    { key: "username", label: "Логін", autoComplete: "username", type: "text" },
+    { key: "firstName", label: "Ім'я", autoComplete: "given-name", type: "text" },
+    { key: "lastName", label: "Прізвище", autoComplete: "family-name", type: "text" },
+    { key: "email", label: "Email", autoComplete: "email", type: "email" },
+    { key: "password", label: "Пароль", autoComplete: "new-password", type: "password" },
   ];
 
   return (
@@ -61,8 +59,8 @@ export default function RegisterPage() {
           <span className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-container text-on-primary">
             <Icon name="person_add" filled className="text-[28px]" />
           </span>
-          <h1 className="text-xl font-bold text-on-surface">{t("auth.registerTitle")}</h1>
-          <p className="mt-1 text-sm text-on-surface-variant">{t("app.name")}</p>
+          <h1 className="text-xl font-bold text-on-surface">Створити акаунт</h1>
+          <p className="mt-1 text-sm text-on-surface-variant">Zhytomyr Assistant</p>
         </div>
         <form className="space-y-4" onSubmit={handleSubmit}>
           {fields.map((field) => (
@@ -83,11 +81,11 @@ export default function RegisterPage() {
             disabled={!canSubmit}
             type="submit"
           >
-            {isSubmitting ? t("auth.creatingAccount") : t("auth.createAccount")}
+            {isSubmitting ? "Створення акаунту..." : "Створити акаунт"}
           </button>
         </form>
         <p className="mt-5 text-center text-sm text-on-surface-variant">
-          {t("auth.haveAccount")} <Link className="font-bold text-on-tertiary-fixed-variant" to="/login">{t("auth.signIn")}</Link>
+          Вже є акаунт? <Link className="font-bold text-on-tertiary-fixed-variant" to="/login">Увійти</Link>
         </p>
       </div>
     </div>

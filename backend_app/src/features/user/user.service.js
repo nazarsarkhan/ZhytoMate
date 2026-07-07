@@ -7,6 +7,7 @@ import {
   findUserByIdAndUpdateAvatar,
   findUserByIdAndUpdateName,
   findUserByIdAndUpdatePassword,
+  findUserByIdAndUpdatePreferences,
   findUserById,
 } from "./user.repository.js";
 import { ApiError } from "../../shared/ApiError.js";

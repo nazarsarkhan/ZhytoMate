@@ -6,7 +6,9 @@ export function useUpdateProfileName() {
   return useMutation({
     mutationFn: ({ firstName, lastName, phone }) =>
       apiFetch("/users/me/name", { method: "PATCH", body: { firstName, lastName, phone } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["currentUser"] }),
+    onSuccess: ({ user }) => {
+      queryClient.setQueryData(["currentUser"], user);
+    },
   });
 }
 
@@ -14,7 +16,19 @@ export function useUpdateProfileAddress() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (address) => apiFetch("/users/me/address", { method: "PATCH", body: address }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["currentUser"] }),
+    onSuccess: ({ user }) => {
+      queryClient.setQueryData(["currentUser"], user);
+    },
+  });
+}
+
+export function useUpdateProfilePreferences() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (preferences) => apiFetch("/users/me/preferences", { method: "PATCH", body: preferences }),
+    onSuccess: ({ user }) => {
+      queryClient.setQueryData(["currentUser"], user);
+    },
   });
 }
 
@@ -26,7 +40,9 @@ export function useUploadAvatar() {
       formData.append("avatar", file);
       return apiUpload("/users/me/avatar", formData);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["currentUser"] }),
+    onSuccess: ({ user }) => {
+      queryClient.setQueryData(["currentUser"], user);
+    },
   });
 }
 
@@ -36,11 +52,8 @@ export function useChangePassword() {
     mutationFn: ({ currentPassword, newPassword }) =>
       apiFetch("/auth/password", { method: "PATCH", body: { currentPassword, newPassword } }),
     onSuccess: (result) => {
-      // Changing the password bumps refreshTokenVersion server-side, invalidating every existing
-      // refresh token including this session's - the server re-issues a fresh pair so the caller
-      // isn't unexpectedly signed out; store it immediately.
       setTokens(result);
-      queryClient.invalidateQueries({ queryKey: ["currentUser"] });
+      queryClient.setQueryData(["currentUser"], result.user);
     },
   });
 }

@@ -45,4 +45,4 @@ class HybridRetriever(Retriever):
         retrieval_leg_hits.labels(leg="dense").inc(len(dense))
         retrieval_leg_hits.labels(leg="lexical").inc(len(lexical))
         fused = reciprocal_rank_fusion(dense, lexical, k=self._rrf_k)
-        return RetrievalOutcome(dense=dense, fused=fused)
+        return RetrievalOutcome(dense=dense, fused=fused, lexical=lexical)

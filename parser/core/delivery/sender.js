@@ -44,11 +44,17 @@ class DeliveryError extends Error {
   }
 }
 
-async function postItem(ingestRequest) {
+// ml-service's ingest endpoint returns HTTP 200 for "ingested", "duplicate", AND "expired" (the
+// born-expired skip) alike — an HTTP-status-only check can't tell a real embedding apart from a
+// silent discard. postItem returns that status so the caller (drainQueue) can react correctly:
+// "expired" content will never embed no matter how many times it's retried (its expiry is a
+// deterministic function of its own published_at + ttl_days), so it must be recorded as skipped,
+// not delivered, or it becomes permanently invisible without ever being in the KB.
+export async function postItem(ingestRequest) {
   if (!isRagSendEnabled()) {
     console.log('IngestRequest ready for ML service:');
     console.log(JSON.stringify(ingestRequest, null, 2));
-    return;
+    return 'ingested';
   }
 
   const response = await fetch(getRagUrl(), {
@@ -63,6 +69,9 @@ async function postItem(ingestRequest) {
   if (!response.ok) {
     throw new DeliveryError(`RAG ingest failed with HTTP ${response.status}`, response.status);
   }
+
+  const body = await response.json();
+  return body.status;
 }
 
 async function postNewsItem(newsItem) {
@@ -126,8 +135,23 @@ async function drainQueue() {
 
         console.log(`AI layer mode: ${outputs.ai.mode}`);
         await saveNewsItem(outputs.newsItem, item);
-        await postItem(outputs.ingestRequest);
+        const ragStatus = await postItem(outputs.ingestRequest);
         await postNewsItem(outputs.newsItem);
+
+        if (ragStatus === 'expired') {
+          console.warn(
+            `RAG ingest reports already-expired, not embedded: ${item.source} ${item.url || item.publishedAt}`,
+          );
+          await markScrapedItemSkipped(item, 'rag ingest returned expired');
+          continue;
+        }
+
+        if (ragStatus !== 'ingested' && ragStatus !== 'duplicate') {
+          console.warn(
+            `RAG ingest returned unexpected status "${ragStatus}" for item ${item.id}; marking delivered to avoid a retry loop, but this should be investigated`,
+          );
+        }
+
         await markScrapedItemDelivered(item);
       } catch (error) {
         if (error.permanent) {

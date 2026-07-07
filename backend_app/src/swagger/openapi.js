@@ -30,6 +30,24 @@ export const openApiSpec = {
           firstName: { type: "string", example: "Nazar" },
           lastName: { type: "string", example: "Dev" },
           email: { type: "string", example: "nazar@example.com" },
+          phone: { type: "string", example: "+380 67 123 4567" },
+          address: {
+            type: "object",
+            properties: {
+              street: { type: "string", example: "вул. Перемоги" },
+              building: { type: "string", example: "10" },
+              district: { type: "string", example: "Центр" },
+              city: { type: "string", example: "Житомир" },
+            },
+          },
+          preferences: {
+            type: "object",
+            properties: {
+              utilityAlerts: { type: "boolean", example: true },
+              cityNews: { type: "boolean", example: true },
+            },
+          },
+          avatarUrl: { type: "string", example: "http://localhost:3000/uploads/avatars/avatar.jpg" },
           role: { type: "string", enum: ["user", "admin"], example: "user" },
         },
       },
@@ -229,6 +247,30 @@ export const openApiSpec = {
                 properties: {
                   firstName: { type: "string", example: "Nazar" },
                   lastName: { type: "string", example: "Developer" },
+                  phone: { type: "string", example: "+380 67 123 4567" },
+                },
+              },
+            },
+          },
+        },
+        responses: { 200: { description: "Updated user" } },
+      },
+    },
+    "/users/me/preferences": {
+      patch: {
+        tags: ["Users"],
+        summary: "Update current user notification preferences",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["utilityAlerts", "cityNews"],
+                properties: {
+                  utilityAlerts: { type: "boolean", example: true },
+                  cityNews: { type: "boolean", example: false },
                 },
               },
             },

@@ -8,6 +8,14 @@ import BottomNav from "../../components/navigation/BottomNav.jsx";
 // vehicle-tracking map directly (Zhytomyr is the default city on this path).
 const DOZOR_MAP_URL = "https://city.dozor.tech/ua/zhytomyr/city";
 
+const transportTypeLabels = {
+  all: "Усі",
+  tram: "Трамваї",
+  minibus: "Маршрутки",
+  trolleybus: "Тролейбуси",
+  bus: "Автобуси",
+};
+
 export default function TransportPage() {
   const { t } = useTranslation();
 

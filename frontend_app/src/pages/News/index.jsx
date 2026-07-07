@@ -12,6 +12,14 @@ import { newsCategory } from "../../consts/newsCategories.js";
 import { useNews } from "../../hooks/useNews.js";
 import { formatDate } from "../../lib/formatDate.js";
 
+const categoryLabels = {
+  all: "Усі",
+  utilities: "Комуналка",
+  transport: "Транспорт",
+  official: "Офіційно",
+  events: "Події",
+};
+
 export default function NewsPage() {
   const { t, i18n } = useTranslation();
   const locale = i18n.resolvedLanguage;
@@ -43,9 +51,9 @@ export default function NewsPage() {
 
   return (
     <Shell className="bg-background pb-28">
-      <PageHero title={t("news.title")}>
+      <PageHero title="Новини та події Житомира">
         <div className="mx-auto max-w-3xl">
-          <SearchInput dark placeholder={t("news.searchPlaceholder")} value={query} onChange={setQuery} />
+          <SearchInput dark placeholder="Пошук новин..." value={query} onChange={setQuery} />
           <div className="mt-4 flex gap-3">
             <button className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 transition active:scale-95" type="button" onClick={() => setFiltersOpen(true)}>
               <Icon name="tune" />
@@ -81,7 +89,7 @@ export default function NewsPage() {
         ) : null}
       </main>
       <BottomNav active="news" />
-      <Modal open={filtersOpen} title={t("news.filterTitle")} sheet onClose={() => setFiltersOpen(false)}>
+      <Modal open={filtersOpen} title="Фільтри новин" sheet onClose={() => setFiltersOpen(false)}>
         <FilterChips items={categories} selectedValues={selectedCategories} onChange={setSelectedCategories} />
       </Modal>
     </Shell>

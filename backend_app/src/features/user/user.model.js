@@ -16,6 +16,14 @@ const addressSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const preferencesSchema = new mongoose.Schema(
+  {
+    utilityAlerts: { type: Boolean, default: true },
+    cityNews: { type: Boolean, default: true },
+  },
+  { _id: false },
+);
+
 const userSchema = new mongoose.Schema(
   {
     _id: { type: mongoose.Schema.Types.ObjectId, auto: true },
@@ -26,6 +34,7 @@ const userSchema = new mongoose.Schema(
     password: { type: String, required: true },
     phone: { type: String, trim: true, default: "" },
     address: { type: addressSchema, default: () => ({}) },
+    preferences: { type: preferencesSchema, default: () => ({}) },
     avatarUrl: { type: String, trim: true, default: "" },
     role: { type: String, enum: ["user", "admin"], default: "user" },
     refreshTokenVersion: { type: Number, default: 0 },
@@ -52,6 +61,10 @@ export function toPublicUser(user) {
       lat: user.address?.lat ?? null,
       lon: user.address?.lon ?? null,
       formatted: user.address?.formatted || "",
+    },
+    preferences: {
+      utilityAlerts: user.preferences?.utilityAlerts ?? true,
+      cityNews: user.preferences?.cityNews ?? true,
     },
     avatarUrl: user.avatarUrl || "",
     role: user.role,

@@ -15,14 +15,14 @@ directly (it doesn't hold the internal token that would let it).
 | `/polls`, `/polls/:id` | Vote in city surveys, see live tallies |
 | `/news`, `/news/:id` | City news feed |
 | `/transport`, `/contacts` | Static city service info |
-| `/profile` | Name/phone/address/avatar editing, password change, language toggle |
+| `/profile` | Name/phone/address/avatar editing, notification preferences, password change |
 | `/notifications` | Push-style notification feed |
 | `/login`, `/register` | Auth |
 
 ## Stack
 
-React 19, Vite 7, Tailwind CSS, TanStack Query (all server state), React Router 7,
-react-i18next (uk/en). No Redux/Zustand — TanStack Query's cache is the only client-side data
+React 19, Vite 7, Tailwind CSS, TanStack Query (all server state), React Router 7.
+No Redux/Zustand — TanStack Query's cache is the only client-side data
 store; component state is local `useState` for everything else.
 
 ## Project structure
@@ -44,7 +44,6 @@ src/
   consts/                    Static copy/fixture data that isn't worth a backend round trip yet
                               (contacts, transport info) — NOT a substitute for real data where
                               real data exists (see Gotchas below)
-  i18n/                      uk/en locale JSON + react-i18next setup
 ```
 
 ## Setup & running

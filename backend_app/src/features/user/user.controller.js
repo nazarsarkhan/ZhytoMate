@@ -5,6 +5,7 @@ import {
   updateUserAddress,
   updateUserAvatarFromUpload,
   updateUserName,
+  updateUserPreferences,
 } from "./user.service.js";
 
 export async function getCurrentUser(req, res, next) {

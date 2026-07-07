@@ -148,6 +148,7 @@ class RagService:
             sources_used=result.sources_used,
             confidence=result.confidence,
             route=result.route,
+            action_intent=result.action_intent,
         )
         if result.debug.get("blocked"):
             # Refused by the OPSEC content-safety gate (pipeline.base.check_query_safety) before

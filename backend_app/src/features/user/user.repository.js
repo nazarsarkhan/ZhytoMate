@@ -20,6 +20,14 @@ export function findUserByIdAndUpdateAddress({ id, address }) {
   );
 }
 
+export function findUserByIdAndUpdatePreferences({ id, preferences }) {
+  return User.findByIdAndUpdate(
+    id,
+    { preferences },
+    { new: true, runValidators: true },
+  );
+}
+
 export function findUserByIdAndUpdateAvatar({ id, avatarUrl }) {
   return User.findByIdAndUpdate(
     id,
@@ -70,6 +78,7 @@ export default {
   findUserById,
   findUserByIdAndUpdateName,
   findUserByIdAndUpdateAddress,
+  findUserByIdAndUpdatePreferences,
   findUserByIdAndUpdateAvatar,
   findUserByIdAndUpdatePassword,
   findUserByEmailOrUsername,

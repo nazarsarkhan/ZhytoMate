@@ -1,9 +1,19 @@
-import { useTranslation } from "react-i18next";
 import Icon from "../../../components/ui/Icon.jsx";
 
+const transportTypeLabels = {
+  tram: "Трамваї",
+  minibus: "Маршрутки",
+  trolleybus: "Тролейбуси",
+  bus: "Автобуси",
+};
+
+const statusLabels = {
+  onTime: "Вчасно",
+  delayed: "Затримка",
+};
+
 export default function RouteCard({ route, saved, onToggleSaved, onOpen }) {
-  const { t } = useTranslation();
-  const statusLabel = route.status ? t(`transport.status.${route.status}`) : "";
+  const statusLabel = route.status ? statusLabels[route.status] : "";
   const isDelayed = route.status === "delayed";
   const statusClass = isDelayed ? "bg-orange-50 text-orange-700" : "bg-green-50 text-green-700";
   const statusIcon = isDelayed ? "warning" : "check_circle";
@@ -25,9 +35,9 @@ export default function RouteCard({ route, saved, onToggleSaved, onOpen }) {
           </div>
           <button className="flex w-full min-w-0 max-w-full items-center gap-2 text-left text-xs text-on-surface-variant" type="button" onClick={onOpen}>
             <Icon name={route.icon} className="text-base" />
-            <span>{t(`transport.types.${route.type}`)}</span>
+            <span>{transportTypeLabels[route.type]}</span>
             <span className="h-1 w-1 rounded-full bg-outline-variant" />
-            <span className="truncate">{t("transport.towards")}: {route.direction}</span>
+            <span className="truncate">Напрямок: {route.direction}</span>
           </button>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {route.times.map((time, index) => {

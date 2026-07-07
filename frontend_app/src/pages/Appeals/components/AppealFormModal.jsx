@@ -1,12 +1,10 @@
 import { useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
 import Modal from "../../../components/overlay/Modal.jsx";
 import Icon from "../../../components/ui/Icon.jsx";
 import { appealCategories } from "../../../consts/appealCategories.js";
 import { useCreateAppeal, useUploadAppealPhoto } from "../../../hooks/useAppeals.js";
 
 export default function AppealFormModal({ open, onClose }) {
-  const { t } = useTranslation();
   const fileInputRef = useRef(null);
   const uploadPhoto = useUploadAppealPhoto();
   const createAppeal = useCreateAppeal();
@@ -90,7 +88,7 @@ export default function AppealFormModal({ open, onClose }) {
   return (
     <Modal
       open={open}
-      title={t("appeals.title")}
+      title="Нове звернення"
       sheet
       onClose={onClose}
       footer={
@@ -100,14 +98,14 @@ export default function AppealFormModal({ open, onClose }) {
           type="button"
           onClick={handleSubmit}
         >
-          {createAppeal.isPending ? t("appeals.sending") : t("appeals.send")}
+          {createAppeal.isPending ? "Надсилання..." : "Надіслати звернення"}
         </button>
       }
     >
       <div className="space-y-6">
         {submitted ? (
           <div className="rounded-xl border border-green-100 bg-green-50 p-3 text-sm font-bold text-green-700">
-            {t("common.saved")}
+            Збережено
           </div>
         ) : null}
         {createAppeal.isError ? (
@@ -117,7 +115,7 @@ export default function AppealFormModal({ open, onClose }) {
         ) : null}
 
         <div>
-          <label className="mb-3 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">{t("appeals.photos")}</label>
+          <label className="mb-3 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">Фото</label>
           <input ref={fileInputRef} className="sr-only" accept="image/jpeg,image/png,image/webp" type="file" onChange={handleFileSelect} />
           {photoPreviewUrl ? (
             <div className="relative overflow-hidden rounded-xl border border-outline-variant/40 bg-surface-container-low">
@@ -127,7 +125,7 @@ export default function AppealFormModal({ open, onClose }) {
               </button>
               {uploadPhoto.isPending ? (
                 <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/40 text-sm font-bold text-white">
-                  <Icon name="smart_toy" filled /> {t("appeals.analyzingPhoto")}
+                  <Icon name="smart_toy" filled /> AI аналізує фото...
                 </div>
               ) : null}
             </div>
@@ -138,14 +136,14 @@ export default function AppealFormModal({ open, onClose }) {
               onClick={() => fileInputRef.current?.click()}
             >
               <Icon name="add_a_photo" className="text-4xl" />
-              <span>{t("appeals.addPhoto")}</span>
+              <span>Додати фото</span>
             </button>
           )}
           {uploadPhoto.isError ? (
             <p className="mt-1.5 ml-1 text-xs font-bold text-error">{uploadPhoto.error.message}</p>
           ) : null}
           {triage && !triage.isValid ? (
-            <p className="mt-1.5 ml-1 text-xs text-on-surface-variant">{t("appeals.notCivicIssueWarning")}</p>
+            <p className="mt-1.5 ml-1 text-xs text-on-surface-variant">Це може не бути міською проблемою — перевірте перед надсиланням.</p>
           ) : null}
           {uploadedImageUrl && !triage && !uploadPhoto.isPending ? (
             <p className="mt-1.5 ml-1 text-xs text-on-surface-variant">{t("appeals.photoSavedManual")}</p>
@@ -153,7 +151,7 @@ export default function AppealFormModal({ open, onClose }) {
         </div>
 
         <div>
-          <label className="mb-3 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">{t("appeals.category")}</label>
+          <label className="mb-3 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">Категорія</label>
           <div className="flex flex-wrap gap-2">
             {appealCategories.map((item) => {
               const active = category === item.slug;
@@ -164,7 +162,7 @@ export default function AppealFormModal({ open, onClose }) {
                   type="button"
                   onClick={() => setCategory(item.slug)}
                 >
-                  {t(item.labelKey)}
+                  {item.label}
                 </button>
               );
             })}
@@ -172,26 +170,26 @@ export default function AppealFormModal({ open, onClose }) {
         </div>
 
         <div>
-          <label className="mb-3 block text-xs font-bold uppercase tracking-wider text-on-surface-variant" htmlFor="appeal-address">{t("appeals.address")}</label>
+          <label className="mb-3 block text-xs font-bold uppercase tracking-wider text-on-surface-variant" htmlFor="appeal-address">Адреса проблеми</label>
           <div className="flex h-12 items-center gap-2 rounded-xl border border-outline-variant bg-surface-container-lowest px-3 focus-within:border-secondary-container focus-within:ring-2 focus-within:ring-secondary-container/30">
             <Icon name="location_on" className="shrink-0 text-lg text-outline" />
             <input
               id="appeal-address"
               className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-on-surface-variant"
-              placeholder={t("appeals.addressPlaceholder")}
+              placeholder="напр. просп. Перемоги, 55"
               type="text"
               value={address}
               onChange={(event) => setAddress(event.target.value)}
             />
           </div>
-          <p className="mt-1.5 ml-1 text-xs text-on-surface-variant">{t("appeals.addressHint")}</p>
+          <p className="mt-1.5 ml-1 text-xs text-on-surface-variant">Вкажіть, де саме виникла проблема</p>
         </div>
 
         <div>
-          <label className="mb-3 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">{t("appeals.description")}</label>
+          <label className="mb-3 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">Опис проблеми</label>
           <textarea
             className="min-h-32 w-full rounded-xl border border-outline-variant bg-surface-container-lowest p-3 text-sm outline-none focus:border-secondary-container focus:ring-2 focus:ring-secondary-container/30"
-            placeholder={t("appeals.descriptionPlaceholder")}
+            placeholder="Опишіть проблему..."
             value={description}
             onChange={(event) => setDescription(event.target.value)}
           />

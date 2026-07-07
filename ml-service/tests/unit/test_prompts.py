@@ -24,6 +24,7 @@ from app.domain.prompts import (
     build_rag_prompt,
     build_rewrite_prompt,
     build_safety_check_prompt,
+    build_slot_extraction_prompt,
 )
 
 
@@ -101,6 +102,22 @@ def test_build_rag_prompt_never_offers_a_russian_directive() -> None:
     assert "ніколи не відповідай" in ru  # the directive's explicit anti-Russian clause
 
 
+def test_build_rag_prompt_forbids_substituting_another_citys_fact() -> None:
+    """Regression: live-reproduced bug (2026-07-07) where "Хто мер?" (who is the mayor) grounded on
+    a real, legitimate KB chunk — a Telegram news story about DORTMUND's own mayor visiting
+    Zhytomyr — and the model answered by naming the Dortmund mayor as if he led Zhytomyr. The
+    pre-existing "answer ONLY from context, be honest if there's no answer" instruction was not
+    specific enough to stop this: the context genuinely mentioned "мер", so the model treated that
+    as license to answer, without checking that the mer in question belonged to a different city.
+    The system instruction must explicitly name this failure mode: a context chunk about a
+    different city/country's person or institution does not answer a Zhytomyr question, even when
+    the topic or the exact query word matches."""
+    prompt = build_rag_prompt(["контекст"], "Хто мер?")
+    assert "ІНШОГО міста" in prompt
+    assert "те саме слово" in prompt
+    assert "факт про інше місто чи особу" in prompt
+
+
 def test_build_safety_check_prompt_carries_query_and_demands_json() -> None:
     query = "Коли вивезуть сміття?"
     prompt = build_safety_check_prompt(query)
@@ -146,3 +163,103 @@ def test_build_general_prompt_never_offers_a_russian_directive() -> None:
     ru = build_general_prompt("как дела", answer_lang="ru")
     assert "РОСІЙСЬКОЮ" not in ru
     assert ru.count("УКРАЇНСЬКОЮ") == 2
+
+
+def test_build_general_prompt_broadens_honesty_trigger_beyond_services() -> None:
+    """Before this fix, the "be honest, don't invent" branch only fired for an enumerated services
+    category (addresses/numbers/deadlines/procedures) that omitted personnel/leadership entirely —
+    so a personnel question like "хто мер?" (who is the mayor), if it ever lands on the ungrounded
+    path, could fall through to the "just chat naturally" branch instead of admitting there's no
+    confirmed answer. The category must now explicitly cover officials/institutions/events too,
+    not just service logistics."""
+    prompt = build_general_prompt("Хто мер?")
+    assert "посадові особи" in prompt
+
+
+def test_build_general_prompt_forbids_substituting_another_citys_fact() -> None:
+    """Defense in depth for the same bug class as build_rag_prompt's anti-substitution guard (see
+    test_build_rag_prompt_forbids_substituting_another_citys_fact): if a similarly-shaped question
+    ever lands on the ungrounded path instead of the grounded one, the model must still be told not
+    to invent an answer by naming a fact about a different city or person."""
+    prompt = build_general_prompt("Хто мер?")
+    assert "факт про інше місто чи особу" in prompt
+
+
+def test_safety_check_prompt_includes_action_intent_contract() -> None:
+    prompt = build_safety_check_prompt("Створити звернення про яму")
+    assert "action_intent" in prompt
+    assert "create_appeal" in prompt
+
+
+def test_slot_extraction_prompt_includes_fields_and_current_slots() -> None:
+    from app.schemas.actions import SlotFieldSchema
+
+    prompt = build_slot_extraction_prompt(
+        message="Величезна яма на вул. Київській",
+        slot_schema=[
+            SlotFieldSchema(
+                name="category",
+                description="Категорія проблеми",
+                enum_values=["pothole", "garbage"],
+            ),
+            SlotFieldSchema(name="address", description="Адреса проблеми"),
+        ],
+        current_slots={"category": "pothole"},
+    )
+    assert "category" in prompt
+    assert "address" in prompt
+    assert "pothole" in prompt  # already-filled slot surfaced back to the model
+    assert "wants_cancel" in prompt
+    assert "is_unrelated" in prompt
+
+
+def test_slot_extraction_prompt_forbids_copying_trigger_phrase_as_description() -> None:
+    """Regression: a message that only mentions an action's topic/intent (e.g. "створити
+    звернення про Х") is a command to start the flow, not a description of the situation, and
+    must never be copied into a free-text field. Before this instruction was added, live
+    reproduction against the running service showed the model doing exactly that — extracting
+    description: "Створити звернення про яму" from the triggering message itself, i.e. treating
+    "mentions the general topic" as sufficient content for a free-text field."""
+    from app.schemas.actions import SlotFieldSchema
+
+    prompt = build_slot_extraction_prompt(
+        message="будь-яке повідомлення",
+        slot_schema=[SlotFieldSchema(name="description", description="Опис ситуації")],
+        current_slots={},
+    )
+    assert "НЕ Є описом ситуації" in prompt
+    assert "команда почати процес" in prompt
+
+
+def test_slot_extraction_prompt_repro_bug_trigger_only_message() -> None:
+    """Locks in the exact live-reproduction conditions for the bug above: the first turn of the
+    "create an appeal" flow, where `message` IS the triggering command sentence and no slots are
+    filled yet (current_slots={}). build_slot_extraction_prompt is a pure string-building function
+    (no I/O — see the module's layer contract), so this can't assert on actual LLM behaviour; it
+    instead proves the built prompt (a) carries the trigger message verbatim inside <text>,
+    matching the exact conditions that reproduced the bug, with the real appeal fields (category/
+    description/address, mirroring backend_app's appeal schema) in scope, and (b) contains the
+    anti-parroting instruction that stops the model from treating "mentions the topic" as
+    sufficient content for `description`. This is a test that would fail if that instruction were
+    ever deleted — not an attempt to mock the model's own judgment."""
+    from app.schemas.actions import SlotFieldSchema
+
+    message = "Створити звернення про яму"
+    appeal_slot_schema = [
+        SlotFieldSchema(
+            name="category",
+            description="Категорія проблеми",
+            enum_values=["pothole", "garbage", "lighting"],
+        ),
+        SlotFieldSchema(name="description", description="Опис ситуації"),
+        SlotFieldSchema(name="address", description="Адреса проблеми"),
+    ]
+
+    prompt = build_slot_extraction_prompt(
+        message=message, slot_schema=appeal_slot_schema, current_slots={}
+    )
+
+    assert f"<text>\n{message}\n</text>" in prompt
+    assert "description" in prompt  # the exact field the bug polluted must be in scope here
+    assert "НЕ Є описом ситуації" in prompt
+    assert "команда почати процес" in prompt

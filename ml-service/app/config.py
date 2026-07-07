@@ -22,11 +22,14 @@ class Settings(BaseSettings):
     llm_model: str = "gpt-4o-mini"
     embed_model: str = "text-embedding-3-large"
 
-    # RAG tuning — PROVISIONAL placeholders for the NEW embedding space. MUST re-calibrate via
-    # scripts/calibrate_thresholds.py: text-embedding-3-large's similarity distribution differs
-    # from e5, so the old 0.78/0.85 values are no longer valid (§2.7).
-    sim_gate: float = 0.70
-    sim_high: float = 0.80
+    # RAG tuning — calibrated via scripts/calibrate_thresholds.py against the seeded KB under
+    # text-embedding-3-large (civic queries cluster ~0.56-0.70, off-topic ~0.31-0.41; see
+    # ml-service/CLAUDE.md's Known Issues). These class defaults exist only as a fallback for a
+    # process that somehow starts with no env value for these two keys — .env should always
+    # supply them explicitly. Re-run the calibration script (and update both here and .env)
+    # whenever the KB, embedding model, or chunking changes.
+    sim_gate: float = 0.50
+    sim_high: float = 0.62
 
     # Rate limiting (Postgres-backed, ADR-009 rev)
     rate_limit_per_minute: int = 10

@@ -25,7 +25,7 @@ import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.api.v1 import health, ingest, query, vision
+from app.api.v1 import actions, health, ingest, query, vision
 from app.components.repository import KnowledgeRepository
 from app.config import Settings
 from app.errors import register_error_handlers
@@ -62,6 +62,7 @@ def _build_app() -> FastAPI:
     app.include_router(ingest.router)
     app.include_router(query.router)
     app.include_router(vision.router)
+    app.include_router(actions.router)
     return app
 
 

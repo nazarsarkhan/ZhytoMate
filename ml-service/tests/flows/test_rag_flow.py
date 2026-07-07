@@ -42,10 +42,14 @@ _QUERY = "Коли вивезуть сміття?"
 _SAFE_JSON = json.dumps({"safe": True})
 
 
-def _hit(chunk_id: int, similarity: float, text: str) -> RetrievalResult:
+def _hit(
+    chunk_id: int, similarity: float, text: str,
+    lexical_coverage: int | None = None, lexical_terms_total: int | None = None,
+) -> RetrievalResult:
     return RetrievalResult(
         id=chunk_id, text=text, source="src", doc_type="instruction", district=None,
-        similarity=similarity,
+        similarity=similarity, lexical_coverage=lexical_coverage,
+        lexical_terms_total=lexical_terms_total,
     )
 
 
@@ -294,3 +298,283 @@ async def test_safety_classifier_malformed_reply_fails_closed() -> None:
     result = await pipeline.run(_ctx(_QUERY))
 
     assert result.debug["blocked"] is True
+
+
+async def test_safety_check_call_requests_json_mode() -> None:
+    """Regression guard: the safety-check call must force API-level JSON mode
+    (Generator.generate(json_mode=True)) rather than relying on prompt text alone — a bare-JSON
+    request with no format enforcement and only a small token budget previously meant any preamble
+    or mid-object truncation from the model raised inside the brace-slice parse, which the
+    fail-closed policy then turned into a wrongly-blocked query. json_mode=True (backed by
+    OpenAI's response_format={"type": "json_object"}, see components.llm) closes that gap."""
+    retriever = FakeRetriever({_QUERY: RetrievalOutcome(dense=[], fused=[])})
+    generator = FakeGenerator(results=[(_SAFE_JSON, 0), ("answer", 0)])
+    pipeline = _pipeline(retriever, generator)
+
+    await pipeline.run(_ctx(_QUERY))
+
+    assert generator.generate_json_modes[0] is True  # the safety check call, always call #1
+
+
+async def test_check_query_safety_returns_action_intent_when_present() -> None:
+    from app.pipeline.base import check_query_safety
+
+    safe_with_action = json.dumps(
+        {"safe": True, "conversational": False, "action_intent": "create_appeal"}
+    )
+    generator = FakeGenerator(result=(safe_with_action, 0))
+
+    is_safe, _refusal, conversational, action_intent = await check_query_safety(
+        generator, "Створити звернення про яму"
+    )
+
+    assert is_safe is True
+    assert conversational is False
+    assert action_intent == "create_appeal"
+
+
+async def test_check_query_safety_rejects_unknown_action_intent() -> None:
+    from app.pipeline.base import check_query_safety
+
+    safe_with_unknown_action = json.dumps(
+        {"safe": True, "conversational": False, "action_intent": "delete_the_database"}
+    )
+    generator = FakeGenerator(result=(safe_with_unknown_action, 0))
+
+    _is_safe, _refusal, _conversational, action_intent = await check_query_safety(
+        generator, "щось"
+    )
+
+    assert action_intent is None
+
+
+async def test_check_query_safety_action_intent_defaults_to_none_on_failure() -> None:
+    from app.pipeline.base import check_query_safety
+
+    generator = FakeGenerator(error=TimeoutError("boom"))
+
+    is_safe, _refusal, conversational, action_intent = await check_query_safety(generator, "щось")
+
+    assert is_safe is False
+    assert conversational is False
+    assert action_intent is None
+
+
+async def test_action_intent_flows_through_to_rag_result() -> None:
+    action_json = json.dumps(
+        {"safe": True, "conversational": False, "action_intent": "create_appeal"}
+    )
+    retriever = FakeRetriever({_QUERY: RetrievalOutcome(dense=[], fused=[])})
+    generator = FakeGenerator(results=[(action_json, 0), ("Гаразд, зберемо деталі.", 0)])
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(_QUERY))
+
+    assert result.action_intent == "create_appeal"
+
+
+async def test_action_intent_is_none_for_ordinary_queries() -> None:
+    retriever = FakeRetriever({_QUERY: RetrievalOutcome(dense=[], fused=[])})
+    generator = FakeGenerator(results=[(_SAFE_JSON, 0), ("Сміття вивозять щовівторка.", 0)])
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(_QUERY))
+
+    assert result.action_intent is None
+
+
+# ---------------------------------------------------------------------------
+# Conversational routing — check_query_safety's `conversational` flag forces the ungrounded/
+# general-conversation path regardless of top1_sim (see run_shared_tail's force_ungrounded)
+# ---------------------------------------------------------------------------
+
+_GREETING = "Привіт, як справи?"
+
+
+async def test_conversational_greeting_skips_grounded_path_despite_passing_similarity() -> None:
+    """Reproduces a live bug: a greeting can score ABOVE sim_gate on same-language vocabulary/style
+    noise alone, with retrieved chunks that are necessarily topically irrelevant. Without the
+    conversational flag, run_shared_tail would call this `grounded` and stuff those irrelevant
+    chunks into build_rag_prompt, producing a nonsensical "no information" reply instead of natural
+    conversation. `conversational: true` (from the same safety-check call, no extra cost) must
+    force the general-conversation path even though this hit clears the gate."""
+    hit = _hit(1, similarity=0.75, text="Графік вивезення сміття у Богунському районі.")
+    retriever = FakeRetriever({_GREETING: RetrievalOutcome(dense=[hit], fused=[hit])})
+    safe_and_conversational = json.dumps({"safe": True, "conversational": True})
+    generator = FakeGenerator(
+        results=[(safe_and_conversational, 0), ("Привіт! Все добре, дякую, що запитали.", 0)]
+    )
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(_GREETING))
+
+    assert result.debug["grounded"] is False
+    answer_prompt = generator.generate_calls[1]
+    assert "<context>" not in answer_prompt
+    assert "звичайне спілкування" in answer_prompt
+
+
+async def test_non_conversational_query_still_grounds_on_passing_similarity() -> None:
+    """Control for the test above: the same passing similarity, but conversational: false (an
+    ordinary civic question) — must still ground normally. Proves force_ungrounded doesn't
+    accidentally suppress real grounded answers."""
+    hit = _hit(1, similarity=0.75, text="Графік вивезення сміття у Богунському районі.")
+    retriever = FakeRetriever({_QUERY: RetrievalOutcome(dense=[hit], fused=[hit])})
+    safe_not_conversational = json.dumps({"safe": True, "conversational": False})
+    generator = FakeGenerator(
+        results=[(safe_not_conversational, 0), ("Сміття вивозять щовівторка.", 0)]
+    )
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(_QUERY))
+
+    assert result.debug["grounded"] is True
+    assert result.answer == "Сміття вивозять щовівторка."
+
+
+# ---------------------------------------------------------------------------
+# Lexical override — a genuine rank-1 lexical/RRF agreement can ground an answer even when dense
+# top1_sim alone would refuse it (see pipeline.base.run_shared_tail's strong_lexical_match, added
+# to fix a live bug where short, keyword-heavy factual queries like "Де ЦНАП?" scored well below
+# sim_gate on dense cosine similarity alone despite a directly-relevant chunk being in the KB).
+# ---------------------------------------------------------------------------
+
+_CNAP_QUERY = "Де ЦНАП?"
+
+
+async def test_strong_lexical_match_grounds_a_low_dense_similarity_cnap_style_query() -> None:
+    """Reproduces the real live bug end-to-end through SimpleRAGPipeline: a short, keyword-heavy
+    factual query's dense top1_sim sits well below sim_gate even against the directly-relevant
+    chunk, but that SAME chunk is trivially the lexical leg's own #1 keyword match (real overlap on
+    "ЦНАП"). fused[0] agreeing with the lexical leg's own rank-1 pick is enough to ground the
+    answer using a chunk the dense gate alone would have refused.
+
+    "Де ЦНАП?" carries none of the Ukrainian-only marker letters (і/ї/є/ґ — see domain.language),
+    so is_ukrainian() returns False and the pipeline genuinely makes a detect_and_translate call
+    before retrieval, exactly as it would for the real query against the live service — scripted
+    here as a real (if redundant) Ukrainian-to-Ukrainian translation, not skipped."""
+    cnap_hit = _hit(
+        1, similarity=0.35,
+        text="ЦНАП Житомирської міської ради: вул. Ватутіна, 2/1, пн-пт 8:00-17:00.",
+    )
+    outcome = RetrievalOutcome(dense=[cnap_hit], fused=[cnap_hit], lexical=[cnap_hit])
+    retriever = FakeRetriever({_CNAP_QUERY: outcome})
+    detect_json = json.dumps({"lang": "uk", "uk": _CNAP_QUERY})
+    generator = FakeGenerator(
+        results=[
+            (_SAFE_JSON, 0),
+            (detect_json, 0),
+            ("ЦНАП знаходиться на вул. Ватутіна, 2/1.", 0),
+        ]
+    )
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(_CNAP_QUERY))
+
+    assert result.debug["grounded"] is True
+    assert result.debug["strong_lexical_match"] is True
+    assert len(result.sources_used) == 1
+    assert result.answer == "ЦНАП знаходиться на вул. Ватутіна, 2/1."
+
+
+async def test_cnap_grounds_via_a_fully_covered_single_term_or_fallback_hit() -> None:
+    """The exact real shape confirmed live against the production DB: "де" is filtered out of
+    "Де ЦНАП?" as a < 3-letter word (see components.repository._significant_terms), leaving "цнап"
+    as the query's ONLY significant term, so BOTH AND tiers (websearch_to_tsquery, plainto_tsquery)
+    return zero rows and the OR-fallback fires — with coverage=1 of a lexical_terms_total of 1.
+    That's a COMPLETE match despite the raw coverage number being the same "1" a genuinely partial
+    match (e.g. the Jupiter/borscht false positives) would also show — this is the live regression
+    caught while hardening the fix: a plain "coverage >= 2" floor wrongly refuses this exact,
+    correct case. Must still ground."""
+    cnap_hit = _hit(
+        1, similarity=0.35,
+        text="ЦНАП Житомирської міської ради: вул. Ватутіна, 2/1, пн-пт 8:00-17:00.",
+        lexical_coverage=1, lexical_terms_total=1,
+    )
+    outcome = RetrievalOutcome(dense=[cnap_hit], fused=[cnap_hit], lexical=[cnap_hit])
+    retriever = FakeRetriever({_CNAP_QUERY: outcome})
+    detect_json = json.dumps({"lang": "uk", "uk": _CNAP_QUERY})
+    generator = FakeGenerator(
+        results=[
+            (_SAFE_JSON, 0),
+            (detect_json, 0),
+            ("ЦНАП знаходиться на вул. Ватутіна, 2/1.", 0),
+        ]
+    )
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(_CNAP_QUERY))
+
+    assert result.debug["grounded"] is True
+    assert result.debug["strong_lexical_match"] is True
+    assert result.answer == "ЦНАП знаходиться на вул. Ватутіна, 2/1."
+
+
+async def test_low_dense_similarity_without_rank1_lexical_agreement_stays_ungrounded() -> None:
+    """Negative control: the dense leg's best (still-weak) guess has SOME lexical presence but is
+    NOT the lexical leg's own rank-1 pick — must stay ungrounded. This is the test that actually
+    protects against a regression that grounds on any non-empty lexical presence rather than
+    specifically a rank-1 match."""
+    weak_dense_hit = _hit(1, 0.35, "слабко пов'язаний фрагмент")
+    lexical_top_hit = _hit(2, 0.0, "інший фрагмент із кращим збігом ключових слів")
+    outcome = RetrievalOutcome(
+        dense=[weak_dense_hit], fused=[weak_dense_hit],
+        lexical=[lexical_top_hit, weak_dense_hit],
+    )
+    retriever = FakeRetriever({_QUERY: outcome})
+    generator = FakeGenerator(
+        results=[(_SAFE_JSON, 0), ("Наразі не маю точних даних, але радо поспілкуюся!", 0)]
+    )
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(_QUERY))
+
+    assert result.debug["grounded"] is False
+    assert result.debug["strong_lexical_match"] is False
+
+
+async def test_partial_or_fallback_match_stays_ungrounded() -> None:
+    """Reproduces the real live false positive found while verifying the fix above: a query
+    genuinely unrelated to Zhytomyr civic services ("Скільки супутників у Юпітера?" — how many
+    moons does Jupiter have) came back grounded because the lexical OR-fallback (real Postgres
+    behavior, see components.repository.retrieve_lexical) degraded to matching on a single common
+    word ("скільки") out of the query's 3 significant terms, in unrelated civic FAQ chunks — the
+    fused top-1 agreed with the lexical leg's own rank-1 pick, but that pick only covered 1 of 3
+    terms (partial, not a genuine multi-term or AND-tier match). Confirmed live against the real
+    DB: both AND tiers (websearch_to_tsquery, plainto_tsquery) returned 0 rows, and the
+    OR-fallback's top row had coverage=1 of 3 significant terms. Must now stay ungrounded."""
+    off_topic_hit = _hit(
+        1, 0.323, "Понад 4,6 млн грн за пів року: скільки нарахували керівництву ОВА",
+        lexical_coverage=1, lexical_terms_total=3,
+    )
+    outcome = RetrievalOutcome(
+        dense=[off_topic_hit], fused=[off_topic_hit], lexical=[off_topic_hit]
+    )
+    retriever = FakeRetriever({_QUERY: outcome})
+    generator = FakeGenerator(
+        results=[(_SAFE_JSON, 0), ("Наразі не маю точних даних, але радо поспілкуюся!", 0)]
+    )
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(_QUERY))
+
+    assert result.debug["grounded"] is False
+    assert result.debug["strong_lexical_match"] is False
+
+
+async def test_conversational_greeting_stays_ungrounded_despite_strong_lexical_match() -> None:
+    """Precedence check at the flow level: even when retrieval surfaces a strong rank-1 lexical
+    match, a conversational/small-talk classification still wins — a greeting must never be
+    stuffed with civic context just because of a keyword coincidence."""
+    hit = _hit(1, 0.35, "ЦНАП Житомирської міської ради: вул. Ватутіна, 2/1.")
+    outcome = RetrievalOutcome(dense=[hit], fused=[hit], lexical=[hit])
+    retriever = FakeRetriever({_GREETING: outcome})
+    safe_and_conversational = json.dumps({"safe": True, "conversational": True})
+    generator = FakeGenerator(
+        results=[(safe_and_conversational, 0), ("Привіт! Все добре, дякую.", 0)]
+    )
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(_GREETING))
+
+    assert result.debug["grounded"] is False

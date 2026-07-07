@@ -21,6 +21,7 @@ from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
 from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI
+from openai.types.chat.completion_create_params import ResponseFormat
 from tenacity import AsyncRetrying, RetryCallState, retry_if_exception, stop_after_attempt
 
 from app.protocols import Generator, VisionGenerator
@@ -56,14 +57,24 @@ class OpenAILLMClient(Generator, VisionGenerator):
         self._model = model
 
     async def generate(
-        self, prompt: str, *, temperature: float, max_tokens: int, timeout_s: float
+        self,
+        prompt: str,
+        *,
+        temperature: float,
+        max_tokens: int,
+        timeout_s: float,
+        json_mode: bool = False,
     ) -> tuple[str, int]:
         async def call() -> str:
+            response_format: ResponseFormat = (
+                {"type": "json_object"} if json_mode else {"type": "text"}
+            )
             response = await self._client.chat.completions.create(
                 model=self._model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=temperature,
                 max_tokens=max_tokens,
+                response_format=response_format,
             )
             return response.choices[0].message.content or ""
 
