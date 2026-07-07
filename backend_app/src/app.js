@@ -10,7 +10,10 @@ import { config } from "./config/index.js";
 import appealRoutes from "./features/appeal/appeal.routes.js";
 import assistantRoutes from "./features/assistant/assistant.routes.js";
 import authRoutes from "./features/auth/auth.routes.js";
+import contactRoutes from "./features/contact/contact.routes.js";
 import conversationRoutes from "./features/conversation/conversation.routes.js";
+import newsRoutes from "./features/news/news.routes.js";
+import outageRoutes from "./features/outage/outage.routes.js";
 import surveyRoutes from "./features/survey/survey.routes.js";
 import userRoutes from "./features/user/user.routes.js";
 import { errorHandler } from "./middleware/errorHandler.js";
@@ -22,6 +25,9 @@ const API_PREFIXES = [
   "/users",
   "/appeals",
   "/surveys",
+  "/contacts",
+  "/outages",
+  "/news",
   "/assistant",
   "/conversations",
   "/docs",
@@ -53,6 +59,9 @@ export function createApp() {
   app.use("/users", userRoutes);
   app.use("/appeals", appealRoutes);
   app.use("/surveys", surveyRoutes);
+  app.use("/contacts", contactRoutes);
+  app.use("/outages", outageRoutes);
+  app.use("/news", newsRoutes);
   app.use("/assistant", assistantRoutes);
   app.use("/conversations", conversationRoutes);
   app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));

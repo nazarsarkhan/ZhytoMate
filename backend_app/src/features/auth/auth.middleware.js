@@ -27,4 +27,19 @@ export function authenticate(req, _res, next) {
   }
 }
 
+// Role gate to place right after `authenticate` on admin-only routes, e.g.
+// router.get("/", authenticate, authorize("admin"), handler). Relies on `authenticate`
+// having already populated req.user.role from the access token.
+export function authorize(...roles) {
+  return (req, _res, next) => {
+    if (!req.user) {
+      return next(ApiError.unauthorized("Authentication required"));
+    }
+    if (!roles.includes(req.user.role)) {
+      return next(ApiError.forbidden("Admin access is required"));
+    }
+    return next();
+  };
+}
+
 export default authenticate;

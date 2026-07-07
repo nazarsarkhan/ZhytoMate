@@ -128,9 +128,15 @@ export default function ProfilePage() {
 
   const saveAddress = async () => {
     try {
-      await updateAddress.mutateAsync(addressForm);
+      // The backend verifies/normalizes the address via Nominatim and returns the updated user;
+      // reflect whether it resolved to a real place in the toast.
+      const result = await updateAddress.mutateAsync(addressForm);
       setAddressOpen(false);
-      showToast(t("common.saved"));
+      showToast(
+        result?.user?.address?.verified
+          ? "Адресу підтверджено ✓"
+          : "Збережено. Не вдалося підтвердити адресу",
+      );
     } catch (err) {
       showToast(err.message);
     }
@@ -203,6 +209,12 @@ export default function ProfilePage() {
                   <span className="block font-medium">{[user.address.street, user.address.building].filter(Boolean).join(", ") || t("profile.addAddress")}</span>
                   <span className="mt-1 block text-sm text-on-surface-variant">{user.address.district}</span>
                   <span className="mt-1 block text-xs text-on-surface-variant">{user.address.city}</span>
+                  {user.address.street || user.address.city ? (
+                    <span className={`mt-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${user.address.verified ? "bg-green-100 text-green-700" : "bg-surface-container-high text-on-surface-variant"}`}>
+                      <Icon name={user.address.verified ? "verified" : "help"} className="text-sm" />
+                      {user.address.verified ? "Адресу підтверджено" : "Не підтверджено"}
+                    </span>
+                  ) : null}
                 </span>
               </span>
               <Icon name="edit_location_alt" className="text-on-tertiary-fixed-variant" />

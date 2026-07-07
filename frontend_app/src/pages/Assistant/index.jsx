@@ -6,6 +6,7 @@ import AppHeader from "../../components/layout/AppHeader.jsx";
 import BottomNav from "../../components/navigation/BottomNav.jsx";
 import Icon from "../../components/ui/Icon.jsx";
 import SinoptikWeatherWidget from "../../components/widgets/SinoptikWeatherWidget.jsx";
+import OutageStatusCard from "../../components/widgets/OutageStatusCard.jsx";
 import { useAutoScrollToBottom } from "../../hooks/useAutoScrollToBottom.js";
 import { useAssistantChat } from "../../hooks/useAssistantChat.js";
 import { useCurrentUser } from "../../hooks/useCurrentUser.js";
@@ -62,17 +63,18 @@ export default function AssistantPage() {
           </div>
           <div className="no-scrollbar flex snap-x gap-3 overflow-x-auto px-container-padding pb-2 sm:px-6 md:grid md:grid-cols-3 md:overflow-visible md:px-0 lg:grid-cols-2">
             {statusCards.map((card) => (
-              <article key={card.title} className="motion-card interactive-card h-[120px] w-[75%] shrink-0 snap-center rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-sm md:h-40 md:w-auto md:p-5">
-                <span className="mb-2 block truncate text-xs font-medium text-on-surface-variant">{card.label}</span>
-                <div className="flex h-[70px] items-center gap-3 md:h-24 md:flex-col md:items-start md:justify-end">
-                  <Icon name={card.icon} filled className={`float-soft icon-display shrink-0 text-[40px] md:text-[46px] ${card.tone}`} />
-                  <div className="min-w-0">
-                    <h2 className="text-3xl font-bold leading-none text-on-surface md:truncate md:text-2xl">{card.title}</h2>
-                    <p className={`mt-1 text-xs font-medium md:truncate ${card.tone}`}>{card.text}</p>
+              <article key={card.title} className="motion-card interactive-card flex min-h-[136px] w-[82%] max-w-[320px] shrink-0 snap-center flex-col rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-3.5 shadow-sm sm:w-[46%] sm:p-4 md:min-h-40 md:w-auto md:max-w-none md:p-5">
+                <span className="mb-3 block truncate text-xs font-medium text-on-surface-variant">{card.label}</span>
+                <div className="flex min-h-0 flex-1 items-start gap-3 md:flex-col md:justify-end">
+                  <Icon name={card.icon} filled className={`float-soft icon-display shrink-0 text-[36px] sm:text-[40px] md:text-[46px] ${card.tone}`} />
+                  <div className="min-w-0 flex-1 md:w-full md:flex-none">
+                    <h2 className="max-w-full break-words text-xl font-bold leading-tight text-on-surface sm:text-2xl md:truncate md:text-2xl">{card.title}</h2>
+                    <p className={`mt-1 max-w-full break-words text-xs font-medium leading-snug md:truncate ${card.tone}`}>{card.text}</p>
                   </div>
                 </div>
               </article>
             ))}
+            <OutageStatusCard />
           </div>
           <div className="mt-2 flex justify-center gap-1 md:hidden">
             <span className="h-1.5 w-1.5 rounded-full bg-primary-container" />

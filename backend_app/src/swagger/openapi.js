@@ -11,6 +11,7 @@ export const openApiSpec = {
     { name: "Users" },
     { name: "Appeals" },
     { name: "Surveys" },
+    { name: "Contacts" },
   ],
   components: {
     securitySchemes: {
@@ -135,18 +136,13 @@ export const openApiSpec = {
                   lastName: { type: "string", example: "Dev" },
                   email: { type: "string", example: "nazar@example.com" },
                   password: { type: "string", example: "password123" },
-                  role: {
-                    type: "string",
-                    enum: ["user", "admin"],
-                    example: "user",
-                  },
                 },
               },
             },
           },
         },
         responses: {
-          201: { description: "Registered" },
+          201: { description: "Registered (always role: user)" },
           400: { description: "Validation error" },
           409: { description: "Duplicate user" },
         },
@@ -261,6 +257,44 @@ export const openApiSpec = {
       },
     },
     "/appeals": {
+      get: {
+        tags: ["Appeals"],
+        summary: "List all appeals (admin)",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "status",
+            in: "query",
+            required: false,
+            schema: {
+              type: "string",
+              enum: ["new", "in_progress", "resolved", "rejected"],
+            },
+          },
+          {
+            name: "category",
+            in: "query",
+            required: false,
+            schema: { type: "string" },
+          },
+          {
+            name: "page",
+            in: "query",
+            required: false,
+            schema: { type: "integer", minimum: 1, default: 1 },
+          },
+          {
+            name: "limit",
+            in: "query",
+            required: false,
+            schema: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+          },
+        ],
+        responses: {
+          200: { description: "Paginated appeals { items, total, page, limit }" },
+          403: { description: "Admin access is required" },
+        },
+      },
       post: {
         tags: ["Appeals"],
         summary: "Create appeal",
@@ -319,6 +353,45 @@ export const openApiSpec = {
         ],
         responses: {
           200: { description: "Appeal details" },
+          404: { description: "Appeal not found" },
+        },
+      },
+      patch: {
+        tags: ["Appeals"],
+        summary: "Respond / change status (admin)",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                minProperties: 1,
+                properties: {
+                  status: {
+                    type: "string",
+                    enum: ["new", "in_progress", "resolved", "rejected"],
+                  },
+                  response: {
+                    type: "string",
+                    example: "Звернення прийнято в роботу.",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: "Updated appeal" },
+          403: { description: "Admin access is required" },
           404: { description: "Appeal not found" },
         },
       },
@@ -403,6 +476,68 @@ export const openApiSpec = {
           404: { description: "Survey not found" },
         },
       },
+      patch: {
+        tags: ["Surveys"],
+        summary: "Edit / close / reopen survey (admin)",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                minProperties: 1,
+                properties: {
+                  title: { type: "string" },
+                  description: { type: "string" },
+                  category: { type: "string" },
+                  options: {
+                    type: "array",
+                    minItems: 2,
+                    items: { type: "string" },
+                    description: "Only honored while the survey has no votes.",
+                  },
+                  startsAt: { type: "string", nullable: true, format: "date-time" },
+                  endsAt: { type: "string", nullable: true, format: "date-time" },
+                  isActive: { type: "boolean" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: "Updated survey" },
+          400: { description: "Cannot change options after votes / invalid window" },
+          403: { description: "Admin access is required" },
+          404: { description: "Survey not found" },
+        },
+      },
+      delete: {
+        tags: ["Surveys"],
+        summary: "Delete survey and its votes (admin)",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          200: { description: "Deleted { id }" },
+          403: { description: "Admin access is required" },
+          404: { description: "Survey not found" },
+        },
+      },
     },
     "/surveys/{id}/vote": {
       post: {
@@ -438,6 +573,179 @@ export const openApiSpec = {
           200: { description: "Vote saved" },
           400: { description: "Invalid option or closed survey" },
           404: { description: "Survey not found" },
+        },
+      },
+    },
+    "/users/me/address": {
+      patch: {
+        tags: ["Users"],
+        summary: "Update address (verified + normalized via Nominatim)",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  street: { type: "string", example: "вул. Михайлівська" },
+                  building: { type: "string", example: "6" },
+                  district: { type: "string", example: "" },
+                  city: { type: "string", example: "Житомир" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description:
+              "Updated user; address includes verified/lat/lon/formatted",
+          },
+        },
+      },
+    },
+    "/users/me/address/preview": {
+      post: {
+        tags: ["Users"],
+        summary: "Verify/normalize an address without saving",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  street: { type: "string" },
+                  building: { type: "string" },
+                  district: { type: "string" },
+                  city: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description:
+              "{ address: { street, building, district, city, verified, lat, lon, formatted } }",
+          },
+        },
+      },
+    },
+    "/contacts": {
+      get: {
+        tags: ["Contacts"],
+        summary: "City contacts grouped for the Contacts tab",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: {
+            description:
+              "{ emergency: [...], groups: [{ group, items: [...] }] }",
+          },
+        },
+      },
+      post: {
+        tags: ["Contacts"],
+        summary: "Create contact (admin)",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["name", "phone"],
+                properties: {
+                  name: { type: "string", example: "Водоканал" },
+                  phone: { type: "string", example: "0412 24-08-10" },
+                  icon: { type: "string", example: "water_drop" },
+                  group: { type: "string", example: "Комунальні служби" },
+                  kind: {
+                    type: "string",
+                    enum: ["emergency", "utility"],
+                    example: "utility",
+                  },
+                  order: { type: "integer", example: 0 },
+                  isActive: { type: "boolean", example: true },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          201: { description: "Created contact" },
+          403: { description: "Admin access is required" },
+        },
+      },
+    },
+    "/contacts/admin": {
+      get: {
+        tags: ["Contacts"],
+        summary: "Flat list of all contacts (admin)",
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: { description: "{ contacts: [...] }" },
+          403: { description: "Admin access is required" },
+        },
+      },
+    },
+    "/contacts/{id}": {
+      patch: {
+        tags: ["Contacts"],
+        summary: "Update contact (admin)",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                minProperties: 1,
+                properties: {
+                  name: { type: "string" },
+                  phone: { type: "string" },
+                  icon: { type: "string" },
+                  group: { type: "string" },
+                  kind: { type: "string", enum: ["emergency", "utility"] },
+                  order: { type: "integer" },
+                  isActive: { type: "boolean" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: "Updated contact" },
+          403: { description: "Admin access is required" },
+          404: { description: "Contact not found" },
+        },
+      },
+      delete: {
+        tags: ["Contacts"],
+        summary: "Delete contact (admin)",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "id",
+            in: "path",
+            required: true,
+            schema: { type: "string" },
+          },
+        ],
+        responses: {
+          200: { description: "Deleted { id }" },
+          403: { description: "Admin access is required" },
+          404: { description: "Contact not found" },
         },
       },
     },

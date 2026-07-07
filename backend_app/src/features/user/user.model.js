@@ -6,6 +6,12 @@ const addressSchema = new mongoose.Schema(
     building: { type: String, trim: true, default: "" },
     district: { type: String, trim: true, default: "" },
     city: { type: String, trim: true, default: "" },
+    // Set by the Nominatim geocoder on save: whether the address resolved to a real place, its
+    // coordinates, and the normalized single-line label. `verified:false` still stores the address.
+    verified: { type: Boolean, default: false },
+    lat: { type: Number, default: null },
+    lon: { type: Number, default: null },
+    formatted: { type: String, trim: true, default: "" },
   },
   { _id: false },
 );
@@ -42,6 +48,10 @@ export function toPublicUser(user) {
       building: user.address?.building || "",
       district: user.address?.district || "",
       city: user.address?.city || "",
+      verified: user.address?.verified || false,
+      lat: user.address?.lat ?? null,
+      lon: user.address?.lon ?? null,
+      formatted: user.address?.formatted || "",
     },
     avatarUrl: user.avatarUrl || "",
     role: user.role,

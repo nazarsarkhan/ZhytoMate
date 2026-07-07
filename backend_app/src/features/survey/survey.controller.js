@@ -1,8 +1,10 @@
 import {
   createSurveyForUsers,
+  deleteSurveyForAdmin,
   getSurveyForUser,
   getSurveyHistory,
   getSurveyProgress,
+  updateSurvey as updateSurveyService,
   voteInSurvey,
 } from "./survey.service.js";
 
@@ -70,10 +72,36 @@ export async function voteSurvey(req, res, next) {
   }
 }
 
+// Admin: edit meta / close / reopen a survey (and replace options while it has no votes).
+export async function updateSurvey(req, res, next) {
+  try {
+    const survey = await updateSurveyService({
+      surveyId: req.params.id,
+      updates: req.body,
+    });
+
+    return res.json({ survey });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// Admin: delete a survey and its votes.
+export async function deleteSurvey(req, res, next) {
+  try {
+    const result = await deleteSurveyForAdmin(req.params.id);
+    return res.json(result);
+  } catch (err) {
+    return next(err);
+  }
+}
+
 export default {
   createSurvey,
   getSurveys,
   getProgress,
   getSurveyById,
   voteSurvey,
+  updateSurvey,
+  deleteSurvey,
 };

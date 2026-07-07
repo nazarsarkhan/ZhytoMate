@@ -31,6 +31,7 @@
     "save": "Save",
     "saved": "Saved",
     "search": "Search",
+    "loading": "Loading...",
     "share": "Share",
     "shared": "Link copied",
     "selected": "Selected",
@@ -58,14 +59,24 @@
     "official": "Official",
     "events": "Events",
     "infrastructure": "Infrastructure",
-    "ecology": "Ecology"
+    "ecology": "Ecology",
+    "memorial": "Memorial",
+    "weather": "Weather",
+    "economy": "Economy",
+    "social": "Social",
+    "culture": "Culture",
+    "safety": "Safety",
+    "health": "Health",
+    "politics": "Politics",
+    "other": "Other"
   },
   "news": {
     "title": "Zhytomyr news and events",
     "searchPlaceholder": "Search news...",
     "details": "News details",
     "empty": "No news found",
-    "filterTitle": "News filters"
+    "filterTitle": "News filters",
+    "readSource": "Read source"
   },
   "appeals": {
     "title": "New appeal",
@@ -81,6 +92,7 @@
     "photoCount": "{{count}} photos selected",
     "analyzingPhoto": "AI is analyzing the photo...",
     "notCivicIssueWarning": "This may not look like a civic issue — please double-check before sending.",
+    "photoSavedManual": "Photo saved. AI is unavailable — pick a category and describe the issue manually.",
     "description": "Issue description",
     "descriptionPlaceholder": "Describe the issue...",
     "send": "Send appeal",
@@ -102,6 +114,26 @@
       "in_progress": "In progress",
       "resolved": "Resolved",
       "rejected": "Rejected"
+    },
+    "detail": {
+      "title": "Appeal",
+      "reviewedYes": "Reviewed by the city",
+      "reviewedNo": "Awaiting review",
+      "progress": "Processing status",
+      "problem": "Issue description",
+      "reportedOn": "Submitted",
+      "response": "City response",
+      "respondedOn": "Updated",
+      "awaitingResponse": "No response yet. We'll notify you once your appeal is reviewed.",
+      "noPhoto": "Photo unavailable",
+      "hasResponse": "Has a response",
+      "open": "View details",
+      "timeline": {
+        "received": "Received",
+        "inReview": "In review",
+        "resolved": "Resolved",
+        "rejected": "Rejected"
+      }
     }
   },
   "services": {
@@ -114,6 +146,7 @@
       "polls": { "title": "Polls & Voting", "subtitle": "City decisions" },
       "appeals": { "title": "Appeals", "subtitle": "Track issues" },
       "transport": { "title": "Transport", "subtitle": "Routes & schedules" },
+      "outages": { "title": "Power", "subtitle": "Outage schedule" },
       "utilities": { "title": "Utilities & Payments", "subtitle": "Tariffs & bills" },
       "healthcare": { "title": "Healthcare", "subtitle": "Book a doctor" }
     }
@@ -126,7 +159,8 @@
     "updating": "Updating...",
     "routeDetails": "Route details",
     "mapTitle": "Live transport map",
-    "mapText": "An interactive transport map will be connected here.",
+    "mapText": "Live Zhytomyr transport tracking (DozoR City): routes, stops and real-time vehicles.",
+    "openDozor": "Open full screen",
     "empty": "No routes found",
     "types": {
       "all": "All",
@@ -204,5 +238,32 @@
     "sentHint": "The answer is generated locally for the UI prototype.",
     "thinking": "AI is thinking...",
     "error": "Something went wrong. Please try again."
+  },
+  "outages": {
+    "title": "Outage schedule",
+    "cardLabel": "Power",
+    "cardLoading": "Loading…",
+    "queue": "Queue {{queue}}",
+    "status": {
+      "on": "Power on",
+      "off": "Power off",
+      "maybe": "Possible outage"
+    },
+    "changeIn": "Changes in {{time}}",
+    "thenBecomes": "then {{status}} at {{time}}",
+    "durationHM": "{{h}}h {{m}}m",
+    "durationH": "{{h}}h",
+    "durationM": "{{m}}m",
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "noOutages": "No planned outages",
+    "loading": "Loading schedule…",
+    "unavailable": "Schedule unavailable",
+    "updatedAt": "Updated {{time}}",
+    "needsAddressTitle": "No address set",
+    "needsAddressHint": "Add your address in the profile and we'll detect your queue and show the outage schedule.",
+    "needsAddressCta": "Add address",
+    "estimateNote": "Approximate schedule for the prototype. Exact data —",
+    "openSource": "on the Zhytomyroblenergo site"
   }
 }

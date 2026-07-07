@@ -51,8 +51,14 @@ export default function AppealFormModal({ open, onClose }) {
       const result = await uploadPhoto.mutateAsync(file);
       setUploadedImageUrl(result.imageUrl);
       setTriage(result.triage);
-      setCategory(result.triage.category);
-      setDescription((current) => current || result.triage.description);
+      // The category is always the citizen's own choice from the chip list below - AI triage only
+      // offers an optional pre-fill. When ml-service is available we suggest a category/description,
+      // but never overwrite whatever the user has already picked or typed (current || ...); when it
+      // is unavailable (triage: null) nothing is pre-filled and the user simply chooses manually.
+      if (result.triage) {
+        setCategory((current) => current || result.triage.category);
+        setDescription((current) => current || result.triage.description);
+      }
     } catch {
       // uploadPhoto.error is rendered below; the preview stays so the user can pick another file.
     }
@@ -140,6 +146,9 @@ export default function AppealFormModal({ open, onClose }) {
           ) : null}
           {triage && !triage.isValid ? (
             <p className="mt-1.5 ml-1 text-xs text-on-surface-variant">{t("appeals.notCivicIssueWarning")}</p>
+          ) : null}
+          {uploadedImageUrl && !triage && !uploadPhoto.isPending ? (
+            <p className="mt-1.5 ml-1 text-xs text-on-surface-variant">{t("appeals.photoSavedManual")}</p>
           ) : null}
         </div>
 

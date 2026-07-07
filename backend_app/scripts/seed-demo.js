@@ -1,10 +1,33 @@
+import bcrypt from "bcryptjs";
 import { connectMongo, disconnectMongo } from "../src/shared/db.js";
 import User from "../src/features/user/user.model.js";
 import Appeal from "../src/features/appeal/appeal.model.js";
 import { Survey } from "../src/features/survey/survey.model.js";
+import { Contact } from "../src/features/contact/contact.model.js";
 import { voteInSurvey } from "../src/features/survey/survey.service.js";
 
 const username = "nazar_dev";
+
+// Dedicated admin login for the admin panel. Override the password via ADMIN_SEED_PASSWORD.
+const ADMIN_USERNAME = "admin";
+const ADMIN_EMAIL = "admin@zhytomate.local";
+const ADMIN_PASSWORD = process.env.ADMIN_SEED_PASSWORD || "admin12345";
+
+// Mirrors the previously-static contacts from frontend_app/src/consts/serviceData.js so the
+// Contacts tab has data once it reads from the API. `kind:"emergency"` renders in the top grid;
+// `kind:"utility"` rows are grouped under their `group` heading.
+const demoContacts = [
+  { name: "Пожежна", phone: "101", icon: "local_fire_department", kind: "emergency", group: "" },
+  { name: "Поліція", phone: "102", icon: "local_police", kind: "emergency", group: "" },
+  { name: "Швидка", phone: "103", icon: "medical_services", kind: "emergency", group: "" },
+  { name: "Служба газу", phone: "104", icon: "gas_meter", kind: "emergency", group: "" },
+  { name: "Водоканал", phone: "0412 24-08-10", icon: "water_drop", kind: "utility", group: "Комунальні служби" },
+  { name: "Обленерго", phone: "0 800 30-92-82", icon: "bolt", kind: "utility", group: "Комунальні служби" },
+  { name: "Теплокомуненерго", phone: "0412 48-14-14", icon: "hvac", kind: "utility", group: "Комунальні служби" },
+  { name: "Ліфтсервіс", phone: "0412 42-20-80", icon: "elevator", kind: "utility", group: "Комунальні служби" },
+  { name: "ЦНАП", phone: "0412 47-06-15", icon: "account_balance", kind: "utility", group: "Соціальні та адмін послуги" },
+  { name: "Соцзахист", phone: "0412 47-09-17", icon: "family_restroom", kind: "utility", group: "Соціальні та адмін послуги" },
+];
 
 const demoAppeals = [
   {
@@ -12,18 +35,26 @@ const demoAppeals = [
     category: "street_lighting",
     description: "Broken street light near the main entrance.",
     address: "Kyivska St, 12",
+    status: "resolved",
+    response:
+      "Дякуємо за звернення! Ліхтар відремонтовано бригадою КП «Міськсвітло». Освітлення відновлено, роботи прийнято.",
   },
   {
     imageUrl: "https://example.com/demo/appeals/pothole.jpg",
     category: "pothole",
     description: "Large pothole on the road after heavy rain.",
     address: "Peremohy Square, 4",
+    status: "in_progress",
+    response:
+      "Звернення прийнято в роботу. Ділянку внесено до графіка ямкового ремонту, орієнтовний термін — 5 робочих днів.",
   },
   {
     imageUrl: "https://example.com/demo/appeals/trash-bin.jpg",
     category: "garbage",
     description: "Overflowing trash bins near the playground.",
     address: "Shevchenka Blvd, 18",
+    status: "new",
+    response: "",
   },
 ];
 
@@ -65,6 +96,13 @@ async function seedAppeals(user) {
     });
 
     if (existing) {
+      // Keep demo status/response in sync on re-runs so the detail page always has data to show.
+      // Also backfill category, since appeals seeded before the category taxonomy existed lack it
+      // and would otherwise fail the model's required-category validation on save().
+      existing.category = appeal.category;
+      existing.status = appeal.status;
+      existing.response = appeal.response;
+      await existing.save();
       continue;
     }
 
@@ -111,6 +149,54 @@ async function seedSurveysAndVotes(user) {
   return { createdSurveys, savedVotes };
 }
 
+// Ensures an admin login exists AND promotes nazar_dev to admin so the existing demo login can
+// reach the admin panel (frontend RequireAdmin checks role === "admin"). Idempotent.
+async function seedAdmin(demoUser) {
+  let adminCreated = false;
+
+  if (demoUser.role !== "admin") {
+    demoUser.role = "admin";
+    await demoUser.save();
+  }
+
+  let admin = await User.findOne({
+    $or: [{ username: ADMIN_USERNAME }, { email: ADMIN_EMAIL }],
+  });
+
+  if (!admin) {
+    const password = await bcrypt.hash(ADMIN_PASSWORD, 12);
+    admin = await User.create({
+      username: ADMIN_USERNAME,
+      firstName: "City",
+      lastName: "Admin",
+      email: ADMIN_EMAIL,
+      password,
+      role: "admin",
+    });
+    adminCreated = true;
+  } else if (admin.role !== "admin") {
+    admin.role = "admin";
+    await admin.save();
+  }
+
+  return { adminCreated };
+}
+
+async function seedContacts() {
+  let created = 0;
+
+  for (const [index, contact] of demoContacts.entries()) {
+    const existing = await Contact.findOne({ name: contact.name });
+    if (existing) {
+      continue;
+    }
+    await Contact.create({ ...contact, order: index });
+    created += 1;
+  }
+
+  return created;
+}
+
 async function main() {
   await connectMongo();
 
@@ -119,13 +205,17 @@ async function main() {
     throw new Error('User "nazar_dev" was not found. Register it first.');
   }
 
+  const { adminCreated } = await seedAdmin(user);
   const createdAppeals = await seedAppeals(user);
   const { createdSurveys, savedVotes } = await seedSurveysAndVotes(user);
+  const createdContacts = await seedContacts();
 
   console.log(`Seeded demo data for ${username}:`);
+  console.log(`- ${username} promoted to admin; dedicated admin account ${adminCreated ? "created" : "already present"} (login: ${ADMIN_USERNAME})`);
   console.log(`- appeals created: ${createdAppeals}`);
   console.log(`- surveys created: ${createdSurveys}`);
   console.log(`- votes saved: ${savedVotes}`);
+  console.log(`- contacts created: ${createdContacts}`);
 }
 
 main()

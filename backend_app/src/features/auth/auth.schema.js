@@ -6,7 +6,8 @@ export const registerSchema = Joi.object({
   lastName: Joi.string().trim().min(1).max(64).required(),
   email: Joi.string().trim().lowercase().email().required(),
   password: Joi.string().min(8).max(128).required(),
-  role: Joi.string().valid("user", "admin").default("user"),
+  // `role` is intentionally NOT accepted here - public registration must never let a client
+  // self-assign "admin". Admins are provisioned via the seed script / an admin-only endpoint.
 });
 
 export const loginSchema = Joi.object({

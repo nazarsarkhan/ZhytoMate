@@ -17,7 +17,7 @@ function getRagUrl() {
 }
 
 function getNewsUrl() {
-  return process.env.NEWS_API_URL || 'http://localhost:8000/api/v1/news';
+  return process.env.NEWS_API_URL || 'http://localhost:3000/news/ingest';
 }
 
 function isRagSendEnabled() {
@@ -76,6 +76,7 @@ async function postNewsItem(newsItem) {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
+      'X-Internal-Token': process.env.INTERNAL_TOKEN,
     },
     body: JSON.stringify(newsItem),
   });

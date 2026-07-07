@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Shell from "../../components/layout/Shell.jsx";
 import BottomNav from "../../components/navigation/BottomNav.jsx";
@@ -57,7 +58,11 @@ export default function AppealsPage() {
           </div>
           <div className="grid gap-stack-gap md:grid-cols-2">
             {filteredAppeals.map((item) => (
-              <article key={item.id} className="motion-card rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-soft">
+              <Link
+                key={item.id}
+                to={`/services/appeals/${item.id}`}
+                className="motion-card block rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-soft transition hover:border-primary-container active:scale-[0.99]"
+              >
                 <div className="mb-3 flex items-start justify-between gap-2">
                   <span className="flex items-center gap-1 text-xs text-on-surface-variant"><Icon name="calendar_today" className="text-base" /> {formatDate(item.createdAt, i18n.resolvedLanguage)}</span>
                   <span className={`rounded-md px-2.5 py-1 text-xs font-bold ${appealStatusTone[item.status] || appealStatusTone.new}`}>{t(`appeals.status.${item.status}`)}</span>
@@ -67,7 +72,13 @@ export default function AppealsPage() {
                 <div className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-surface-container-low px-2 py-1.5 text-xs text-on-surface-variant">
                   <Icon name="location_on" className="text-base" /> {item.address}
                 </div>
-              </article>
+                <div className="mt-3 flex items-center justify-between gap-2 border-t border-outline-variant/20 pt-3">
+                  {item.response ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-green-700"><Icon name="mark_chat_read" className="text-base" /> {t("appeals.detail.hasResponse")}</span>
+                  ) : <span />}
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-primary">{t("appeals.detail.open")} <Icon name="arrow_forward" className="text-base" /></span>
+                </div>
+              </Link>
             ))}
             {!filteredAppeals.length ? <p className="col-span-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-6 text-center text-sm text-on-surface-variant">{t("appeals.empty")}</p> : null}
           </div>

@@ -2,12 +2,15 @@ import { ApiError } from "../../shared/ApiError.js";
 import {
   countSurveys,
   countVotesByOption,
+  countVotesBySurvey,
   countVotesByUserId,
   createSurvey,
+  deleteSurveyById,
   findSurveyById,
   findSurveys,
   findVoteBySurveyAndUser,
   findVotesByUserId,
+  updateSurveyById,
   upsertSurveyVote,
 } from "./survey.repository.js";
 import {
@@ -53,6 +56,64 @@ export async function createSurveyForUsers({
   });
 
   return toPublicSurvey(survey);
+}
+
+export async function updateSurvey({ surveyId, updates }) {
+  const survey = await findSurveyById(surveyId);
+  if (!survey) {
+    throw ApiError.notFound("Survey not found");
+  }
+
+  const patch = {};
+  for (const field of [
+    "title",
+    "description",
+    "category",
+    "startsAt",
+    "endsAt",
+    "isActive",
+  ]) {
+    if (updates[field] !== undefined) {
+      patch[field] = updates[field];
+    }
+  }
+
+  // Validate the date window against the effective (current ∪ patched) values.
+  const effectiveStartsAt = patch.startsAt ?? survey.startsAt;
+  const effectiveEndsAt = patch.endsAt ?? survey.endsAt;
+  if (
+    effectiveStartsAt &&
+    effectiveEndsAt &&
+    new Date(effectiveStartsAt) >= new Date(effectiveEndsAt)
+  ) {
+    throw ApiError.badRequest("startsAt must be before endsAt");
+  }
+
+  // Replacing the option set would orphan existing votes (they reference old option ids), so only
+  // allow it while no one has voted yet. Meta fields above can always be edited.
+  if (updates.options !== undefined) {
+    const voteCount = await countVotesBySurvey(surveyId);
+    if (voteCount > 0) {
+      throw ApiError.badRequest(
+        "Cannot change options after votes have been cast",
+      );
+    }
+    patch.options = updates.options.map((label) => ({ label }));
+  }
+
+  const updated = await updateSurveyById(surveyId, patch);
+  const tallies = await countVotesByOption(surveyId);
+  return toPublicSurvey(updated, null, tallies);
+}
+
+export async function deleteSurveyForAdmin(surveyId) {
+  const survey = await findSurveyById(surveyId);
+  if (!survey) {
+    throw ApiError.notFound("Survey not found");
+  }
+
+  await deleteSurveyById(surveyId);
+  return { id: surveyId };
 }
 
 export async function getSurveyHistory(userId) {
@@ -124,6 +185,8 @@ export async function voteInSurvey({ surveyId, userId, optionId }) {
 
 export default {
   createSurveyForUsers,
+  updateSurvey,
+  deleteSurveyForAdmin,
   getSurveyHistory,
   getSurveyProgress,
   getSurveyForUser,

@@ -47,16 +47,17 @@ export async function register({
   lastName,
   email,
   password: plainPassword,
-  role = "user",
 }) {
   const password = await bcrypt.hash(plainPassword, 12);
+  // Public registration always creates a plain "user" - role is never taken from the request
+  // (registerSchema drops it, and we hardcode it here as defense-in-depth).
   const user = await createUserProfile({
     username,
     firstName,
     lastName,
     email: email.toLowerCase(),
     password,
-    role,
+    role: "user",
   });
 
   return {

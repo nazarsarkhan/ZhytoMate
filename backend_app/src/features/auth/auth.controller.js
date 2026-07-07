@@ -8,14 +8,13 @@ import {
 
 export async function registerUser(req, res, next) {
   try {
-    const { username, firstName, lastName, email, password, role } = req.body;
+    const { username, firstName, lastName, email, password } = req.body;
     const result = await register({
       username,
       firstName,
       lastName,
       email,
       password,
-      role,
     });
     return res.status(201).json(result);
   } catch (err) {

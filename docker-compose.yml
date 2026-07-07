@@ -136,8 +136,8 @@ services:
       RAG_URL: http://ml:8000/api/v1/knowledge/ingest
       RAG_SEND_ENABLED: ${RAG_SEND_ENABLED:-false}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
-      NEWS_API_URL: http://ml:8000/api/v1/news
-      NEWS_SEND_ENABLED: ${NEWS_SEND_ENABLED:-false}
+      NEWS_API_URL: http://backend:3000/news/ingest
+      NEWS_SEND_ENABLED: ${NEWS_SEND_ENABLED:-true}
       ZT_RADA_MAX_PAGES: ${ZT_RADA_MAX_PAGES:-800}
       ZT_RADA_MAX_ITEMS: ${ZT_RADA_MAX_ITEMS:-1200}
       ZT_RADA_ATTACHMENT_LIMIT_PER_PAGE: ${ZT_RADA_ATTACHMENT_LIMIT_PER_PAGE:-5}
@@ -150,6 +150,11 @@ services:
         condition: service_healthy
       ml:
         condition: service_healthy
+      # News now POSTs to the backend; wait for it to start (backend has no healthcheck, so
+      # service_started rather than service_healthy). The parser's queue retries transient failures
+      # regardless, so this is just start-order best-effort.
+      backend:
+        condition: service_started
 
 volumes:
   pgdata: {}

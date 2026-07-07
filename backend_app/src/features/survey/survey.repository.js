@@ -4,6 +4,7 @@ import { Survey, SurveyVote } from "./survey.model.js";
 export function createSurvey({
   title,
   description,
+  category,
   options,
   startsAt,
   endsAt,
@@ -12,6 +13,7 @@ export function createSurvey({
   return Survey.create({
     title,
     description,
+    category,
     options,
     startsAt,
     endsAt,
@@ -21,6 +23,24 @@ export function createSurvey({
 
 export function findSurveys() {
   return Survey.find().sort({ createdAt: -1 });
+}
+
+export function updateSurveyById(id, updates) {
+  return Survey.findByIdAndUpdate(
+    id,
+    { $set: updates },
+    { new: true, runValidators: true },
+  );
+}
+
+export async function deleteSurveyById(id) {
+  // Remove the votes first so no orphaned SurveyVote docs linger for a deleted survey.
+  await SurveyVote.deleteMany({ survey: id });
+  return Survey.findByIdAndDelete(id);
+}
+
+export function countVotesBySurvey(surveyId) {
+  return SurveyVote.countDocuments({ survey: surveyId });
 }
 
 export function countSurveys() {
@@ -67,6 +87,9 @@ export async function countVotesByOption(surveyId) {
 export default {
   createSurvey,
   findSurveys,
+  updateSurveyById,
+  deleteSurveyById,
+  countVotesBySurvey,
   countSurveys,
   findSurveyById,
   findVotesByUserId,

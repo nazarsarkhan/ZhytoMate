@@ -1,6 +1,7 @@
 import { ApiError } from "../../shared/ApiError.js";
 import {
   getPublicUserById,
+  previewUserAddress,
   updateUserAddress,
   updateUserAvatarFromUpload,
   updateUserName,
@@ -54,6 +55,16 @@ export async function updateCurrentUserAddress(req, res, next) {
   }
 }
 
+// Verify/normalize an address without saving it (for the profile's "check address" UX).
+export async function previewCurrentUserAddress(req, res, next) {
+  try {
+    const address = await previewUserAddress(req.body);
+    return res.json({ address });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 export async function uploadCurrentUserAvatar(req, res, next) {
   try {
     if (!req.file) {
@@ -77,5 +88,6 @@ export default {
   getUserById,
   updateCurrentUserName,
   updateCurrentUserAddress,
+  previewCurrentUserAddress,
   uploadCurrentUserAvatar,
 };

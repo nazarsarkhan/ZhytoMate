@@ -11,6 +11,17 @@ export function useAppeals() {
   });
 }
 
+export function useAppeal(appealId) {
+  return useQuery({
+    queryKey: ["appeals", appealId],
+    queryFn: async () => {
+      const { appeal } = await apiFetch(`/appeals/${appealId}`);
+      return appeal;
+    },
+    enabled: Boolean(appealId),
+  });
+}
+
 export function useUploadAppealPhoto() {
   return useMutation({
     mutationFn: (file) => {

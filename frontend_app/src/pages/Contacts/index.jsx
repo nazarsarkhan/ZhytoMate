@@ -3,8 +3,14 @@ import AppHeader from "../../components/layout/AppHeader.jsx";
 import BottomNav from "../../components/navigation/BottomNav.jsx";
 import Icon from "../../components/ui/Icon.jsx";
 import { emergencyServices, utilityContacts } from "../../consts/serviceData.js";
+import { useContacts } from "../../hooks/useContacts.js";
 
 export default function ContactsPage() {
+  const { data } = useContacts();
+  // Fall back to the bundled static list while loading or if the API returns nothing.
+  const emergency = data?.emergency?.length ? data.emergency : emergencyServices;
+  const groups = data?.groups?.length ? data.groups : utilityContacts;
+
   return (
     <Shell className="bg-background pb-28">
       <AppHeader title="Контакти міста" backTo="/services" rightIcon="notifications" rightTo="/notifications" />
@@ -30,7 +36,7 @@ export default function ContactsPage() {
           <section>
             <h2 className="mb-3 text-lg font-bold text-primary-container">Екстрені служби</h2>
             <div className="grid grid-cols-2 gap-gutter">
-              {emergencyServices.map((item) => (
+              {emergency.map((item) => (
                 <article key={item.phone} className="rounded-xl border border-surface-variant bg-surface-container-lowest p-4 text-center shadow-soft">
                   <span className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-error-container text-error">
                     <Icon name={item.icon} filled />
@@ -42,7 +48,7 @@ export default function ContactsPage() {
               ))}
             </div>
           </section>
-          {utilityContacts.map((group) => (
+          {groups.map((group) => (
             <section key={group.group}>
               <h2 className="mb-3 text-lg font-bold text-primary-container">{group.group}</h2>
               <div className="overflow-hidden rounded-xl border border-surface-variant bg-surface-container-lowest shadow-soft">

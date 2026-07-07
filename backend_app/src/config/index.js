@@ -25,6 +25,14 @@ export const config = {
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean),
+  // Address verification/normalization via Nominatim (OpenStreetMap). No API key required, but
+  // Nominatim's usage policy REQUIRES an identifying User-Agent and limits to ~1 req/sec. For
+  // production, point NOMINATIM_BASE_URL at a self-hosted instance or a paid geocoder.
+  nominatimBaseUrl:
+    process.env.NOMINATIM_BASE_URL || "https://nominatim.openstreetmap.org",
+  nominatimUserAgent:
+    process.env.NOMINATIM_USER_AGENT || "Zhytomate/1.0 (city services app)",
+  addressDefaultCity: process.env.ADDRESS_DEFAULT_CITY || "Житомир",
 };
 
 export default config;

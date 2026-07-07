@@ -4,6 +4,7 @@ import { authenticate } from "../auth/auth.middleware.js";
 import {
   getCurrentUser,
   getUserById,
+  previewCurrentUserAddress,
   updateCurrentUserAddress,
   updateCurrentUserName,
   uploadCurrentUserAvatar,
@@ -25,6 +26,12 @@ router.patch(
   authenticate,
   validate(updateAddressSchema),
   updateCurrentUserAddress,
+);
+router.post(
+  "/me/address/preview",
+  authenticate,
+  validate(updateAddressSchema),
+  previewCurrentUserAddress,
 );
 router.post(
   "/me/avatar",

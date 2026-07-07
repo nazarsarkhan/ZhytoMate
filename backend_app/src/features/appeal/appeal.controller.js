@@ -2,8 +2,10 @@ import { ApiError } from "../../shared/ApiError.js";
 import {
   analyzeAppealPhoto,
   createUserAppeal,
+  getAllAppeals,
   getUserAppealById,
   getUserAppeals,
+  respondToAppeal,
 } from "./appeal.service.js";
 
 export async function createAppeal(req, res, next) {
@@ -63,9 +65,38 @@ export async function getAppealById(req, res, next) {
   }
 }
 
+// Admin: list every citizen's appeals with optional filters.
+export async function getAppeals(req, res, next) {
+  try {
+    const { status, category, page, limit } = req.validatedQuery;
+    const result = await getAllAppeals({ status, category, page, limit });
+
+    return res.json(result);
+  } catch (err) {
+    return next(err);
+  }
+}
+
+// Admin: set status and/or the citizen-facing response on an appeal.
+export async function updateAppeal(req, res, next) {
+  try {
+    const appeal = await respondToAppeal({
+      appealId: req.params.id,
+      status: req.body.status,
+      response: req.body.response,
+    });
+
+    return res.json({ appeal });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 export default {
   createAppeal,
   uploadPhoto,
   getMyAppeals,
   getAppealById,
+  getAppeals,
+  updateAppeal,
 };

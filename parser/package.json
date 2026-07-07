@@ -8,6 +8,7 @@
     "start": "node index.js",
     "dev": "node --watch index.js",
     "session": "node scripts/generate-session.js",
+    "backfill:news": "node scripts/backfill-news-to-backend.js",
     "test": "node --test"
   },
   "dependencies": {

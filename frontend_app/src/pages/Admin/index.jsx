@@ -13,6 +13,7 @@ const sections = [
   { entity: "announcements", path: "announcements", label: "Анонси", singular: "анонс", icon: "campaign", searchable: ["title", "body", "audience", "priority", "status"] },
   { entity: "news", path: "news", label: "Новини", singular: "новину", icon: "newspaper", searchable: ["title", "body", "source", "category", "status", "tags"] },
   { entity: "appeals", path: "appeals", label: "Звернення", singular: "звернення", icon: "assignment", searchable: ["user", "category", "address", "description", "status"] },
+  { entity: "contacts", path: "contacts", label: "Контакти", singular: "контакт", icon: "contacts", searchable: ["name", "phone", "group", "kind"] },
 ];
 
 const sectionByEntity = Object.fromEntries(sections.map((section) => [section.entity, section]));
@@ -31,10 +32,12 @@ const statusTone = {
   low: "bg-surface-container-high text-on-surface-variant",
   admin: "bg-primary-container text-on-primary",
   user: "bg-surface-container-high text-on-surface-variant",
+  emergency: "bg-error-container text-error",
+  utility: "bg-surface-container-high text-on-surface-variant",
 };
 
 const statusLabel = {
-  active: "Активний",
+  active: "Активне",
   blocked: "Заблокований",
   draft: "Чернетка",
   published: "Опубліковано",
@@ -48,6 +51,8 @@ const statusLabel = {
   low: "Низький",
   admin: "Адмін",
   user: "Юзер",
+  emergency: "Екстрена",
+  utility: "Служба",
 };
 
 const fieldsByEntity = {
@@ -87,13 +92,19 @@ const fieldsByEntity = {
     ["date", "Дата"],
     ["tags", "Теги"],
   ],
+  // Appeals are filed by citizens - admins only set the status and write the reply, so the editor
+  // exposes just those two fields. The reporter/category/address/description show read-only on the
+  // detail page.
   appeals: [
-    ["user", "Заявник"],
-    ["category", "Категорія"],
-    ["address", "Адреса"],
-    ["description", "Опис", "textarea"],
     ["status", "Статус", "select", ["new", "in_progress", "resolved", "rejected"]],
-    ["createdAt", "Дата"],
+    ["response", "Відповідь мешканцю", "textarea"],
+  ],
+  contacts: [
+    ["name", "Назва"],
+    ["phone", "Телефон"],
+    ["icon", "Іконка"],
+    ["group", "Група"],
+    ["kind", "Тип", "select", ["emergency", "utility"]],
   ],
 };
 
@@ -152,7 +163,8 @@ function emptyItem(entity) {
     },
     announcements: { title: "", body: "", audience: "Усі мешканці", priority: "medium", status: "draft", publishAt: today, author: "Адміністрація" },
     news: { title: "", body: "", source: "Житомирська міська рада", category: "Офіційно", status: "draft", date: today, tags: "" },
-    appeals: { user: "", userId: "", category: "", address: "", description: "", status: "new", imageUrl: "", createdAt: today },
+    appeals: { user: "", userId: "", category: "", address: "", description: "", status: "new", response: "", imageUrl: "", createdAt: today },
+    contacts: { name: "", phone: "", icon: "call", group: "", kind: "utility" },
   };
   return defaults[entity];
 }
@@ -377,7 +389,7 @@ function AdminHeader({ section, onCreate }) {
               <h1 className="truncate text-2xl font-bold text-on-surface">{section.label}</h1>
             </div>
           </div>
-          {section.entity !== "users" ? (
+          {!["users", "appeals"].includes(section.entity) ? (
             <button className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-secondary-container text-on-secondary-container active:scale-[0.98] sm:w-auto sm:px-4" type="button" aria-label={`Додати ${section.singular}`} onClick={onCreate}>
               <Icon name="add" className="text-lg" />
               <span className="hidden text-sm font-bold sm:inline">Додати</span>
@@ -553,6 +565,7 @@ function AdminEditorModal({ entity, item, open, onClose }) {
 function itemTitle(entity, item) {
   if (entity === "users") return `${item.firstName} ${item.lastName}`.trim() || item.username;
   if (entity === "appeals") return `${item.category}: ${item.address}`;
+  if (entity === "contacts") return item.name;
   return item.title;
 }
 
@@ -561,11 +574,13 @@ function itemSubtitle(entity, item) {
   if (entity === "surveys") return item.description;
   if (entity === "announcements") return item.body;
   if (entity === "news") return item.body;
+  if (entity === "contacts") return [item.phone, item.group].filter(Boolean).join(" · ");
   return item.description;
 }
 
 function filterValue(entity, item) {
   if (entity === "users") return item.role;
+  if (entity === "contacts") return item.kind;
   return item.status || item.priority;
 }
 
@@ -626,9 +641,11 @@ function AdminListPage({ entity }) {
                   <Link className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-container text-on-surface-variant" to={`/admin/${section.path}/${item.id}`} aria-label="Відкрити">
                     <Icon name="visibility" className="text-lg" />
                   </Link>
-                  <button className="flex h-9 w-9 items-center justify-center rounded-full bg-error-container text-error" type="button" aria-label="Видалити" onClick={() => setPendingDelete(item)}>
-                    <Icon name="delete" className="text-lg" />
-                  </button>
+                  {entity !== "appeals" ? (
+                    <button className="flex h-9 w-9 items-center justify-center rounded-full bg-error-container text-error" type="button" aria-label="Видалити" onClick={() => setPendingDelete(item)}>
+                      <Icon name="delete" className="text-lg" />
+                    </button>
+                  ) : null}
                 </div>
               </article>
             ))}
@@ -735,11 +752,13 @@ function AdminDetailPage({ entity }) {
           </div>
           <div className="flex gap-2">
             <button className="flex h-10 items-center gap-2 rounded-full bg-surface-container px-4 text-sm font-bold text-on-surface" type="button" onClick={() => setEditorOpen(true)}>
-              <Icon name="edit" className="text-lg" /> Редагувати
+              <Icon name="edit" className="text-lg" /> {entity === "appeals" ? "Відповісти" : "Редагувати"}
             </button>
-            <button className="flex h-10 items-center gap-2 rounded-full bg-error-container px-4 text-sm font-bold text-error" type="button" onClick={() => setDeleteConfirmOpen(true)}>
-              <Icon name="delete" className="text-lg" /> Видалити
-            </button>
+            {entity !== "appeals" ? (
+              <button className="flex h-10 items-center gap-2 rounded-full bg-error-container px-4 text-sm font-bold text-error" type="button" onClick={() => setDeleteConfirmOpen(true)}>
+                <Icon name="delete" className="text-lg" /> Видалити
+              </button>
+            ) : null}
           </div>
         </div>
       </header>
