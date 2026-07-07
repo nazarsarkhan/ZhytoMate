@@ -54,8 +54,14 @@ function findInvalidFields(action, slots) {
   return action.slotSchema.filter((field) => {
     const value = slots[field.name];
     if (field.enumValues && !field.enumValues.includes(value)) return true;
-    if (field.minLength !== undefined && (typeof value !== "string" || value.length < field.minLength)) return true;
-    if (field.maxLength !== undefined && typeof value === "string" && value.length > field.maxLength) return true;
+
+    // Mirror appeal.schema.js's Joi chain (.trim().min()/.max()), which measures length AFTER
+    // trimming - checking the raw value here would let a whitespace-padded-below-minimum string
+    // (or an all-whitespace one) through, only for appeal.model.js's Mongoose `trim: true` to
+    // silently collapse it to something shorter (or empty) on save.
+    const trimmed = typeof value === "string" ? value.trim() : value;
+    if (field.minLength !== undefined && (typeof trimmed !== "string" || trimmed.length < field.minLength)) return true;
+    if (field.maxLength !== undefined && typeof trimmed === "string" && trimmed.length > field.maxLength) return true;
     return false;
   });
 }
