@@ -13,6 +13,10 @@ export const createAppealAction = {
     { name: "description", description: "Детальний опис проблеми" },
     { name: "address", description: "Адреса або місце розташування проблеми" },
   ],
+  // Confirm/cancel replies are rendered by assistantActions.service.js, which is generic across
+  // action types - it falls back to its own defaults if an action module omits these.
+  successMessage: "Готово! Звернення опубліковано.",
+  failureMessage: "Не вдалося опублікувати. Спробуйте підтвердити ще раз.",
   describeSummary(slots) {
     return [
       `Категорія: ${slots.category}`,
