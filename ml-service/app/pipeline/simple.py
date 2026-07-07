@@ -73,12 +73,11 @@ class SimpleRAGPipeline(RAGPipeline):
         outcome = await self._retriever.retrieve(
             retrieval_query, query_vec, ctx.district_slug, k=RETRIEVE_LIMIT
         )
-        # A genuine rank-1 agreement between the fused list and the raw lexical leg — see
-        # run_shared_tail's docstring for why this grounds an answer even when dense top1_sim
-        # alone sits below sim_gate.
-        strong_lexical_match = (
-            bool(outcome.fused) and outcome.fused[0].id == outcome.lexical_top1_id
-        )
+        # A genuine rank-1 agreement between the fused list and the raw lexical leg (excluding a
+        # degenerate single-common-word OR-fallback coincidence — see RetrievalOutcome
+        # .has_strong_lexical_match) grounds an answer even when dense top1_sim alone sits below
+        # sim_gate; see run_shared_tail's docstring for why.
+        strong_lexical_match = outcome.has_strong_lexical_match
         result = await run_shared_tail(
             generator=self._generator,
             sim_gate=self._sim_gate,

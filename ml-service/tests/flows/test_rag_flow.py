@@ -42,10 +42,14 @@ _QUERY = "Коли вивезуть сміття?"
 _SAFE_JSON = json.dumps({"safe": True})
 
 
-def _hit(chunk_id: int, similarity: float, text: str) -> RetrievalResult:
+def _hit(
+    chunk_id: int, similarity: float, text: str,
+    lexical_coverage: int | None = None, lexical_terms_total: int | None = None,
+) -> RetrievalResult:
     return RetrievalResult(
         id=chunk_id, text=text, source="src", doc_type="instruction", district=None,
-        similarity=similarity,
+        similarity=similarity, lexical_coverage=lexical_coverage,
+        lexical_terms_total=lexical_terms_total,
     )
 
 
@@ -473,6 +477,39 @@ async def test_strong_lexical_match_grounds_a_low_dense_similarity_cnap_style_qu
     assert result.answer == "ЦНАП знаходиться на вул. Ватутіна, 2/1."
 
 
+async def test_cnap_grounds_via_a_fully_covered_single_term_or_fallback_hit() -> None:
+    """The exact real shape confirmed live against the production DB: "де" is filtered out of
+    "Де ЦНАП?" as a < 3-letter word (see components.repository._significant_terms), leaving "цнап"
+    as the query's ONLY significant term, so BOTH AND tiers (websearch_to_tsquery, plainto_tsquery)
+    return zero rows and the OR-fallback fires — with coverage=1 of a lexical_terms_total of 1.
+    That's a COMPLETE match despite the raw coverage number being the same "1" a genuinely partial
+    match (e.g. the Jupiter/borscht false positives) would also show — this is the live regression
+    caught while hardening the fix: a plain "coverage >= 2" floor wrongly refuses this exact,
+    correct case. Must still ground."""
+    cnap_hit = _hit(
+        1, similarity=0.35,
+        text="ЦНАП Житомирської міської ради: вул. Ватутіна, 2/1, пн-пт 8:00-17:00.",
+        lexical_coverage=1, lexical_terms_total=1,
+    )
+    outcome = RetrievalOutcome(dense=[cnap_hit], fused=[cnap_hit], lexical=[cnap_hit])
+    retriever = FakeRetriever({_CNAP_QUERY: outcome})
+    detect_json = json.dumps({"lang": "uk", "uk": _CNAP_QUERY})
+    generator = FakeGenerator(
+        results=[
+            (_SAFE_JSON, 0),
+            (detect_json, 0),
+            ("ЦНАП знаходиться на вул. Ватутіна, 2/1.", 0),
+        ]
+    )
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(_CNAP_QUERY))
+
+    assert result.debug["grounded"] is True
+    assert result.debug["strong_lexical_match"] is True
+    assert result.answer == "ЦНАП знаходиться на вул. Ватутіна, 2/1."
+
+
 async def test_low_dense_similarity_without_rank1_lexical_agreement_stays_ungrounded() -> None:
     """Negative control: the dense leg's best (still-weak) guess has SOME lexical presence but is
     NOT the lexical leg's own rank-1 pick — must stay ungrounded. This is the test that actually
@@ -483,6 +520,35 @@ async def test_low_dense_similarity_without_rank1_lexical_agreement_stays_ungrou
     outcome = RetrievalOutcome(
         dense=[weak_dense_hit], fused=[weak_dense_hit],
         lexical=[lexical_top_hit, weak_dense_hit],
+    )
+    retriever = FakeRetriever({_QUERY: outcome})
+    generator = FakeGenerator(
+        results=[(_SAFE_JSON, 0), ("Наразі не маю точних даних, але радо поспілкуюся!", 0)]
+    )
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(_QUERY))
+
+    assert result.debug["grounded"] is False
+    assert result.debug["strong_lexical_match"] is False
+
+
+async def test_partial_or_fallback_match_stays_ungrounded() -> None:
+    """Reproduces the real live false positive found while verifying the fix above: a query
+    genuinely unrelated to Zhytomyr civic services ("Скільки супутників у Юпітера?" — how many
+    moons does Jupiter have) came back grounded because the lexical OR-fallback (real Postgres
+    behavior, see components.repository.retrieve_lexical) degraded to matching on a single common
+    word ("скільки") out of the query's 3 significant terms, in unrelated civic FAQ chunks — the
+    fused top-1 agreed with the lexical leg's own rank-1 pick, but that pick only covered 1 of 3
+    terms (partial, not a genuine multi-term or AND-tier match). Confirmed live against the real
+    DB: both AND tiers (websearch_to_tsquery, plainto_tsquery) returned 0 rows, and the
+    OR-fallback's top row had coverage=1 of 3 significant terms. Must now stay ungrounded."""
+    off_topic_hit = _hit(
+        1, 0.323, "Понад 4,6 млн грн за пів року: скільки нарахували керівництву ОВА",
+        lexical_coverage=1, lexical_terms_total=3,
+    )
+    outcome = RetrievalOutcome(
+        dense=[off_topic_hit], fused=[off_topic_hit], lexical=[off_topic_hit]
     )
     retriever = FakeRetriever({_QUERY: outcome})
     generator = FakeGenerator(

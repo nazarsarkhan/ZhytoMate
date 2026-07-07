@@ -115,15 +115,12 @@ class AgentRAGPipeline(RAGPipeline):
 
         flattened = _interleave_by_rank(outcomes)
         agent_top1 = max((outcome.dense_top1_sim for outcome in outcomes), default=0.0)
-        # True when ANY sub-query's own fused top-1 chunk agrees with that same sub-query's own
-        # lexical rank-1 pick — mirrors SimpleRAGPipeline's per-outcome check (pipeline.base's
-        # run_shared_tail docstring), just reduced with `any(...)` across sub-queries: one strongly
-        # lexically-grounded chunk anywhere in the interleaved context is enough, even if the
-        # overall agent_top1 (max dense similarity across all sub-queries) sits below sim_gate.
-        strong_lexical_match = any(
-            bool(outcome.fused) and outcome.fused[0].id == outcome.lexical_top1_id
-            for outcome in outcomes
-        )
+        # True when ANY sub-query's own outcome has a strong lexical match (RetrievalOutcome
+        # .has_strong_lexical_match — mirrors SimpleRAGPipeline's per-outcome check), reduced with
+        # `any(...)` across sub-queries: one strongly lexically-grounded chunk anywhere in the
+        # interleaved context is enough, even if the overall agent_top1 (max dense similarity
+        # across all sub-queries) sits below sim_gate.
+        strong_lexical_match = any(outcome.has_strong_lexical_match for outcome in outcomes)
 
         return await run_shared_tail(
             generator=self._generator,

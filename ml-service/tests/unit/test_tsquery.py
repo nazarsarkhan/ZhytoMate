@@ -1,8 +1,13 @@
 """
 Purpose:   Unit: _significant_terms extracts the distinct, non-trivial tokens a query contributes to
-           the lexical OR fallback (the corpus-frequency filtering on top of it lives in
-           KnowledgeRepository._distinctive_terms and is exercised by the integration suite). Pure
-           string function — no DB.
+           the lexical OR fallback. NOTE: a corpus-frequency filter on top of this was planned
+           (originally referenced here and in repository.py as `KnowledgeRepository
+           ._distinctive_terms`) but never actually built — there is no such method anywhere in
+           this codebase. The current mitigation for the resulting risk (the OR fallback anchoring
+           on a single corpus-common word) lives one layer up: retrieve_lexical tags OR-fallback
+           hits with their real lexical_coverage, and RetrievalOutcome.has_strong_lexical_match
+           requires coverage >= 2 to trust one. See ml-service/CLAUDE.md's Known Issues for the
+           full history. Pure string function — no DB.
 Layer:     test
 May import:   pytest, app.components.repository (the pure helper only)
 Must NOT import:  a live asyncpg pool (the function under test touches no I/O)
