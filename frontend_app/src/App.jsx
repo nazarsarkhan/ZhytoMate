@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import AssistantPage from "./pages/Assistant/index.jsx";
+import AdminApp from "./pages/Admin/index.jsx";
 import AppealsPage from "./pages/Appeals/index.jsx";
 import ChatConversationPage from "./pages/ChatConversation/index.jsx";
 import ChatHistoryPage from "./pages/ChatHistory/index.jsx";
@@ -15,6 +16,7 @@ import RegisterPage from "./pages/Register/index.jsx";
 import ServicesPage from "./pages/Services/index.jsx";
 import TransportPage from "./pages/Transport/index.jsx";
 import RequireAuth from "./components/routing/RequireAuth.jsx";
+import RequireAdmin from "./components/routing/RequireAdmin.jsx";
 
 export default function App() {
   const location = useLocation();
@@ -25,6 +27,7 @@ export default function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/" element={<Navigate to="/assistant" replace />} />
       <Route path="/assistant" element={<RequireAuth><AssistantPage /></RequireAuth>} />
+      <Route path="/admin/*" element={<RequireAdmin><AdminApp /></RequireAdmin>} />
       <Route path="/chat-history" element={<RequireAuth><ChatHistoryPage /></RequireAuth>} />
       <Route path="/chat-history/:chatId" element={<RequireAuth><ChatConversationPage /></RequireAuth>} />
       <Route path="/notifications" element={<RequireAuth><NotificationsPage /></RequireAuth>} />

@@ -1,20 +1,23 @@
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Icon from "../ui/Icon.jsx";
-import { navItems } from "../../consts/navItems.js";
+import { adminNavItem, navItems } from "../../consts/navItems.js";
+import { useCurrentUser } from "../../hooks/useCurrentUser.js";
 
 export default function BottomNav({ active = "assistant", dark = false }) {
   const { t } = useTranslation();
+  const currentUser = useCurrentUser();
+  const visibleItems = currentUser.data?.role === "admin" ? [...navItems, adminNavItem] : navItems;
 
   return (
     <nav className={`fixed inset-x-0 bottom-0 z-50 mx-auto flex min-h-[calc(72px+var(--safe-bottom))] w-full max-w-[1180px] items-center justify-between gap-2 border-t px-4 pb-safe-bottom sm:px-6 md:px-8 lg:hidden ${dark ? "border-white/10 bg-primary-container text-on-primary shadow-lg" : "border-outline-variant bg-surface-container-lowest text-on-surface-variant shadow-sm"}`}>
-      {navItems.map(({ key, href, icon, labelKey }) => {
+      {visibleItems.map(({ key, href, icon, labelKey, label }) => {
         const isActive = key === active;
         const content = (
           <>
             {isActive && !dark ? <span className="absolute inset-x-2 top-2 h-10 rounded-2xl bg-primary-fixed/55" /> : null}
             <Icon name={icon} filled={isActive} className={`relative mb-1 text-[24px] ${isActive ? dark ? "text-secondary-container" : "text-primary" : dark ? "text-white/60" : ""}`} />
-            <span className={`relative text-[10px] font-semibold ${isActive ? dark ? "text-on-primary" : "text-primary" : ""}`}>{t(labelKey)}</span>
+            <span className={`relative text-[10px] font-semibold ${isActive ? dark ? "text-on-primary" : "text-primary" : ""}`}>{labelKey ? t(labelKey) : label}</span>
           </>
         );
 

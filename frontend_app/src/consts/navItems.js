@@ -4,3 +4,5 @@ export const navItems = [
   { key: "news", href: "/news", icon: "newspaper", labelKey: "nav.news" },
   { key: "profile", href: "/profile", icon: "person", labelKey: "nav.profile" },
 ];
+
+export const adminNavItem = { key: "admin", href: "/admin", icon: "admin_panel_settings", label: "Адмін" };

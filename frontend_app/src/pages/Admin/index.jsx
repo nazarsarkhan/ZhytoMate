@@ -1,0 +1,813 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link, Navigate, NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
+import Icon from "../../components/ui/Icon.jsx";
+import SearchInput from "../../components/ui/SearchInput.jsx";
+import FilterChips from "../../components/ui/FilterChips.jsx";
+import Modal from "../../components/overlay/Modal.jsx";
+import { useAuth } from "../../hooks/useAuth.jsx";
+import { AdminDataProvider, useAdminData } from "./AdminDataContext.jsx";
+
+const sections = [
+  { entity: "users", path: "users", label: "Юзери", singular: "юзера", icon: "group", searchable: ["firstName", "lastName", "username", "email", "phone", "role"] },
+  { entity: "surveys", path: "surveys", label: "Опитування", singular: "опитування", icon: "poll", searchable: ["title", "description", "category", "status"] },
+  { entity: "announcements", path: "announcements", label: "Анонси", singular: "анонс", icon: "campaign", searchable: ["title", "body", "audience", "priority", "status"] },
+  { entity: "news", path: "news", label: "Новини", singular: "новину", icon: "newspaper", searchable: ["title", "body", "source", "category", "status", "tags"] },
+  { entity: "appeals", path: "appeals", label: "Звернення", singular: "звернення", icon: "assignment", searchable: ["user", "category", "address", "description", "status"] },
+];
+
+const sectionByEntity = Object.fromEntries(sections.map((section) => [section.entity, section]));
+const statusTone = {
+  active: "bg-green-100 text-green-700",
+  blocked: "bg-error-container text-error",
+  draft: "bg-surface-container-high text-on-surface-variant",
+  published: "bg-green-100 text-green-700",
+  review: "bg-primary-fixed text-on-primary-fixed",
+  new: "bg-secondary-container text-on-secondary-container",
+  in_progress: "bg-primary-fixed text-on-primary-fixed",
+  resolved: "bg-green-100 text-green-700",
+  rejected: "bg-error-container text-error",
+  high: "bg-error-container text-error",
+  medium: "bg-secondary-container text-on-secondary-container",
+  low: "bg-surface-container-high text-on-surface-variant",
+  admin: "bg-primary-container text-on-primary",
+  user: "bg-surface-container-high text-on-surface-variant",
+};
+
+const statusLabel = {
+  active: "Активний",
+  blocked: "Заблокований",
+  draft: "Чернетка",
+  published: "Опубліковано",
+  review: "На перевірці",
+  new: "Нове",
+  in_progress: "В роботі",
+  resolved: "Вирішено",
+  rejected: "Відхилено",
+  high: "Високий",
+  medium: "Середній",
+  low: "Низький",
+  admin: "Адмін",
+  user: "Юзер",
+};
+
+const fieldsByEntity = {
+  users: [
+    ["firstName", "Ім'я"],
+    ["lastName", "Прізвище"],
+    ["username", "Логін"],
+    ["email", "Email"],
+    ["phone", "Телефон"],
+    ["role", "Роль", "select", ["user", "admin"]],
+    ["status", "Статус", "select", ["active", "blocked"]],
+    ["address", "Адреса"],
+  ],
+  surveys: [
+    ["title", "Назва"],
+    ["description", "Опис", "textarea"],
+    ["category", "Категорія"],
+    ["status", "Статус", "select", ["draft", "active", "published"]],
+    ["startsAt", "Початок"],
+    ["endsAt", "Кінець"],
+  ],
+  announcements: [
+    ["title", "Назва"],
+    ["body", "Текст", "textarea"],
+    ["audience", "Аудиторія"],
+    ["priority", "Пріоритет", "select", ["low", "medium", "high"]],
+    ["status", "Статус", "select", ["draft", "review", "published"]],
+    ["publishAt", "Дата публікації"],
+    ["author", "Автор"],
+  ],
+  news: [
+    ["title", "Назва"],
+    ["body", "Текст", "textarea"],
+    ["source", "Джерело"],
+    ["category", "Категорія"],
+    ["status", "Статус", "select", ["draft", "review", "published"]],
+    ["date", "Дата"],
+    ["tags", "Теги"],
+  ],
+  appeals: [
+    ["user", "Заявник"],
+    ["category", "Категорія"],
+    ["address", "Адреса"],
+    ["description", "Опис", "textarea"],
+    ["status", "Статус", "select", ["new", "in_progress", "resolved", "rejected"]],
+    ["createdAt", "Дата"],
+  ],
+};
+
+const dateFieldNames = new Set(["startsAt", "endsAt", "publishAt", "date", "createdAt"]);
+
+function toDateInputValue(value) {
+  if (!value) return "";
+  return String(value).slice(0, 10);
+}
+
+function normalizeSurveyForForm(item) {
+  if (!item) return null;
+  return {
+    ...item,
+    options: item.options?.length
+      ? item.options.map((option, index) => ({ ...option, id: option.id || `opt-${index + 1}` }))
+      : [{ id: "opt-1", label: "Так", votes: 0, percent: 0 }, { id: "opt-2", label: "Ні", votes: 0, percent: 0 }],
+  };
+}
+
+function normalizeItemForForm(entity, item) {
+  const base = entity === "surveys" ? normalizeSurveyForForm(item) : item ? { ...item } : emptyItem(entity);
+  return Object.fromEntries(
+    Object.entries(base).map(([key, value]) => [key, dateFieldNames.has(key) ? toDateInputValue(value) : value]),
+  );
+}
+
+function normalizeFormForSave(entity, form, options = {}) {
+  if (entity !== "surveys") return form;
+  const surveyOptions = form.options
+    .map((option, index) => ({
+      id: option.id || `opt-${Date.now().toString(36)}-${index}`,
+      label: option.label.trim(),
+      votes: Number(option.votes || 0),
+      percent: Number(option.percent || 0),
+    }))
+    .filter((option) => option.label);
+  const { options: _options, ...rest } = form;
+  if (options.requireValid && surveyOptions.length < 2) return null;
+  return { ...rest, totalVotes: Number(rest.totalVotes || 0), options: surveyOptions };
+}
+
+function emptyItem(entity) {
+  const today = new Date().toISOString().slice(0, 10);
+  const defaults = {
+    users: { firstName: "", lastName: "", username: "", email: "", phone: "", role: "user", status: "active", address: "", createdAt: today },
+    surveys: {
+      title: "",
+      description: "",
+      category: "",
+      status: "draft",
+      startsAt: today,
+      endsAt: "",
+      totalVotes: 0,
+      options: [{ id: "opt-1", label: "Так", votes: 0, percent: 0 }, { id: "opt-2", label: "Ні", votes: 0, percent: 0 }],
+    },
+    announcements: { title: "", body: "", audience: "Усі мешканці", priority: "medium", status: "draft", publishAt: today, author: "Адміністрація" },
+    news: { title: "", body: "", source: "Житомирська міська рада", category: "Офіційно", status: "draft", date: today, tags: "" },
+    appeals: { user: "", userId: "", category: "", address: "", description: "", status: "new", imageUrl: "", createdAt: today },
+  };
+  return defaults[entity];
+}
+
+function Badge({ value }) {
+  return <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-bold ${statusTone[value] || "bg-surface-container-high text-on-surface-variant"}`}>{statusLabel[value] || value}</span>;
+}
+
+function AdminSelectField({ value, options, onChange }) {
+  const [open, setOpen] = useState(false);
+  const selectedLabel = statusLabel[value] || value || "Оберіть";
+
+  return (
+    <div className="relative">
+      <button
+        className={`flex h-11 w-full items-center justify-between gap-3 rounded-xl border bg-surface px-3 text-left text-sm outline-none transition ${open ? "border-secondary-container ring-2 ring-secondary-container/30" : "border-outline-variant/50"}`}
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className="truncate">{selectedLabel}</span>
+        <Icon name={open ? "expand_less" : "expand_more"} className="text-xl text-on-surface-variant" />
+      </button>
+      {open ? (
+        <div className="absolute inset-x-0 top-[calc(100%+6px)] z-[120] overflow-hidden rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-1 shadow-xl">
+          {options.map((option) => {
+            const active = option === value;
+            return (
+              <button
+                key={option}
+                className={`flex min-h-10 w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${active ? "bg-secondary-container text-on-secondary-container" : "text-on-surface hover:bg-surface-container"}`}
+                type="button"
+                onClick={() => {
+                  onChange(option);
+                  setOpen(false);
+                }}
+              >
+                <span>{statusLabel[option] || option}</span>
+                {active ? <Icon name="check" className="text-lg" /> : null}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function AdminDateField({ value, onChange }) {
+  return (
+    <label className="flex h-11 items-center gap-2 rounded-xl border border-outline-variant/50 bg-surface px-3 transition focus-within:border-secondary-container focus-within:ring-2 focus-within:ring-secondary-container/30">
+      <Icon name="calendar_today" className="text-lg text-on-surface-variant" />
+      <input
+        className="min-w-0 flex-1 border-0 bg-transparent text-sm outline-none"
+        type="date"
+        value={toDateInputValue(value)}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+
+function ConfirmModal({
+  open,
+  title,
+  description,
+  confirmLabel = "Підтвердити",
+  cancelLabel = "Скасувати",
+  tone = "danger",
+  onCancel,
+  onConfirm,
+}) {
+  return (
+    <Modal
+      open={open}
+      title={title}
+      onClose={onCancel}
+      footer={
+        <div className="flex gap-3">
+          <button className="h-12 flex-1 rounded-full border border-outline-variant text-sm font-bold text-on-surface" type="button" onClick={onCancel}>
+            {cancelLabel}
+          </button>
+          <button className={`h-12 flex-1 rounded-full text-sm font-bold ${tone === "danger" ? "bg-error-container text-error" : "bg-secondary-container text-on-secondary-container"}`} type="button" onClick={onConfirm}>
+            {confirmLabel}
+          </button>
+        </div>
+      }
+    >
+      <p className="text-sm leading-6 text-on-surface-variant">{description}</p>
+    </Modal>
+  );
+}
+
+function AdminMenuLinks({ onNavigate }) {
+  return (
+    <nav className="space-y-1.5">
+      {sections.map((section) => (
+        <NavLink
+          key={section.entity}
+          to={`/admin/${section.path}`}
+          className={({ isActive }) => `flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold transition ${isActive ? "bg-secondary-container text-on-secondary-container" : "text-white/70 hover:bg-white/10 hover:text-white"}`}
+          onClick={onNavigate}
+        >
+          <Icon name={section.icon} filled />
+          {section.label}
+        </NavLink>
+      ))}
+    </nav>
+  );
+}
+
+function AdminActions({ onLogoutClick, onNavigate }) {
+  return (
+    <div className="space-y-1.5 border-t border-white/10 pt-4">
+      <Link className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white" to="/assistant" onClick={onNavigate}>
+        <Icon name="arrow_back" className="text-[22px]" /> Вийти з адмінки
+      </Link>
+      <Link className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white" to="/profile" onClick={onNavigate}>
+        <Icon name="person" className="text-[22px]" /> Профіль
+      </Link>
+      <button className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white" type="button" onClick={onLogoutClick}>
+        <Icon name="logout" className="text-[22px]" /> Вийти з акаунту
+      </button>
+    </div>
+  );
+}
+
+function AdminDrawer({ open, onClose, onLogoutClick }) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[90] lg:hidden">
+      <button className="absolute inset-0 bg-black/50 backdrop-blur-sm" type="button" aria-label="Закрити меню" onClick={onClose} />
+      <aside className="relative z-10 flex h-full w-72 max-w-[86vw] flex-col bg-primary-container p-5 text-on-primary shadow-xl">
+        <div className="mb-8 flex items-center justify-between gap-3">
+          <Link to="/assistant" className="flex min-w-0 items-center gap-3" onClick={onClose}>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-primary">
+              <Icon name="location_city" filled />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-bold">Zhytomate</span>
+              <span className="block truncate text-xs text-white/60">Адмін панель</span>
+            </span>
+          </Link>
+          <button className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10" type="button" aria-label="Закрити меню" onClick={onClose}>
+            <Icon name="close" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <AdminMenuLinks onNavigate={onClose} />
+        </div>
+        <AdminActions onNavigate={onClose} onLogoutClick={onLogoutClick} />
+      </aside>
+    </div>
+  );
+}
+
+function AdminShell({ children }) {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+
+  const confirmLogout = () => {
+    logout();
+    setLogoutConfirmOpen(false);
+    navigate("/login", { replace: true });
+  };
+
+  return (
+    <div className="phone-shell min-h-dvh overflow-hidden bg-background md:min-h-[calc(100dvh-32px)]">
+      <div className="flex min-h-dvh bg-surface-container-lowest md:min-h-[calc(100dvh-32px)]">
+        <aside className="hidden w-64 shrink-0 flex-col border-r border-outline-variant/30 bg-primary-container p-5 text-on-primary lg:flex">
+          <Link to="/assistant" className="mb-8 flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-primary">
+              <Icon name="location_city" filled />
+            </span>
+            <span>
+              <span className="block text-sm font-bold">Zhytomate</span>
+              <span className="block text-xs text-white/60">Адмін панель</span>
+            </span>
+          </Link>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <AdminMenuLinks />
+          </div>
+          <AdminActions onLogoutClick={() => setLogoutConfirmOpen(true)} />
+        </aside>
+        <div className="min-w-0 flex-1">{children}</div>
+      </div>
+      <ConfirmModal
+        open={logoutConfirmOpen}
+        title="Вийти з акаунту?"
+        description="Після виходу потрібно буде знову авторизуватися, щоб повернутися в адмінку."
+        confirmLabel="Вийти"
+        onCancel={() => setLogoutConfirmOpen(false)}
+        onConfirm={confirmLogout}
+      />
+    </div>
+  );
+}
+
+function AdminHeader({ section, onCreate }) {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+
+  const confirmLogout = () => {
+    logout();
+    setLogoutConfirmOpen(false);
+    navigate("/login", { replace: true });
+  };
+
+  return (
+    <>
+      <header className="sticky top-0 z-30 border-b border-outline-variant/30 bg-surface-container-lowest/95 px-container-padding py-4 backdrop-blur sm:px-6 md:px-8">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <button className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-container text-on-surface lg:hidden" type="button" aria-label="Відкрити меню" onClick={() => setMenuOpen(true)}>
+              <Icon name="menu" />
+            </button>
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase text-on-surface-variant">Адмін панель</p>
+              <h1 className="truncate text-2xl font-bold text-on-surface">{section.label}</h1>
+            </div>
+          </div>
+          {section.entity !== "users" ? (
+            <button className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-secondary-container text-on-secondary-container active:scale-[0.98] sm:w-auto sm:px-4" type="button" aria-label={`Додати ${section.singular}`} onClick={onCreate}>
+              <Icon name="add" className="text-lg" />
+              <span className="hidden text-sm font-bold sm:inline">Додати</span>
+            </button>
+          ) : null}
+        </div>
+      </header>
+      <AdminDrawer open={menuOpen} onClose={() => setMenuOpen(false)} onLogoutClick={() => setLogoutConfirmOpen(true)} />
+      <ConfirmModal
+        open={logoutConfirmOpen}
+        title="Вийти з акаунту?"
+        description="Після виходу потрібно буде знову авторизуватися, щоб повернутися в адмінку."
+        confirmLabel="Вийти"
+        onCancel={() => setLogoutConfirmOpen(false)}
+        onConfirm={confirmLogout}
+      />
+    </>
+  );
+}
+
+function AdminEditorModal({ entity, item, open, onClose }) {
+  const { createItem, updateItem } = useAdminData();
+  const [form, setForm] = useState(() => normalizeSurveyForForm(item) || emptyItem(entity));
+  const [initialSnapshot, setInitialSnapshot] = useState("");
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
+  const [formError, setFormError] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      const nextForm = normalizeItemForForm(entity, item);
+      setForm(nextForm);
+      setInitialSnapshot(JSON.stringify(nextForm));
+      setCloseConfirmOpen(false);
+      setFormError("");
+    }
+  }, [entity, item, open]);
+
+  const fields = fieldsByEntity[entity];
+  const section = sectionByEntity[entity];
+
+  const save = () => {
+    const payload = normalizeFormForSave(entity, form, { requireValid: true });
+    if (!payload) {
+      setFormError("Додайте мінімум 2 заповнені варіанти відповіді.");
+      return;
+    }
+    if (item?.id) updateItem(entity, item.id, payload);
+    else createItem(entity, payload);
+    onClose();
+  };
+
+  const updateSurveyOption = (optionId, label) => {
+    setForm((current) => ({
+      ...current,
+      options: current.options.map((option) => (option.id === optionId ? { ...option, label } : option)),
+    }));
+    setFormError("");
+  };
+
+  const addSurveyOption = () => {
+    setForm((current) => ({
+      ...current,
+      options: [...current.options, { id: `opt-${Date.now().toString(36)}`, label: "", votes: 0, percent: 0 }],
+    }));
+    setFormError("");
+  };
+
+  const removeSurveyOption = (optionId) => {
+    setForm((current) => {
+      if (current.options.length <= 2) return current;
+      return { ...current, options: current.options.filter((option) => option.id !== optionId) };
+    });
+    setFormError("");
+  };
+
+  const requestClose = () => {
+    if (JSON.stringify(form) !== initialSnapshot) {
+      setCloseConfirmOpen(true);
+      return;
+    }
+    onClose();
+  };
+
+  const confirmClose = () => {
+    setCloseConfirmOpen(false);
+    onClose();
+  };
+
+  return (
+    <>
+      <Modal
+        open={open}
+        title={item?.id ? `Редагувати ${section.singular}` : `Додати ${section.singular}`}
+        sheet
+        onClose={requestClose}
+        footer={
+          <div className="flex gap-3">
+            <button className="h-12 flex-1 rounded-full border border-outline-variant text-sm font-bold text-on-surface" type="button" onClick={requestClose}>
+              Скасувати
+            </button>
+            <button className="h-12 flex-1 rounded-full bg-secondary-container text-sm font-bold text-on-secondary-container" type="button" onClick={save}>
+              Зберегти
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          {formError ? <p className="rounded-xl border border-error-container bg-error-container/30 p-3 text-sm font-bold text-error">{formError}</p> : null}
+          {fields.map(([name, label, type, options]) => (
+            <label key={name} className="block">
+              <span className="mb-1.5 block text-xs font-bold uppercase text-on-surface-variant">{label}</span>
+              {type === "textarea" ? (
+                <textarea className="min-h-24 w-full rounded-xl border border-outline-variant/50 bg-surface px-3 py-2 text-sm outline-none focus:border-secondary-container" value={form[name] || ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
+              ) : type === "select" ? (
+                <AdminSelectField value={form[name] || options[0]} options={options} onChange={(nextValue) => setForm((current) => ({ ...current, [name]: nextValue }))} />
+              ) : dateFieldNames.has(name) ? (
+                <AdminDateField value={form[name] || ""} onChange={(nextValue) => setForm((current) => ({ ...current, [name]: nextValue }))} />
+              ) : (
+                <input className="h-11 w-full rounded-xl border border-outline-variant/50 bg-surface px-3 text-sm outline-none focus:border-secondary-container" value={form[name] || ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
+              )}
+            </label>
+          ))}
+          {entity === "surveys" ? (
+            <section className="rounded-2xl border border-outline-variant/30 bg-surface-container-low p-3">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-on-surface">Варіанти відповіді</h3>
+                  <p className="mt-1 text-xs text-on-surface-variant">Мінімум 2 варіанти. Порядок збережеться як у формі.</p>
+                </div>
+                <button className="flex h-9 shrink-0 items-center gap-1 rounded-full bg-secondary-container px-3 text-xs font-bold text-on-secondary-container" type="button" onClick={addSurveyOption}>
+                  <Icon name="add_circle" className="text-base" /> Додати
+                </button>
+              </div>
+              <div className="space-y-2">
+                {form.options.map((option, index) => (
+                  <div key={option.id} className="flex items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-2">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-fixed/50 text-xs font-bold text-primary-container">{index + 1}</span>
+                    <input
+                      className="h-10 min-w-0 flex-1 border-0 bg-transparent text-sm font-semibold text-on-surface outline-none placeholder:text-on-surface-variant"
+                      placeholder={`Варіант ${index + 1}`}
+                      value={option.label}
+                      onChange={(event) => updateSurveyOption(option.id, event.target.value)}
+                    />
+                    <button
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-error transition hover:bg-error-container disabled:cursor-not-allowed disabled:opacity-30"
+                      disabled={form.options.length <= 2}
+                      type="button"
+                      aria-label="Видалити варіант"
+                      onClick={() => removeSurveyOption(option.id)}
+                    >
+                      <Icon name="delete" className="text-lg" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </div>
+      </Modal>
+      <ConfirmModal
+        open={closeConfirmOpen}
+        title="Закрити без збереження?"
+        description="Зміни в цій формі не будуть збережені."
+        confirmLabel="Закрити"
+        cancelLabel="Продовжити редагування"
+        onCancel={() => setCloseConfirmOpen(false)}
+        onConfirm={confirmClose}
+      />
+    </>
+  );
+}
+
+function itemTitle(entity, item) {
+  if (entity === "users") return `${item.firstName} ${item.lastName}`.trim() || item.username;
+  if (entity === "appeals") return `${item.category}: ${item.address}`;
+  return item.title;
+}
+
+function itemSubtitle(entity, item) {
+  if (entity === "users") return item.email;
+  if (entity === "surveys") return item.description;
+  if (entity === "announcements") return item.body;
+  if (entity === "news") return item.body;
+  return item.description;
+}
+
+function filterValue(entity, item) {
+  if (entity === "users") return item.role;
+  return item.status || item.priority;
+}
+
+function AdminListPage({ entity }) {
+  const section = sectionByEntity[entity];
+  const { data, removeItem } = useAdminData();
+  const [query, setQuery] = useState("");
+  const [filters, setFilters] = useState([]);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const items = data[entity];
+
+  const filterItems = useMemo(() => {
+    const values = Array.from(new Set(items.map((item) => filterValue(entity, item)).filter(Boolean)));
+    return [{ value: "all", label: "Усі" }, ...values.map((value) => ({ value, label: statusLabel[value] || value }))];
+  }, [entity, items]);
+
+  const filteredItems = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return items.filter((item) => {
+      const matchesQuery = !normalized || section.searchable.some((key) => String(item[key] || "").toLowerCase().includes(normalized));
+      const matchesFilter = !filters.length || filters.includes(filterValue(entity, item));
+      return matchesQuery && matchesFilter;
+    });
+  }, [entity, filters, items, query, section.searchable]);
+
+  const confirmDelete = () => {
+    if (!pendingDelete) return;
+    removeItem(entity, pendingDelete.id);
+    setPendingDelete(null);
+  };
+
+  return (
+    <AdminShell>
+      <AdminHeader section={section} onCreate={() => setEditorOpen(true)} />
+      <main className="space-y-5 px-container-padding py-section-margin sm:px-6 md:px-8">
+        <section className="grid gap-3 lg:grid-cols-[1fr_auto]">
+          <SearchInput value={query} onChange={setQuery} placeholder={`Пошук: ${section.label.toLowerCase()}`} />
+          <FilterChips items={filterItems} selectedValues={filters} onChange={setFilters} />
+        </section>
+        <section className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-soft">
+          <div className="hidden grid-cols-[1.4fr_1fr_160px_120px] gap-4 border-b border-outline-variant/30 px-4 py-3 text-xs font-bold uppercase text-on-surface-variant md:grid">
+            <span>Назва</span>
+            <span>Деталі</span>
+            <span>Статус</span>
+            <span>Дії</span>
+          </div>
+          <div className="divide-y divide-outline-variant/20">
+            {filteredItems.map((item) => (
+              <article key={item.id} className="grid gap-3 p-4 md:grid-cols-[1.4fr_1fr_160px_120px] md:items-center">
+                <Link className="min-w-0" to={`/admin/${section.path}/${item.id}`}>
+                  <h2 className="truncate text-base font-bold text-on-surface">{itemTitle(entity, item)}</h2>
+                  <p className="mt-1 text-xs text-on-surface-variant">{item.id}</p>
+                </Link>
+                <p className="line-clamp-2 text-sm text-on-surface-variant">{itemSubtitle(entity, item)}</p>
+                <Badge value={filterValue(entity, item)} />
+                <div className="flex gap-2">
+                  <Link className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-container text-on-surface-variant" to={`/admin/${section.path}/${item.id}`} aria-label="Відкрити">
+                    <Icon name="visibility" className="text-lg" />
+                  </Link>
+                  <button className="flex h-9 w-9 items-center justify-center rounded-full bg-error-container text-error" type="button" aria-label="Видалити" onClick={() => setPendingDelete(item)}>
+                    <Icon name="delete" className="text-lg" />
+                  </button>
+                </div>
+              </article>
+            ))}
+            {!filteredItems.length ? <p className="p-6 text-center text-sm text-on-surface-variant">Нічого не знайдено</p> : null}
+          </div>
+        </section>
+      </main>
+      <AdminEditorModal entity={entity} open={editorOpen} onClose={() => setEditorOpen(false)} />
+      <ConfirmModal
+        open={Boolean(pendingDelete)}
+        title="Видалити запис?"
+        description={pendingDelete ? `Запис "${itemTitle(entity, pendingDelete)}" буде видалено тільки з поточної сесії.` : ""}
+        confirmLabel="Видалити"
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={confirmDelete}
+      />
+    </AdminShell>
+  );
+}
+
+function DetailRow({ label, children }) {
+  return (
+    <div className="rounded-xl bg-surface-container-low p-3">
+      <p className="text-xs font-bold uppercase text-on-surface-variant">{label}</p>
+      <div className="mt-1 text-sm font-semibold text-on-surface">{children || "—"}</div>
+    </div>
+  );
+}
+
+function SurveyOptions({ item }) {
+  if (!item.options?.length) return null;
+  return (
+    <section className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-soft">
+      <h2 className="mb-3 text-lg font-bold">Варіанти</h2>
+      <div className="space-y-3">
+        {item.options.map((option) => (
+          <div key={option.id} className="rounded-xl border border-outline-variant/30 p-3">
+            <div className="mb-2 flex justify-between gap-3 text-sm font-bold">
+              <span>{option.label}</span>
+              <span>{option.percent}%</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-surface-container-high">
+              <div className="h-full rounded-full bg-secondary-container" style={{ width: `${option.percent}%` }} />
+            </div>
+            <p className="mt-2 text-xs text-on-surface-variant">{option.votes} голосів</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AdminDetailPage({ entity }) {
+  const section = sectionByEntity[entity];
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+  const { data, removeItem } = useAdminData();
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const item = data[entity].find((entry) => entry.id === id);
+
+  const confirmLogout = () => {
+    logout();
+    setLogoutConfirmOpen(false);
+    navigate("/login", { replace: true });
+  };
+
+  if (!item) {
+    return (
+      <AdminShell>
+        <main className="px-container-padding py-section-margin sm:px-6 md:px-8">
+          <div className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 text-center shadow-soft">
+            <h1 className="text-xl font-bold">Запис не знайдено</h1>
+            <Link className="mt-4 inline-flex rounded-full bg-secondary-container px-4 py-2 text-sm font-bold text-on-secondary-container" to={`/admin/${section.path}`}>Назад до списку</Link>
+          </div>
+        </main>
+      </AdminShell>
+    );
+  }
+
+  const handleDelete = () => {
+    removeItem(entity, item.id);
+    setDeleteConfirmOpen(false);
+    navigate(`/admin/${section.path}`, { replace: true });
+  };
+
+  return (
+    <AdminShell>
+      <header className="sticky top-0 z-30 border-b border-outline-variant/30 bg-surface-container-lowest/95 px-container-padding py-4 backdrop-blur sm:px-6 md:px-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <button className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface-container text-on-surface lg:hidden" type="button" aria-label="Відкрити меню" onClick={() => setMenuOpen(true)}>
+              <Icon name="menu" />
+            </button>
+            <div className="min-w-0">
+              <Link className="mb-2 inline-flex items-center gap-1 text-xs font-bold text-on-tertiary-fixed-variant" to={`/admin/${section.path}`}>
+                <Icon name="arrow_back" className="text-base" /> Назад
+              </Link>
+              <h1 className="truncate text-2xl font-bold text-on-surface">{itemTitle(entity, item)}</h1>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button className="flex h-10 items-center gap-2 rounded-full bg-surface-container px-4 text-sm font-bold text-on-surface" type="button" onClick={() => setEditorOpen(true)}>
+              <Icon name="edit" className="text-lg" /> Редагувати
+            </button>
+            <button className="flex h-10 items-center gap-2 rounded-full bg-error-container px-4 text-sm font-bold text-error" type="button" onClick={() => setDeleteConfirmOpen(true)}>
+              <Icon name="delete" className="text-lg" /> Видалити
+            </button>
+          </div>
+        </div>
+      </header>
+      <main className="grid gap-5 px-container-padding py-section-margin sm:px-6 md:px-8 xl:grid-cols-[1fr_320px]">
+        <section className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-soft">
+          <div className="mb-5 flex flex-wrap items-center gap-2">
+            <Badge value={filterValue(entity, item)} />
+            <span className="rounded-full bg-surface-container px-2.5 py-1 text-xs font-bold text-on-surface-variant">{item.id}</span>
+          </div>
+          <p className="whitespace-pre-line text-base leading-7 text-on-surface-variant">{itemSubtitle(entity, item)}</p>
+          {entity === "surveys" ? <div className="mt-5"><SurveyOptions item={item} /></div> : null}
+          {entity === "appeals" ? (
+            <div className="mt-5 flex h-48 items-center justify-center rounded-2xl border border-dashed border-outline-variant bg-surface-container text-sm font-bold text-on-surface-variant">
+              Фото звернення
+            </div>
+          ) : null}
+        </section>
+        <aside className="space-y-3">
+          {Object.entries(item)
+            .filter(([key]) => !["body", "description", "options", "imageUrl"].includes(key))
+            .map(([key, value]) => (
+              <DetailRow key={key} label={key}>
+                {Array.isArray(value) ? value.join(", ") : key === "status" || key === "role" || key === "priority" ? <Badge value={value} /> : String(value || "")}
+              </DetailRow>
+            ))}
+        </aside>
+      </main>
+      <AdminDrawer open={menuOpen} onClose={() => setMenuOpen(false)} onLogoutClick={() => setLogoutConfirmOpen(true)} />
+      <AdminEditorModal entity={entity} item={item} open={editorOpen} onClose={() => setEditorOpen(false)} />
+      <ConfirmModal
+        open={deleteConfirmOpen}
+        title="Видалити запис?"
+        description={`Запис "${itemTitle(entity, item)}" буде видалено тільки з поточної сесії.`}
+        confirmLabel="Видалити"
+        onCancel={() => setDeleteConfirmOpen(false)}
+        onConfirm={handleDelete}
+      />
+      <ConfirmModal
+        open={logoutConfirmOpen}
+        title="Вийти з акаунту?"
+        description="Після виходу потрібно буде знову авторизуватися, щоб повернутися в адмінку."
+        confirmLabel="Вийти"
+        onCancel={() => setLogoutConfirmOpen(false)}
+        onConfirm={confirmLogout}
+      />
+    </AdminShell>
+  );
+}
+
+function AdminRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<Navigate to="/admin/users" replace />} />
+      {sections.map((section) => (
+        <Route key={section.entity} path={`${section.path}`} element={<AdminListPage entity={section.entity} />} />
+      ))}
+      {sections.map((section) => (
+        <Route key={`${section.entity}-detail`} path={`${section.path}/:id`} element={<AdminDetailPage entity={section.entity} />} />
+      ))}
+      <Route path="*" element={<Navigate to="/admin/users" replace />} />
+    </Routes>
+  );
+}
+
+export default function AdminApp() {
+  return (
+    <AdminDataProvider>
+      <AdminRoutes />
+    </AdminDataProvider>
+  );
+}

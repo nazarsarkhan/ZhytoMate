@@ -1,11 +1,14 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import Icon from "../ui/Icon.jsx";
-import { navItems } from "../../consts/navItems.js";
+import { adminNavItem, navItems } from "../../consts/navItems.js";
+import { useCurrentUser } from "../../hooks/useCurrentUser.js";
 
 export default function SideNav() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const currentUser = useCurrentUser();
+  const visibleItems = currentUser.data?.role === "admin" ? [...navItems, adminNavItem] : navItems;
 
   return (
     <aside className="absolute inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-white/10 bg-primary-container px-4 pb-6 pt-6 text-on-primary lg:flex">
@@ -19,7 +22,7 @@ export default function SideNav() {
         </span>
       </div>
       <nav className="flex flex-1 flex-col gap-1.5">
-        {navItems.map(({ key, href, icon, labelKey }) => (
+        {visibleItems.map(({ key, href, icon, labelKey, label }) => (
           <NavLink
             key={key}
             to={href}
@@ -30,7 +33,7 @@ export default function SideNav() {
             {({ isActive }) => (
               <>
                 <Icon name={icon} filled={isActive} className="text-[22px]" />
-                {t(labelKey)}
+                {labelKey ? t(labelKey) : label}
               </>
             )}
           </NavLink>
