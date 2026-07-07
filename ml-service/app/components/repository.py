@@ -108,7 +108,12 @@ _OR_LEXICAL_SQL = """
 """
 
 
-def _to_result(row: asyncpg.Record, similarity: float) -> RetrievalResult:
+def _to_result(
+    row: asyncpg.Record,
+    similarity: float,
+    lexical_coverage: int | None = None,
+    lexical_terms_total: int | None = None,
+) -> RetrievalResult:
     return RetrievalResult(
         id=row["id"],
         text=row["text"],
@@ -116,6 +121,8 @@ def _to_result(row: asyncpg.Record, similarity: float) -> RetrievalResult:
         doc_type=row["doc_type"],
         district=row["district"],
         similarity=similarity,
+        lexical_coverage=lexical_coverage,
+        lexical_terms_total=lexical_terms_total,
     )
 
 
@@ -126,8 +133,22 @@ _TSQUERY_WORD = re.compile(r"[^\W\d_]{3,}", re.UNICODE)
 
 def _significant_terms(query: str) -> list[str]:
     """Distinct >=3-letter tokens from a query (drops short stopword-ish words and digits),
-    order-preserving. The raw material for the lexical OR fallback — filtered by corpus frequency
-    in KnowledgeRepository._distinctive_terms before use."""
+    order-preserving. The raw material for the lexical OR fallback.
+
+    NOTE: a corpus-frequency filter on top of this (originally planned as
+    KnowledgeRepository._distinctive_terms, referenced here and in test_tsquery.py's docstring)
+    was never actually built — there is no such method anywhere in this codebase. This is exactly
+    why the OR fallback can anchor on a single corpus-common word (e.g. "українського") for a
+    query whose real subject has zero KB overlap. The current mitigation lives one layer up, at
+    the confidence gate: retrieve_lexical tags each OR-fallback RetrievalResult with its real
+    lexical_coverage int and lexical_terms_total (len(terms) here), and
+    RetrievalOutcome.has_strong_lexical_match (schemas/retrieval.py) requires FULL coverage
+    (lexical_coverage == lexical_terms_total) before trusting an OR-fallback hit — not merely an
+    absolute minimum count, which can't distinguish a short query's only significant term
+    (coverage=1 of 1, a complete match) from one matching word out of several in a verbose,
+    off-topic query (coverage=1 of 3+, a partial one). A real corpus-frequency filter here (so
+    `_significant_terms` itself never offers up an overly-common word as OR-fallback bait in the
+    first place) remains a follow-up — see ml-service/CLAUDE.md's Known Issues."""
     seen: list[str] = []
     for token in _TSQUERY_WORD.findall(query.lower()):
         if token not in seen:
@@ -201,7 +222,14 @@ class KnowledgeRepository:
         self, query: str, district_slug: str | None, limit: int = 10
     ) -> list[RetrievalResult]:
         """Full-text leg (§2.8). websearch_to_tsquery primary; plainto_tsquery fallback on 0
-        rows; coverage-ranked OR fallback when both AND queries are empty."""
+        rows; coverage-ranked OR fallback when both AND queries are empty. AND-tier hits carry
+        lexical_coverage=lexical_terms_total=None (an all-or-nothing match needs no partial-
+        coverage caveat); only OR-fallback hits carry their real coverage int and the query's total
+        significant-term count, so callers (see
+        schemas.retrieval.RetrievalOutcome.has_strong_lexical_match) can tell a FULL match (a short
+        query's only significant term, fully covered) from a partial, degenerate one (one common
+        word out of several, in an otherwise off-topic query) — a plain minimum coverage count
+        can't tell those two apart, since both can read coverage=1."""
         start = time.perf_counter()
         rows = await self._pool.fetch(
             _LEXICAL_SQL.format(tsquery="websearch_to_tsquery"), query, district_slug, limit
@@ -211,6 +239,8 @@ class KnowledgeRepository:
             rows = await self._pool.fetch(
                 _LEXICAL_SQL.format(tsquery="plainto_tsquery"), query, district_slug, limit
             )
+        coverage_by_id: dict[int, int] = {}
+        terms_total: int | None = None
         if not rows:
             # Both of the above AND every term, so a verbose question matches no single chunk. Fall
             # back to an OR of the significant terms, ranked by how many DISTINCT terms each chunk
@@ -220,13 +250,25 @@ class KnowledgeRepository:
                 rows = await self._pool.fetch(
                     _OR_LEXICAL_SQL, " | ".join(terms), district_slug, limit, terms
                 )
+                coverage_by_id = {row["id"]: row["coverage"] for row in rows}
+                terms_total = len(terms)
         logger.debug(
             "retrieve_lexical",
             rows=len(rows),
             took_ms=round((time.perf_counter() - start) * 1000, 1),
         )
         # similarity=0.0 — ts_rank is not a cosine; fusion ranks the lexical leg by position.
-        return [_to_result(r, 0.0) for r in rows]
+        # lexical_coverage/lexical_terms_total come from coverage_by_id/terms_total, which stay
+        # empty/None (every .get() -> None) unless the OR-fallback tier is what actually produced
+        # these rows.
+        return [
+            _to_result(
+                r, 0.0,
+                lexical_coverage=coverage_by_id.get(r["id"]),
+                lexical_terms_total=terms_total,
+            )
+            for r in rows
+        ]
 
     async def incr_rate_limit_counter(self, hashed_key: str, window_min: int) -> int:
         """Atomic per-key fixed-window counter (upsert + increment). Returns the count AFTER this

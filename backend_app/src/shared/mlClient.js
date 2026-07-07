@@ -6,6 +6,7 @@ import { ApiError } from "./ApiError.js";
 // ml-service call happens here, server-side, on behalf of an already-authenticated citizen.
 const CHAT_TIMEOUT_MS = 20_000;
 const VISION_TIMEOUT_MS = 25_000;
+const ACTION_TIMEOUT_MS = 15_000;
 
 async function callMlService(path, body, timeoutMs) {
   const controller = new AbortController();
@@ -66,6 +67,7 @@ export async function queryAssistant({ userQuery, userId, district }) {
     answer: result.answer,
     sourcesUsed: result.sources_used,
     confidence: result.confidence,
+    actionIntent: result.action_intent || null,
   };
 }
 
@@ -84,4 +86,25 @@ export async function analyzeVision({ imageBase64, mimeType }) {
   };
 }
 
-export default { queryAssistant, analyzeVision };
+export async function extractActionSlots({ message, slotSchema, currentSlots }) {
+  const result = await callMlService(
+    "/api/v1/assistant/extract-slots",
+    {
+      message,
+      slot_schema: slotSchema.map((field) => ({
+        name: field.name,
+        description: field.description,
+        enum_values: field.enumValues || null,
+      })),
+      current_slots: currentSlots,
+    },
+    ACTION_TIMEOUT_MS,
+  );
+  return {
+    slots: result.slots,
+    wantsCancel: result.wants_cancel,
+    isUnrelated: result.is_unrelated,
+  };
+}
+
+export default { queryAssistant, analyzeVision, extractActionSlots };

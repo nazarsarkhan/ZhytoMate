@@ -4,8 +4,10 @@ Purpose:   SimpleRAGPipeline(RAGPipeline): single-shot path for SIMPLE queries �
            never reaching retrieval or generation) -> detect language + translate the query to
            Ukrainian for retrieval if needed (detect_and_translate; skipped for Ukrainian queries)
            -> embed the query (no prefix; OpenAI embeddings are prefix-free, unlike the old e5
-           setup) -> hybrid retrieve (dense+lexical, RRF) via the injected Retriever port -> shared
-           tail (confidence gate decides grounded vs ungrounded; ALWAYS generates either way;
+           setup) -> hybrid retrieve (dense+lexical, RRF) via the injected Retriever port -> derive
+           strong_lexical_match (does the fused list's own top-1 chunk agree with the lexical
+           leg's own rank-1 pick?) -> shared tail (confidence gate decides grounded vs ungrounded,
+           now via EITHER a passing top1_sim OR strong_lexical_match; ALWAYS generates either way;
            fallback on LLM error) via pipeline.base.run_shared_tail. At most one safety-check
            call, plus one generation call, plus at most one detect+translate call for a non-
            Ukrainian query. Generation receives the ORIGINAL query and the policy-resolved
@@ -50,8 +52,12 @@ class SimpleRAGPipeline(RAGPipeline):
     async def run(self, ctx: RagContext) -> RagResult:
         # Wartime OPSEC gate first, before any retrieval/generation work — see
         # pipeline.base.check_query_safety for the two-layer (heuristic + LLM) design and the
-        # fail-closed policy.
-        is_safe, refusal = await check_query_safety(self._generator, ctx.user_query)
+        # fail-closed policy. conversational feeds run_shared_tail's force_ungrounded below, so a
+        # greeting doesn't get routed to the civic RAG prompt just because retrieval's similarity
+        # gate happened to clear on vocabulary/style noise.
+        is_safe, refusal, conversational, action_intent = await check_query_safety(
+            self._generator, ctx.user_query
+        )
         if not is_safe:
             return RagResult(
                 answer=refusal, sources_used=[], confidence=0.0, route=ctx.route,
@@ -67,7 +73,12 @@ class SimpleRAGPipeline(RAGPipeline):
         outcome = await self._retriever.retrieve(
             retrieval_query, query_vec, ctx.district_slug, k=RETRIEVE_LIMIT
         )
-        return await run_shared_tail(
+        # A genuine rank-1 agreement between the fused list and the raw lexical leg (excluding a
+        # degenerate single-common-word OR-fallback coincidence — see RetrievalOutcome
+        # .has_strong_lexical_match) grounds an answer even when dense top1_sim alone sits below
+        # sim_gate; see run_shared_tail's docstring for why.
+        strong_lexical_match = outcome.has_strong_lexical_match
+        result = await run_shared_tail(
             generator=self._generator,
             sim_gate=self._sim_gate,
             sim_high=self._sim_high,
@@ -77,4 +88,7 @@ class SimpleRAGPipeline(RAGPipeline):
             question=ctx.user_query,
             route=ctx.route,
             answer_lang=answer_lang,
+            force_ungrounded=conversational,
+            strong_lexical_match=strong_lexical_match,
         )
+        return result.model_copy(update={"action_intent": action_intent})

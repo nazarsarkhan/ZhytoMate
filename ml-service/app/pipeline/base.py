@@ -5,7 +5,13 @@ Purpose:   RAGPipeline(ABC).run(ctx: RagContext) -> RagResult — the contract b
            conversational via build_general_prompt) -> extractive fallback on any LLM error for a
            grounded answer, or an honest "couldn't respond" message for an ungrounded one (ADR-007
            extended — the LLM is still the least reliable hop, so a demo must stay alive either
-           way). Defines RagContext (user_query, district_slug, route) and RagResult (answer,
+           way). The confidence gate itself reads two signals, not just dense top1_sim: a passing
+           top1_sim grounds as before, but a query whose top1_sim sits below sim_gate can still
+           ground via strong_lexical_match — a genuine rank-1 agreement between the fused
+           (RRF) list and the raw lexical leg (see RetrievalOutcome.lexical_top1_id) — fixing short,
+           keyword-heavy factual queries ("Де ЦНАП?") that dense cosine similarity structurally
+           under-scores even against a directly-relevant chunk. Defines RagContext (user_query,
+           district_slug, route) and RagResult (answer,
            sources_used, confidence, route, debug) as pydantic v2 internal DTOs (not HTTP I/O —
            that stays schemas/query). RagContext deliberately carries NO pre-computed query
            vector: AgentRAGPipeline embeds MULTIPLE sub-queries that don't exist until after its
@@ -21,12 +27,15 @@ Purpose:   RAGPipeline(ABC).run(ctx: RagContext) -> RagResult — the contract b
            heuristic, then an LLM classification pass) that SimpleRAGPipeline.run() calls first,
            before any retrieval/generation — an unsafe query short-circuits with a refusal, never
            reaching the KB or the main generation call. This safety gate and the answer-language
-           policy both apply unconditionally to every query, grounded or not.
+           policy both apply unconditionally to every query, grounded or not. The same call also
+           classifies action_intent — one of domain.actions.KNOWN_ACTIONS's names, or None — so a
+           later layer (not this one) can route a query like "create an appeal about a pothole"
+           into a slot-collection flow instead of an ordinary answer.
 Layer:     pipeline
 May import:   stdlib (abc, asyncio, json, time, collections.abc), structlog, pydantic,
-              app.protocols (Generator), schemas/*, domain/{confidence, context, language, opsec,
-              prompts}, app.metrics; openai (exception types only, for classifying a fallback
-              reason in _fallback_reason — never to make an API call directly)
+              app.protocols (Generator), schemas/*, domain/{actions, confidence, context, language,
+              opsec, prompts}, app.metrics; openai (exception types only, for classifying a
+              fallback reason in _fallback_reason — never to make an API call directly)
 Must NOT import:  api/*, services/*; concrete components/*; FastAPI, asyncpg, sentence-transformers;
               openai beyond the narrow exception-type import noted above
 """
@@ -42,6 +51,7 @@ import structlog
 from openai import APIError, APITimeoutError
 from pydantic import BaseModel, Field
 
+from app.domain.actions import KNOWN_ACTIONS
 from app.domain.confidence import ConfidenceBand, confidence_band
 from app.domain.context import CONTEXT_TOKEN_BUDGET, assemble_context
 from app.domain.language import detect_query_language, is_ukrainian, resolve_answer_lang
@@ -54,6 +64,7 @@ from app.domain.prompts import (
 )
 from app.metrics import (
     degraded_responses,
+    grounded_via_lexical_total,
     llm_calls,
     llm_latency_seconds,
     queries_blocked_total,
@@ -100,9 +111,13 @@ _TRANSLATE_TIMEOUT_S = 5.0
 _VALID_LANGS = frozenset({"uk", "ru", "en"})
 
 # OPSEC content-safety classification (layer 2 — see check_query_safety). A true/false
-# classification, not a user-facing answer: short, deterministic, cheap.
+# classification, not a user-facing answer: short, deterministic, cheap. 96 tokens (not the bare
+# minimum a clean {"safe": bool, "conversational": bool, "action_intent": str | null} needs) leaves
+# real headroom now that json_mode=True enforces valid JSON at the API level — see
+# components.llm.OpenAILLMClient. Bumped from 64: the JSON payload grew a third field plus room for
+# the longest registered action name.
 _SAFETY_CHECK_TEMPERATURE = 0.0
-_SAFETY_CHECK_MAX_TOKENS = 32
+_SAFETY_CHECK_MAX_TOKENS = 96
 _SAFETY_CHECK_TIMEOUT_S = 5.0
 
 
@@ -138,43 +153,63 @@ async def detect_and_translate(generator: Generator, query: str) -> tuple[str, s
     return resolve_answer_lang(lang), retrieval_query
 
 
-async def check_query_safety(generator: Generator, query: str) -> tuple[bool, str]:
+async def check_query_safety(
+    generator: Generator, query: str
+) -> tuple[bool, str, bool, str | None]:
     """Two-layer wartime OPSEC content-safety gate. Layer 1 is the free, instant keyword heuristic
     (domain.opsec.contains_opsec_risk_terms) — if it flags the query, the LLM is never called.
     Layer 2, reached only if layer 1 passes, is an LLM classification pass that catches paraphrased
-    or creative attempts the fixed phrase list cannot. Returns (is_safe, refusal_answer); the
-    refusal text is only meaningful when is_safe is False, and its language is always
-    resolve_answer_lang(detect_query_language(query)) so a refusal can never itself violate the
-    answer-language policy. FAIL CLOSED: any classifier exception (timeout, network error,
-    malformed JSON, missing/wrong-typed "safe" key) is treated as UNSAFE, not safe — an
-    unverifiable safety check must never let a query through. Only SimpleRAGPipeline calls this,
-    as the very first step, before any retrieval or generation work."""
+    or creative attempts the fixed phrase list cannot. Returns (is_safe, refusal_answer,
+    conversational, action_intent); the refusal text is only meaningful when is_safe is False, and
+    its language is always resolve_answer_lang(detect_query_language(query)) so a refusal can
+    never itself violate the answer-language policy. FAIL CLOSED: any classifier exception
+    (timeout, network error, malformed JSON, missing/wrong-typed "safe" key) is treated as UNSAFE,
+    not safe — an unverifiable safety check must never let a query through; conversational and
+    action_intent both default to their "nothing detected" value in that case too. Only
+    SimpleRAGPipeline calls this, as the very first step, before any retrieval or generation work.
+
+    conversational piggybacks on this same call (see build_safety_check_prompt) to flag small
+    talk/greetings that carry no real information need — run_shared_tail's force_ungrounded uses
+    it to skip the grounded/RAG-prompt path even if retrieval's similarity gate accidentally
+    passes on vocabulary/style noise alone (same-language conversational text scores above the
+    off-topic calibration floor regardless of topical relevance).
+
+    action_intent piggybacks on the same call too — one of domain.actions.KNOWN_ACTIONS's keys, or
+    None. A value outside that known set (a classifier hallucination) is treated as None, the same
+    fail-safe posture as everything else here. backend_app uses this to decide whether to start
+    collecting details for a registered action instead of answering as a normal query."""
     refusal_lang = resolve_answer_lang(detect_query_language(query))
     refusal = _REFUSAL_ANSWER_BY_LANG.get(refusal_lang, _REFUSAL_ANSWER_BY_LANG["uk"])
     if contains_opsec_risk_terms(query):
         queries_blocked_total.labels(layer="heuristic").inc()
         logger.warning("query_blocked", layer="heuristic")
-        return False, refusal
+        return False, refusal, False, None
     try:
         raw, _ = await generator.generate(
             build_safety_check_prompt(query),
             temperature=_SAFETY_CHECK_TEMPERATURE,
             max_tokens=_SAFETY_CHECK_MAX_TOKENS,
             timeout_s=_SAFETY_CHECK_TIMEOUT_S,
+            json_mode=True,
         )
         parsed = json.loads(raw[raw.find("{") : raw.rfind("}") + 1])
         # Strict identity check, not bool(...): a malformed reply (a stray string "false", a
         # missing key, a non-boolean value) must resolve to unsafe, never be coerced to safe by
         # truthiness (e.g. bool("false") is True — a real footgun given the fail-closed policy).
         is_safe = parsed.get("safe") is True
+        conversational = is_safe and parsed.get("conversational") is True
+        raw_action_intent = parsed.get("action_intent")
+        action_intent = (
+            raw_action_intent if is_safe and raw_action_intent in KNOWN_ACTIONS else None
+        )
     except Exception as exc:  # noqa: BLE001 — fail closed: an unverifiable safety check is unsafe
         logger.warning("query_safety_check_failed", err=type(exc).__name__)
         queries_blocked_total.labels(layer="llm_error").inc()
-        return False, refusal
+        return False, refusal, False, None
     if not is_safe:
         queries_blocked_total.labels(layer="llm").inc()
         logger.warning("query_blocked", layer="llm")
-    return is_safe, refusal
+    return is_safe, refusal, conversational, action_intent
 
 
 class RagContext(BaseModel):
@@ -190,12 +225,15 @@ class RagResult(BaseModel):
     logging (top1_sim, band, n_chunks, llm_ok, llm_retries, grounded) without widening the
     pydantic schema for values that are never part of the HTTP contract. `grounded` is False for
     both an ungrounded-but-answered response and an OPSEC-blocked refusal — callers distinguish
-    the latter via the separate `blocked` key, which only a blocked result sets."""
+    the latter via the separate `blocked` key, which only a blocked result sets. `action_intent`
+    IS part of the HTTP contract (backend_app reads it to decide whether to start collecting
+    details for a registered action), so unlike the debug fields it gets its own top-level field."""
 
     answer: str
     sources_used: list[SourceUsed]
     confidence: float
     route: QueryRoute
+    action_intent: str | None = None
     debug: dict[str, object] = Field(default_factory=dict)
 
 
@@ -215,6 +253,8 @@ async def run_shared_tail(
     question: str,
     route: QueryRoute,
     answer_lang: str = "uk",
+    force_ungrounded: bool = False,
+    strong_lexical_match: bool = False,
 ) -> RagResult:
     """The ONE place the confidence-gate -> generate -> extractive-fallback tail lives (ADR-007).
     Both SimpleRAGPipeline and AgentRAGPipeline call this after producing their own
@@ -224,10 +264,36 @@ async def run_shared_tail(
     `grounded` (retrieval produced usable context) decides which prompt gets built, but the LLM is
     ALWAYS called either way — an ungrounded query gets a real, conversational answer via
     build_general_prompt instead of a canned refusal. Confidence is 0.0 for any ungrounded answer,
-    grounded or not: it signals "not verified city info", not "no answer was given"."""
+    grounded or not: it signals "not verified city info", not "no answer was given".
+
+    force_ungrounded=True (SimpleRAGPipeline passes check_query_safety's conversational flag)
+    skips the grounded path even if top1_sim happens to clear sim_gate — a greeting can cross the
+    numeric gate on same-language vocabulary/style noise alone, with no real topical match, and
+    would otherwise get stuffed with irrelevant civic context instead of a natural reply.
+
+    strong_lexical_match=True (both pipelines pass outcome.fused[0].id == outcome.lexical_top1_id)
+    grounds an answer EVEN when top1_sim alone sits in the NO_INFO band — fixes a real bug where
+    short, keyword-heavy factual queries ("Де ЦНАП?") score well below sim_gate on dense cosine
+    similarity alone against even a directly-relevant chunk, while that same chunk is trivially the
+    lexical leg's own #1 keyword match. Requiring the fused list's actual top-1 chunk to agree with
+    the lexical leg's own rank-1 pick (not just "some" lexical overlap) keeps this conservative: it
+    needs a real tsquery match on that specific chunk, not just a coincidence elsewhere. This is a
+    genuine OR-branch on top of the existing gate, not a replacement for it — force_ungrounded is
+    still checked first and short-circuits before this matters, so a conversational query can never
+    be grounded by a stray keyword coincidence in its (irrelevant) retrieval."""
     retrieval_top1_sim.observe(top1_sim)
     band = confidence_band(top1_sim, sim_gate, sim_high)
-    grounded = bool(retrieved) and band is not ConfidenceBand.NO_INFO
+    grounded = not force_ungrounded and bool(retrieved) and (
+        band is not ConfidenceBand.NO_INFO or strong_lexical_match
+    )
+    if grounded and band is ConfidenceBand.NO_INFO:
+        # Dense similarity alone (NO_INFO band) would have refused this — strong_lexical_match is
+        # what actually flipped it to grounded. Checking the already-computed `grounded` (rather
+        # than re-testing strong_lexical_match directly) means this can never fire for a query
+        # force_ungrounded won anyway: grounded is False there regardless of the lexical signal, so
+        # this metric only ever counts a REAL change in outcome, never a coincidence that didn't
+        # end up mattering.
+        grounded_via_lexical_total.inc()
     if not grounded:
         # Retrieval was insufficient to ground an answer - still an operationally interesting
         # signal (a KB coverage gap, or simply an off-topic/general query), even though the
@@ -292,6 +358,7 @@ async def run_shared_tail(
             "grounded": grounded, "top1_sim": top1_sim, "band": band.value,
             "n_chunks": len(top_results), "llm_ok": llm_ok, "llm_retries": retries,
             "llm_ms": round(llm_elapsed_s * 1000, 1),
+            "strong_lexical_match": strong_lexical_match,
         },
     )
 

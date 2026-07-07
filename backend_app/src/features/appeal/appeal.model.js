@@ -16,6 +16,14 @@ export const APPEAL_CATEGORIES = [
   "other",
 ];
 
+// Shared by createAppealSchema (HTTP/Joi) and createAppeal.action.js (chat/assistant) so the two
+// write paths to the same collection can never drift apart on length bounds - see this repo's
+// CLAUDE.md Known Issues for the enum-only gap this closes the rest of the way.
+export const APPEAL_DESCRIPTION_MIN_LENGTH = 5;
+export const APPEAL_DESCRIPTION_MAX_LENGTH = 2000;
+export const APPEAL_ADDRESS_MIN_LENGTH = 3;
+export const APPEAL_ADDRESS_MAX_LENGTH = 256;
+
 const appealSchema = new mongoose.Schema(
   {
     user: {
@@ -24,7 +32,10 @@ const appealSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    imageUrl: { type: String, required: true, trim: true },
+    // Optional: chat-created appeals (assistant actions framework) publish without a photo.
+    // Form-created appeals (POST /appeals) still require one via createAppealSchema's Joi
+    // validation at the HTTP layer - this relaxation is DB-level only.
+    imageUrl: { type: String, trim: true, default: "" },
     category: { type: String, enum: APPEAL_CATEGORIES, required: true },
     description: { type: String, required: true, trim: true },
     address: { type: String, required: true, trim: true },

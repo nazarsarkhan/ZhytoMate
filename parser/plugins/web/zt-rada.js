@@ -7,7 +7,7 @@ const CONFIG = {
   enabled: true,
   schedule: "*/30 * * * *",
   useAi: false,
-  backfillDays: 5,
+  backfillDays: 365,
   maxPages: 1500,
   maxItems: 2000,
   attachmentLimitPerPage: 5,
@@ -94,8 +94,9 @@ function getNumberEnv(name, fallback) {
 }
 
 function getBackfillCutoff() {
+  const backfillDays = getNumberEnv("ZT_RADA_BACKFILL_DAYS", CONFIG.backfillDays);
   const cutoff = new Date();
-  cutoff.setUTCDate(cutoff.getUTCDate() - CONFIG.backfillDays);
+  cutoff.setUTCDate(cutoff.getUTCDate() - backfillDays);
   return cutoff;
 }
 

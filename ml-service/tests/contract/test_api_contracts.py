@@ -135,6 +135,54 @@ async def test_query_golden_response_shape_on_an_empty_knowledge_base(client) ->
     assert body["route"] == "SIMPLE"
 
 
+async def test_query_response_includes_action_intent_field(client) -> None:
+    response = await client.post(
+        "/api/v1/chat/query",
+        headers=AUTH,
+        json={"user_query": "Коли вивезуть сміття?", "user_id": "contract-user-2"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert "action_intent" in body
+    assert body["action_intent"] is None
+
+
+async def test_query_response_carries_a_real_action_intent_value(test_app, client) -> None:
+    """The test above only proves the field EXISTS and defaults to None — which is also what
+    QueryResponse's own pydantic default produces even if rag_service.py's
+    `action_intent=result.action_intent` wiring were deleted outright. This test scripts a
+    safety-check reply carrying a REAL action_intent so only the actual wiring, not the field's
+    default, can make it pass — mirrors test_query_answer_cache_persists_across_separate_requests's
+    pattern of rebuilding state.rag_service with a custom generator to get a specific scripted
+    reply through the real HTTP stack."""
+    action_json = json.dumps(
+        {"safe": True, "conversational": False, "action_intent": "create_appeal"}
+    )
+    generator = FakeGenerator(
+        results=[(action_json, 0), ("Гаразд, зберемо деталі про звернення.", 0)]
+    )
+    test_app.state.llm_client = generator
+    test_app.state.rag_service = RagService(
+        repo=test_app.state.repo,
+        embedder=test_app.state.embedder,
+        generator=generator,
+        settings=test_app.state.settings,
+    )
+
+    response = await client.post(
+        "/api/v1/chat/query",
+        headers=AUTH,
+        json={
+            "user_query": "Хочу подати звернення про яму на дорозі",
+            "user_id": "contract-user-action",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["action_intent"] == "create_appeal"
+
+
 async def test_query_answer_cache_persists_across_separate_requests(test_app, client) -> None:
     """Regression test for the bug where app.deps.get_rag_service built a brand-new RagService (and
     therefore a brand-new, empty answer cache) on every call — FastAPI invokes a
@@ -185,6 +233,38 @@ async def test_query_answer_cache_persists_across_separate_requests(test_app, cl
     # second skips pipeline.run() entirely, so a THIRD call would mean the second request built its
     # own fresh, empty cache instead of reusing the RagService (and its cache) built once above.
     assert generator.call_count == 2
+
+
+async def test_extract_slots_endpoint_returns_the_contract_shape(client) -> None:
+    """Contract-level shape check only — tests.conftest's default test_app fixture scripts a
+    generator reply for the safety-check JSON contract, not this endpoint's {"slots", ...} shape,
+    so this specific call falls through ActionService's fail-closed path (is_unrelated=True,
+    current_slots preserved unchanged — here, empty). Richer extraction/merge behavior is
+    unit-tested against a purpose-scripted FakeGenerator in tests/unit/test_action_service.py —
+    this test only proves the HTTP contract (status code, response keys) end-to-end through the
+    real FastAPI route."""
+    response = await client.post(
+        "/api/v1/assistant/extract-slots",
+        headers=AUTH,
+        json={
+            "message": "Величезна яма на вул. Київській",
+            "slot_schema": [
+                {
+                    "name": "category",
+                    "description": "Категорія проблеми",
+                    "enum_values": ["pothole", "garbage"],
+                },
+                {"name": "address", "description": "Адреса"},
+            ],
+            "current_slots": {},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["slots"] == {}
+    assert body["wants_cancel"] is False
+    assert body["is_unrelated"] is True
 
 
 async def test_vision_golden_response_shape(test_app, client) -> None:

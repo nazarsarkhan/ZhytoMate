@@ -8,8 +8,7 @@ export const statusCards = [
 
 export const chatSuggestions = [
   "Де ЦНАП?",
-  "Перевірити графік відключень",
-  "Створити звернення про яму",
+  "Створити звернення",
 ];
 
 export const notifications = [
