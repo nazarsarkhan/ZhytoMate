@@ -23,6 +23,8 @@ export default function TransportPage() {
             title={t("transport.mapTitle")}
             src={DOZOR_MAP_URL}
             loading="lazy"
+            referrerPolicy="no-referrer"
+            sandbox="allow-scripts allow-same-origin"
             className="absolute inset-0 h-full w-full"
             style={{ border: 0 }}
           />
