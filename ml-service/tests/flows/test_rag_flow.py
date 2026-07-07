@@ -426,3 +426,89 @@ async def test_non_conversational_query_still_grounds_on_passing_similarity() ->
 
     assert result.debug["grounded"] is True
     assert result.answer == "Сміття вивозять щовівторка."
+
+
+# ---------------------------------------------------------------------------
+# Lexical override — a genuine rank-1 lexical/RRF agreement can ground an answer even when dense
+# top1_sim alone would refuse it (see pipeline.base.run_shared_tail's strong_lexical_match, added
+# to fix a live bug where short, keyword-heavy factual queries like "Де ЦНАП?" scored well below
+# sim_gate on dense cosine similarity alone despite a directly-relevant chunk being in the KB).
+# ---------------------------------------------------------------------------
+
+_CNAP_QUERY = "Де ЦНАП?"
+
+
+async def test_strong_lexical_match_grounds_a_low_dense_similarity_cnap_style_query() -> None:
+    """Reproduces the real live bug end-to-end through SimpleRAGPipeline: a short, keyword-heavy
+    factual query's dense top1_sim sits well below sim_gate even against the directly-relevant
+    chunk, but that SAME chunk is trivially the lexical leg's own #1 keyword match (real overlap on
+    "ЦНАП"). fused[0] agreeing with the lexical leg's own rank-1 pick is enough to ground the
+    answer using a chunk the dense gate alone would have refused.
+
+    "Де ЦНАП?" carries none of the Ukrainian-only marker letters (і/ї/є/ґ — see domain.language),
+    so is_ukrainian() returns False and the pipeline genuinely makes a detect_and_translate call
+    before retrieval, exactly as it would for the real query against the live service — scripted
+    here as a real (if redundant) Ukrainian-to-Ukrainian translation, not skipped."""
+    cnap_hit = _hit(
+        1, similarity=0.35,
+        text="ЦНАП Житомирської міської ради: вул. Ватутіна, 2/1, пн-пт 8:00-17:00.",
+    )
+    outcome = RetrievalOutcome(dense=[cnap_hit], fused=[cnap_hit], lexical=[cnap_hit])
+    retriever = FakeRetriever({_CNAP_QUERY: outcome})
+    detect_json = json.dumps({"lang": "uk", "uk": _CNAP_QUERY})
+    generator = FakeGenerator(
+        results=[
+            (_SAFE_JSON, 0),
+            (detect_json, 0),
+            ("ЦНАП знаходиться на вул. Ватутіна, 2/1.", 0),
+        ]
+    )
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(_CNAP_QUERY))
+
+    assert result.debug["grounded"] is True
+    assert result.debug["strong_lexical_match"] is True
+    assert len(result.sources_used) == 1
+    assert result.answer == "ЦНАП знаходиться на вул. Ватутіна, 2/1."
+
+
+async def test_low_dense_similarity_without_rank1_lexical_agreement_stays_ungrounded() -> None:
+    """Negative control: the dense leg's best (still-weak) guess has SOME lexical presence but is
+    NOT the lexical leg's own rank-1 pick — must stay ungrounded. This is the test that actually
+    protects against a regression that grounds on any non-empty lexical presence rather than
+    specifically a rank-1 match."""
+    weak_dense_hit = _hit(1, 0.35, "слабко пов'язаний фрагмент")
+    lexical_top_hit = _hit(2, 0.0, "інший фрагмент із кращим збігом ключових слів")
+    outcome = RetrievalOutcome(
+        dense=[weak_dense_hit], fused=[weak_dense_hit],
+        lexical=[lexical_top_hit, weak_dense_hit],
+    )
+    retriever = FakeRetriever({_QUERY: outcome})
+    generator = FakeGenerator(
+        results=[(_SAFE_JSON, 0), ("Наразі не маю точних даних, але радо поспілкуюся!", 0)]
+    )
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(_QUERY))
+
+    assert result.debug["grounded"] is False
+    assert result.debug["strong_lexical_match"] is False
+
+
+async def test_conversational_greeting_stays_ungrounded_despite_strong_lexical_match() -> None:
+    """Precedence check at the flow level: even when retrieval surfaces a strong rank-1 lexical
+    match, a conversational/small-talk classification still wins — a greeting must never be
+    stuffed with civic context just because of a keyword coincidence."""
+    hit = _hit(1, 0.35, "ЦНАП Житомирської міської ради: вул. Ватутіна, 2/1.")
+    outcome = RetrievalOutcome(dense=[hit], fused=[hit], lexical=[hit])
+    retriever = FakeRetriever({_GREETING: outcome})
+    safe_and_conversational = json.dumps({"safe": True, "conversational": True})
+    generator = FakeGenerator(
+        results=[(safe_and_conversational, 0), ("Привіт! Все добре, дякую.", 0)]
+    )
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(_GREETING))
+
+    assert result.debug["grounded"] is False

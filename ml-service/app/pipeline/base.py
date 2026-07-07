@@ -5,7 +5,13 @@ Purpose:   RAGPipeline(ABC).run(ctx: RagContext) -> RagResult — the contract b
            conversational via build_general_prompt) -> extractive fallback on any LLM error for a
            grounded answer, or an honest "couldn't respond" message for an ungrounded one (ADR-007
            extended — the LLM is still the least reliable hop, so a demo must stay alive either
-           way). Defines RagContext (user_query, district_slug, route) and RagResult (answer,
+           way). The confidence gate itself reads two signals, not just dense top1_sim: a passing
+           top1_sim grounds as before, but a query whose top1_sim sits below sim_gate can still
+           ground via strong_lexical_match — a genuine rank-1 agreement between the fused
+           (RRF) list and the raw lexical leg (see RetrievalOutcome.lexical_top1_id) — fixing short,
+           keyword-heavy factual queries ("Де ЦНАП?") that dense cosine similarity structurally
+           under-scores even against a directly-relevant chunk. Defines RagContext (user_query,
+           district_slug, route) and RagResult (answer,
            sources_used, confidence, route, debug) as pydantic v2 internal DTOs (not HTTP I/O —
            that stays schemas/query). RagContext deliberately carries NO pre-computed query
            vector: AgentRAGPipeline embeds MULTIPLE sub-queries that don't exist until after its
@@ -58,6 +64,7 @@ from app.domain.prompts import (
 )
 from app.metrics import (
     degraded_responses,
+    grounded_via_lexical_total,
     llm_calls,
     llm_latency_seconds,
     queries_blocked_total,
@@ -247,6 +254,7 @@ async def run_shared_tail(
     route: QueryRoute,
     answer_lang: str = "uk",
     force_ungrounded: bool = False,
+    strong_lexical_match: bool = False,
 ) -> RagResult:
     """The ONE place the confidence-gate -> generate -> extractive-fallback tail lives (ADR-007).
     Both SimpleRAGPipeline and AgentRAGPipeline call this after producing their own
@@ -261,10 +269,31 @@ async def run_shared_tail(
     force_ungrounded=True (SimpleRAGPipeline passes check_query_safety's conversational flag)
     skips the grounded path even if top1_sim happens to clear sim_gate — a greeting can cross the
     numeric gate on same-language vocabulary/style noise alone, with no real topical match, and
-    would otherwise get stuffed with irrelevant civic context instead of a natural reply."""
+    would otherwise get stuffed with irrelevant civic context instead of a natural reply.
+
+    strong_lexical_match=True (both pipelines pass outcome.fused[0].id == outcome.lexical_top1_id)
+    grounds an answer EVEN when top1_sim alone sits in the NO_INFO band — fixes a real bug where
+    short, keyword-heavy factual queries ("Де ЦНАП?") score well below sim_gate on dense cosine
+    similarity alone against even a directly-relevant chunk, while that same chunk is trivially the
+    lexical leg's own #1 keyword match. Requiring the fused list's actual top-1 chunk to agree with
+    the lexical leg's own rank-1 pick (not just "some" lexical overlap) keeps this conservative: it
+    needs a real tsquery match on that specific chunk, not just a coincidence elsewhere. This is a
+    genuine OR-branch on top of the existing gate, not a replacement for it — force_ungrounded is
+    still checked first and short-circuits before this matters, so a conversational query can never
+    be grounded by a stray keyword coincidence in its (irrelevant) retrieval."""
     retrieval_top1_sim.observe(top1_sim)
     band = confidence_band(top1_sim, sim_gate, sim_high)
-    grounded = not force_ungrounded and bool(retrieved) and band is not ConfidenceBand.NO_INFO
+    grounded = not force_ungrounded and bool(retrieved) and (
+        band is not ConfidenceBand.NO_INFO or strong_lexical_match
+    )
+    if grounded and band is ConfidenceBand.NO_INFO:
+        # Dense similarity alone (NO_INFO band) would have refused this — strong_lexical_match is
+        # what actually flipped it to grounded. Checking the already-computed `grounded` (rather
+        # than re-testing strong_lexical_match directly) means this can never fire for a query
+        # force_ungrounded won anyway: grounded is False there regardless of the lexical signal, so
+        # this metric only ever counts a REAL change in outcome, never a coincidence that didn't
+        # end up mattering.
+        grounded_via_lexical_total.inc()
     if not grounded:
         # Retrieval was insufficient to ground an answer - still an operationally interesting
         # signal (a KB coverage gap, or simply an off-topic/general query), even though the
@@ -329,6 +358,7 @@ async def run_shared_tail(
             "grounded": grounded, "top1_sim": top1_sim, "band": band.value,
             "n_chunks": len(top_results), "llm_ok": llm_ok, "llm_retries": retries,
             "llm_ms": round(llm_elapsed_s * 1000, 1),
+            "strong_lexical_match": strong_lexical_match,
         },
     )
 

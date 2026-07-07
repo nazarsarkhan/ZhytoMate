@@ -198,6 +198,47 @@ async def test_interleaving_prevents_one_subquery_from_starving_another_out_of_t
     assert result.confidence == 0.99  # top1 across sub-queries is B0's — never dropped upstream
 
 
+async def test_agent_grounds_a_dry_subquery_via_strong_lexical_match_after_reretry() -> None:
+    """Same lexical-override mechanism as SimpleRAGPipeline (see test_rag_flow.py's CNAP-style
+    test), proven through AgentRAGPipeline's own call to run_shared_tail: a single sub-query whose
+    dense top1_sim sits below sim_gate is dry (triggers the one shared re-query), and the
+    rewritten retry is STILL low-dense-similarity — but both the original and the rewritten
+    outcome's fused top-1 chunk agree with their own lexical top-1, so the final synthesized
+    answer must still ground, not fall back to the ungrounded/general-conversation path."""
+    cnap_q = "Де ЦНАП?"
+    cnap_rewritten = "Яка адреса Центру надання адміністративних послуг?"
+    decompose_json = json.dumps([cnap_q])
+    cnap_text = "ЦНАП Житомирської міської ради: вул. Ватутіна, 2/1."
+    original_hit = _hit(1, 0.35, cnap_text)
+    rewritten_hit = _hit(2, 0.38, cnap_text)
+    retriever = FakeRetriever(
+        {
+            cnap_q: RetrievalOutcome(
+                dense=[original_hit], fused=[original_hit], lexical=[original_hit]
+            ),
+            cnap_rewritten: RetrievalOutcome(
+                dense=[rewritten_hit], fused=[rewritten_hit], lexical=[rewritten_hit]
+            ),
+        }
+    )
+    generator = FakeGenerator(
+        results=[
+            (decompose_json, 0),
+            (cnap_rewritten, 0),
+            ("ЦНАП знаходиться на вул. Ватутіна, 2/1.", 0),
+        ]
+    )
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(
+        RagContext(user_query=cnap_q, district_slug=None, route=QueryRoute.SIMPLE)
+    )
+
+    assert generator.call_count == 3  # decompose + the one shared re-query + synthesis
+    assert result.debug["grounded"] is True
+    assert result.answer == "ЦНАП знаходиться на вул. Ватутіна, 2/1."
+
+
 async def test_one_subquery_retrieval_failure_is_isolated_and_treated_as_dry() -> None:
     """A transient error inside one sub-query's retrieve() (e.g. a dropped Postgres connection) must
     not blow up the whole agent request. It degrades to an empty (dry) outcome, so the existing

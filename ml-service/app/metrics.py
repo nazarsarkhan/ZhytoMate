@@ -106,3 +106,12 @@ slot_extraction_anomalies_total = Counter(
     "Slot-extraction replies that needed correction before being returned",
     ["kind"],
 )
+
+# Queries grounded ONLY because of a strong (rank-1) lexical/RRF agreement — dense top1_sim alone
+# was in the NO_INFO band, but run_shared_tail's strong_lexical_match override flipped the outcome
+# to grounded. Never incremented when dense similarity alone would already have grounded the
+# answer (the lexical signal wasn't the deciding factor then) — see pipeline/base.py.
+grounded_via_lexical_total = Counter(
+    "zhytomate_grounded_via_lexical_total",
+    "Queries grounded via a strong lexical match despite a NO_INFO dense similarity band",
+)

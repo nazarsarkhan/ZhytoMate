@@ -4,8 +4,10 @@ Purpose:   SimpleRAGPipeline(RAGPipeline): single-shot path for SIMPLE queries â
            never reaching retrieval or generation) -> detect language + translate the query to
            Ukrainian for retrieval if needed (detect_and_translate; skipped for Ukrainian queries)
            -> embed the query (no prefix; OpenAI embeddings are prefix-free, unlike the old e5
-           setup) -> hybrid retrieve (dense+lexical, RRF) via the injected Retriever port -> shared
-           tail (confidence gate decides grounded vs ungrounded; ALWAYS generates either way;
+           setup) -> hybrid retrieve (dense+lexical, RRF) via the injected Retriever port -> derive
+           strong_lexical_match (does the fused list's own top-1 chunk agree with the lexical
+           leg's own rank-1 pick?) -> shared tail (confidence gate decides grounded vs ungrounded,
+           now via EITHER a passing top1_sim OR strong_lexical_match; ALWAYS generates either way;
            fallback on LLM error) via pipeline.base.run_shared_tail. At most one safety-check
            call, plus one generation call, plus at most one detect+translate call for a non-
            Ukrainian query. Generation receives the ORIGINAL query and the policy-resolved
@@ -71,6 +73,12 @@ class SimpleRAGPipeline(RAGPipeline):
         outcome = await self._retriever.retrieve(
             retrieval_query, query_vec, ctx.district_slug, k=RETRIEVE_LIMIT
         )
+        # A genuine rank-1 agreement between the fused list and the raw lexical leg â€” see
+        # run_shared_tail's docstring for why this grounds an answer even when dense top1_sim
+        # alone sits below sim_gate.
+        strong_lexical_match = (
+            bool(outcome.fused) and outcome.fused[0].id == outcome.lexical_top1_id
+        )
         result = await run_shared_tail(
             generator=self._generator,
             sim_gate=self._sim_gate,
@@ -82,5 +90,6 @@ class SimpleRAGPipeline(RAGPipeline):
             route=ctx.route,
             answer_lang=answer_lang,
             force_ungrounded=conversational,
+            strong_lexical_match=strong_lexical_match,
         )
         return result.model_copy(update={"action_intent": action_intent})

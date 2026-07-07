@@ -11,9 +11,14 @@ Purpose:   AgentRAGPipeline(RAGPipeline): COMPLEX path via query DECOMPOSITION (
            sub-query's rank-0 chunk before any sub-query's rank-1 chunk) so no single sub-query can
            starve the others out of the shared tail's token budget -> merge+dedup happens inside the
            shared tail's assemble_context -> one synthesis call. Worst case: 1 (decompose) + 1
-           (rewrite) + 1 (synthesis) = 3 Generator calls. AGENT_RAG_ENABLED gating and the
-           fallback-to-SimpleRAGPipeline decision live in app.services.rag_service (the router), NOT
-           here — AgentRAGPipeline.run() always runs the full agent flow when called.
+           (rewrite) + 1 (synthesis) = 3 Generator calls. Also derives strong_lexical_match (any
+           sub-query outcome whose own fused top-1 chunk agrees with its own lexical rank-1 pick)
+           and passes it to the shared tail alongside agent_top1, mirroring SimpleRAGPipeline's
+           identical per-outcome check — see pipeline.base.run_shared_tail's docstring for why this
+           can ground an answer even when agent_top1 alone sits below sim_gate. AGENT_RAG_ENABLED
+           gating and the fallback-to-SimpleRAGPipeline decision live in app.services.rag_service
+           (the router), NOT here — AgentRAGPipeline.run() always runs the full agent flow when
+           called.
 Layer:     pipeline
 May import:   pipeline/base, protocols (Embedder/Retriever/Generator), domain/{sufficiency,prompts},
               schemas/retrieval, app.metrics, stdlib (asyncio, json), structlog
@@ -110,6 +115,15 @@ class AgentRAGPipeline(RAGPipeline):
 
         flattened = _interleave_by_rank(outcomes)
         agent_top1 = max((outcome.dense_top1_sim for outcome in outcomes), default=0.0)
+        # True when ANY sub-query's own fused top-1 chunk agrees with that same sub-query's own
+        # lexical rank-1 pick — mirrors SimpleRAGPipeline's per-outcome check (pipeline.base's
+        # run_shared_tail docstring), just reduced with `any(...)` across sub-queries: one strongly
+        # lexically-grounded chunk anywhere in the interleaved context is enough, even if the
+        # overall agent_top1 (max dense similarity across all sub-queries) sits below sim_gate.
+        strong_lexical_match = any(
+            bool(outcome.fused) and outcome.fused[0].id == outcome.lexical_top1_id
+            for outcome in outcomes
+        )
 
         return await run_shared_tail(
             generator=self._generator,
@@ -120,6 +134,7 @@ class AgentRAGPipeline(RAGPipeline):
             top1_sim=agent_top1,
             question=ctx.user_query,
             route=ctx.route,
+            strong_lexical_match=strong_lexical_match,
         )
 
     async def _retrieve_all(
