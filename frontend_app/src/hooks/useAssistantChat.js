@@ -12,3 +12,21 @@ export function useAssistantChat() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["conversations"] }),
   });
 }
+
+export function useConfirmAction() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (conversationId) =>
+      apiFetch(`/assistant/conversations/${conversationId}/actions/confirm`, { method: "POST" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["conversations"] }),
+  });
+}
+
+export function useCancelAction() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (conversationId) =>
+      apiFetch(`/assistant/conversations/${conversationId}/actions/cancel`, { method: "POST" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["conversations"] }),
+  });
+}
