@@ -115,7 +115,7 @@ function buildScheduleForQueue({ queueNumber, subqueue, resolvedFrom, addressLab
 export async function getOutageSchedule({ userId, queueOverride, subqueueOverride }) {
   // An explicit ?queue override lets the resident browse any queue (e.g. a relative's address)
   // without touching their saved profile.
-  if (queueOverride) {
+  if (queueOverride !== null && queueOverride !== undefined) {
     return {
       needsAddress: false,
       schedule: buildScheduleForQueue({
