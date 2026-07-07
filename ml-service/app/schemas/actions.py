@@ -21,7 +21,10 @@ from pydantic import BaseModel, Field
 
 # A filled slot value (an address, a short answer) or a field's declared choice list — generous
 # but capped, mirroring the same order of magnitude as SlotFieldSchema.description/name below.
-_MAX_SLOT_VALUE_LENGTH = 500
+# Public (no leading underscore): action_service.py reuses this exact cap to truncate its own
+# extraction response, so an oversized value can never round-trip back in as a future request's
+# current_slots and fail this same validation.
+MAX_SLOT_VALUE_LENGTH = 500
 _MAX_ENUM_VALUES = 50
 
 
@@ -36,7 +39,7 @@ class SlotFieldSchema(BaseModel):
 class SlotExtractionRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=1000)
     slot_schema: list[SlotFieldSchema] = Field(..., min_length=1, max_length=20)
-    current_slots: dict[str, Annotated[str, Field(max_length=_MAX_SLOT_VALUE_LENGTH)]] = Field(
+    current_slots: dict[str, Annotated[str, Field(max_length=MAX_SLOT_VALUE_LENGTH)]] = Field(
         default_factory=dict, max_length=20
     )
 

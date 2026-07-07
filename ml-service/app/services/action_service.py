@@ -11,7 +11,11 @@ Purpose:   ActionService.extract_slots — generic structured-extraction over a 
            still (incorrectly) changes a field can never sneak that change past the caller — the
            prompt asks for this too, but code enforcement is the real guarantee (defense in depth,
            the same posture as the OPSEC gate / never-answer-in-Russian policy elsewhere in this
-           service). Emits llm_calls/llm_latency_seconds the same way vision_service.py and
+           service). Every merged value is also clamped to MAX_SLOT_VALUE_LENGTH before it's
+           returned — SlotExtractionRequest.current_slots enforces that same cap on input, so an
+           unclamped LLM-extracted value could otherwise round-trip back in as a future request and
+           fail that validation forever, permanently wedging the caller's draft. Emits
+           llm_calls/llm_latency_seconds the same way vision_service.py and
            pipeline.base.run_shared_tail do (route="actions"), so this LLM-calling path is covered
            by the same dashboards/alerts as every other one.
 Layer:     service
@@ -29,7 +33,7 @@ import structlog
 from app.domain.prompts import build_slot_extraction_prompt
 from app.metrics import llm_calls, llm_latency_seconds
 from app.protocols import Generator
-from app.schemas.actions import SlotExtractionRequest, SlotExtractionResponse
+from app.schemas.actions import MAX_SLOT_VALUE_LENGTH, SlotExtractionRequest, SlotExtractionResponse
 
 logger = structlog.get_logger(__name__)
 
@@ -70,6 +74,17 @@ class ActionService:
                 if is_unrelated
                 else {**request.current_slots, **extracted}
             )
+            # extracted comes straight from the LLM's JSON reply, bounded only by
+            # _EXTRACTION_MAX_TOKENS for the whole response — a single field can still exceed
+            # MAX_SLOT_VALUE_LENGTH. Left unclamped, that value would be persisted by the caller as
+            # this draft's current_slots and re-sent on the next turn, where it fails
+            # SlotExtractionRequest's own validation — permanently wedging the draft, since a failed
+            # request never reaches this method again to self-correct. Clamped here, after both
+            # branches above converge, so it also covers is_unrelated's copy-forward path.
+            overlong = [key for key, value in merged.items() if len(value) > MAX_SLOT_VALUE_LENGTH]
+            if overlong:
+                logger.warning("slot_extraction_value_truncated", fields=overlong)
+                merged = {key: value[:MAX_SLOT_VALUE_LENGTH] for key, value in merged.items()}
             llm_calls.labels(route=_METRICS_ROUTE, outcome="ok").inc()
             return SlotExtractionResponse(
                 slots=merged,

@@ -6,7 +6,10 @@ Purpose:   Unit: ActionService.extract_slots — merges newly-extracted slots ov
            object disagrees), and passes through wants_cancel. Also covers SlotExtractionRequest/
            SlotFieldSchema's input caps (current_slots key count + value length, enum_values item
            count + length) — mirrors test_vision.py's pattern of testing a service and its request
-           schema's validation together in one file. Uses FakeGenerator, no real LLM.
+           schema's validation together in one file — plus the mirrored output-side cap: an
+           oversized extracted value must be truncated before it's returned, and that truncated
+           response must itself satisfy current_slots' own validation, proving the round-trip wedge
+           this guards against is actually closed. Uses FakeGenerator, no real LLM.
 Layer:     test
 May import:   pytest, pydantic, app.services.action_service, app.schemas.actions,
               tests.fakes.fake_generator
@@ -19,7 +22,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.actions import SlotExtractionRequest, SlotFieldSchema
+from app.schemas.actions import MAX_SLOT_VALUE_LENGTH, SlotExtractionRequest, SlotFieldSchema
 from app.services.action_service import ActionService
 from tests.fakes.fake_generator import FakeGenerator
 
@@ -130,6 +133,55 @@ async def test_extract_slots_fails_closed_to_unrelated_on_malformed_reply() -> N
     assert result.is_unrelated is True
     assert result.wants_cancel is False
     assert result.slots == {}
+
+
+async def test_extract_slots_truncates_oversized_extracted_value() -> None:
+    """Reproduces the round-trip wedge: current_slots caps each value at MAX_SLOT_VALUE_LENGTH, but
+    nothing bounded SlotExtractionResponse.slots the same way, so a verbose model reply could
+    extract a value past that cap. Left unclamped, the caller (backend_app) persists this response
+    as-is and re-sends it as a future request's current_slots, which then fails that exact
+    validation forever — the draft is permanently stuck with no clean way to extract, cancel, or
+    confirm it. The service must clamp before returning."""
+    oversized_value = "а" * (MAX_SLOT_VALUE_LENGTH + 50)
+    scripted = {
+        "slots": {"address": oversized_value},
+        "wants_cancel": False,
+        "is_unrelated": False,
+    }
+    generator = FakeGenerator(result=(json.dumps(scripted), 0))
+    service = ActionService(generator)
+    request = SlotExtractionRequest(
+        message="Ось повна адреса", slot_schema=_SCHEMA, current_slots={}
+    )
+
+    result = await service.extract_slots(request)
+
+    assert len(result.slots["address"]) == MAX_SLOT_VALUE_LENGTH
+    assert result.slots["address"] == oversized_value[:MAX_SLOT_VALUE_LENGTH]
+
+
+async def test_truncated_extraction_response_round_trips_as_valid_current_slots() -> None:
+    """The actual proof the wedge is closed, not just that truncation happened: the real
+    SlotExtractionResponse this service returns for an oversized extraction must itself be
+    acceptable as a future request's current_slots — that's exactly what the caller persists and
+    re-sends on the next turn."""
+    oversized_value = "а" * (MAX_SLOT_VALUE_LENGTH + 50)
+    scripted = {
+        "slots": {"address": oversized_value},
+        "wants_cancel": False,
+        "is_unrelated": False,
+    }
+    generator = FakeGenerator(result=(json.dumps(scripted), 0))
+    service = ActionService(generator)
+    request = SlotExtractionRequest(
+        message="Ось повна адреса", slot_schema=_SCHEMA, current_slots={}
+    )
+    result = await service.extract_slots(request)
+
+    # Must not raise ValidationError — this is the exact request shape the caller sends next turn.
+    SlotExtractionRequest(
+        message="наступне повідомлення", slot_schema=_SCHEMA, current_slots=result.slots
+    )
 
 
 def test_current_slots_over_max_keys_is_rejected() -> None:
