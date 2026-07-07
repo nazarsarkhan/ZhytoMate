@@ -4,7 +4,7 @@ import { APPEAL_CATEGORIES } from "../../appeal/appeal.model.js";
 // One entry in the assistant actions registry (see actionRegistry.js and
 // docs/superpowers/specs/2026-07-06-assistant-actions-framework-design.md). Each action module
 // owns its own slot schema, summary rendering, and execution - the orchestration in
-// assistant.controller.js never hardcodes appeal-specific field names.
+// assistant.service.js never hardcodes appeal-specific field names.
 export const createAppealAction = {
   type: "create_appeal",
   requiredSlots: ["category", "description", "address"],

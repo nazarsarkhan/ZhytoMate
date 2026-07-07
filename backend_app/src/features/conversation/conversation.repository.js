@@ -10,25 +10,6 @@ export function findConversationByIdAndUser(id, userId) {
   return Conversation.findOne({ _id: id, user: userId });
 }
 
-export function createConversation({ userId, title, userQuery, answer }) {
-  return Conversation.create({
-    user: userId,
-    title,
-    messages: [
-      { role: "user", text: userQuery },
-      { role: "assistant", text: answer },
-    ],
-    lastMessageAt: new Date(),
-  });
-}
-
-export function appendExchange(conversation, { userQuery, answer }) {
-  conversation.messages.push({ role: "user", text: userQuery });
-  conversation.messages.push({ role: "assistant", text: answer });
-  conversation.lastMessageAt = new Date();
-  return conversation.save();
-}
-
 export function createEmptyConversation({ userId, title }) {
   return Conversation.create({ user: userId, title, messages: [], lastMessageAt: new Date() });
 }
@@ -58,8 +39,6 @@ export function appendUserMessage(conversation, { text }) {
 export default {
   findConversationsByUser,
   findConversationByIdAndUser,
-  createConversation,
-  appendExchange,
   createEmptyConversation,
   setPendingAction,
   clearPendingAction,
