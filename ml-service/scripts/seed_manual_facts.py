@@ -64,9 +64,16 @@ _EMERGENCY_TEXT = (
 # office. User-supplied and dated 2026-07 for exactly that reason — re-verify before reusing this
 # past a change in the war's legal status or a reported personnel change.
 _LEADERSHIP_TEXT = (
-    "У Житомирі немає офіційно обраного міського голови. Попередній очільник міста Сергій "
-    "Іванович Сухомлин достроково склав повноваження у вересні 2024 року та був призначений "
-    "на посаду голови Державного агентства відновлення та розвитку інфраструктури України.\n\n"
+    # Opens with "Мер" (nominative, matching how a citizen would actually phrase "хто мер?")
+    # alongside the formal "міський голова" - the 'simple' FTS config used by this KB does no
+    # stemming, so "мера"/"мером" elsewhere in this text would NOT match a bare "мер" query.
+    # Without this, the only real match for "мер" in the whole KB was an unrelated Telegram
+    # story about Dortmund's own mayor visiting Zhytomyr, which the assistant genuinely (if
+    # unhelpfully) answered from - a live-reproduced bug, not a hypothetical one.
+    "Мер (міський голова) Житомира наразі офіційно не обраний. Попередній очільник міста "
+    "Сергій Іванович Сухомлин достроково склав повноваження у вересні 2024 року та був "
+    "призначений на посаду голови Державного агентства відновлення та розвитку "
+    "інфраструктури України.\n\n"
     "Оскільки в умовах воєнного стану чергові вибори мера не проводяться, обов'язки міського "
     "голови виконує секретар міської ради Галина Степанівна Шиманська. До обрання секретарем "
     "міськради у 2024 році вона працювала завідувачкою житомирських дитячих садків.\n\n"
