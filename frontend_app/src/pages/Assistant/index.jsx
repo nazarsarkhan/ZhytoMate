@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import ActionCard from "../../components/assistant/ActionCard.jsx";
 import Shell from "../../components/layout/Shell.jsx";
 import AppHeader from "../../components/layout/AppHeader.jsx";
 import BottomNav from "../../components/navigation/BottomNav.jsx";
 import Icon from "../../components/ui/Icon.jsx";
 import SinoptikWeatherWidget from "../../components/widgets/SinoptikWeatherWidget.jsx";
 import { useAutoScrollToBottom } from "../../hooks/useAutoScrollToBottom.js";
-import { useAssistantChat } from "../../hooks/useAssistantChat.js";
+import { useAssistantChat, useCancelAction, useConfirmAction } from "../../hooks/useAssistantChat.js";
 import { useCurrentUser } from "../../hooks/useCurrentUser.js";
 import { chatSuggestions, statusCards } from "../../consts/homeData.js";
 
@@ -15,6 +16,8 @@ export default function AssistantPage() {
   const { t } = useTranslation();
   const currentUser = useCurrentUser();
   const assistantChat = useAssistantChat();
+  const confirmAction = useConfirmAction();
+  const cancelAction = useCancelAction();
   const [input, setInput] = useState("");
   const [listening, setListening] = useState(false);
   const [messages, setMessages] = useState([
@@ -34,10 +37,25 @@ export default function AssistantPage() {
     try {
       const result = await assistantChat.mutateAsync({ userQuery: text, conversationId });
       if (result.conversationId) setConversationId(result.conversationId);
-      setMessages((current) => [...current, { role: "assistant", text: result.answer }]);
+      setMessages((current) => [
+        ...current,
+        { role: "assistant", text: result.answer, actionCard: result.actionCard || null },
+      ]);
     } catch {
       setMessages((current) => [...current, { role: "assistant", text: t("chat.error"), isError: true }]);
     }
+  };
+
+  // Once an action card is resolved, it must stop being interactive - otherwise a later re-click
+  // would still reach the backend (safely, but as a confusing "No action awaiting confirmation"
+  // error with no visible cause) since the card itself has no notion of its own past outcome.
+  const applyActionResult = (index, result) => {
+    setMessages((current) => [
+      ...current.map((message, messageIndex) =>
+        messageIndex === index ? { ...message, actionCard: null } : message,
+      ),
+      { role: "assistant", text: result.answer },
+    ]);
   };
 
   return (
@@ -97,9 +115,17 @@ export default function AssistantPage() {
                       <Icon name="smart_toy" className="text-lg text-on-primary" />
                     </div>
                   ) : null}
-                  <div className={`max-w-[85%] rounded-2xl border p-4 text-sm leading-5 ${isUser ? "rounded-tr-sm border-primary-container/20 bg-primary-container text-on-primary" : message.isError ? "rounded-tl-sm border-error-container bg-error-container/30 text-error" : "rounded-tl-sm border-outline-variant/20 bg-surface-container text-on-surface-variant"}`}>
-                    {message.text}
-                  </div>
+                  {message.actionCard ? (
+                    <ActionCard
+                      actionCard={message.actionCard}
+                      onConfirm={async () => applyActionResult(index, await confirmAction.mutateAsync(conversationId))}
+                      onCancel={async () => applyActionResult(index, await cancelAction.mutateAsync(conversationId))}
+                    />
+                  ) : (
+                    <div className={`max-w-[85%] rounded-2xl border p-4 text-sm leading-5 ${isUser ? "rounded-tr-sm border-primary-container/20 bg-primary-container text-on-primary" : message.isError ? "rounded-tl-sm border-error-container bg-error-container/30 text-error" : "rounded-tl-sm border-outline-variant/20 bg-surface-container text-on-surface-variant"}`}>
+                      {message.text}
+                    </div>
+                  )}
                 </div>
               );
             })}
