@@ -8,11 +8,13 @@ import { voteInSurvey } from "../src/features/survey/survey.service.js";
 
 const username = "nazar_dev";
 
-// Dedicated admin login for the admin panel. Override the password via ADMIN_SEED_PASSWORD.
+// Dedicated admin login for the admin panel. Provide the password via ADMIN_SEED_PASSWORD.
 const ADMIN_USERNAME = "admin";
 const ADMIN_EMAIL = "admin@zhytomate.local";
-const ADMIN_PASSWORD = process.env.ADMIN_SEED_PASSWORD || "admin12345";
-
+const ADMIN_PASSWORD = process.env.ADMIN_SEED_PASSWORD;
+if (!ADMIN_PASSWORD) {
+  throw new Error("ADMIN_SEED_PASSWORD must be set to seed the admin account");
+}
 // Mirrors the previously-static contacts from frontend_app/src/consts/serviceData.js so the
 // Contacts tab has data once it reads from the API. `kind:"emergency"` renders in the top grid;
 // `kind:"utility"` rows are grouped under their `group` heading.
