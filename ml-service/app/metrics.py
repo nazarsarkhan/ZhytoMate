@@ -97,3 +97,12 @@ dedup_skips_total = Counter(
 queries_blocked_total = Counter(
     "zhytomate_queries_blocked_total", "Queries refused by the OPSEC content-safety gate", ["layer"]
 )
+
+# Slot-extraction replies action_service.py had to correct before returning them — both are the
+# same hazard (an uncorrected reply round-tripping back in as a future request's current_slots and
+# failing that request's own validation forever). kind: value_truncated | unexpected_key
+slot_extraction_anomalies_total = Counter(
+    "zhytomate_slot_extraction_anomalies_total",
+    "Slot-extraction replies that needed correction before being returned",
+    ["kind"],
+)

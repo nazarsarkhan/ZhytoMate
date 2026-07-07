@@ -6,10 +6,11 @@ Purpose:   Unit: ActionService.extract_slots — merges newly-extracted slots ov
            object disagrees), and passes through wants_cancel. Also covers SlotExtractionRequest/
            SlotFieldSchema's input caps (current_slots key count + value length, enum_values item
            count + length) — mirrors test_vision.py's pattern of testing a service and its request
-           schema's validation together in one file — plus the mirrored output-side cap: an
-           oversized extracted value must be truncated before it's returned, and that truncated
-           response must itself satisfy current_slots' own validation, proving the round-trip wedge
-           this guards against is actually closed. Uses FakeGenerator, no real LLM.
+           schema's validation together in one file — plus the two mirrored output-side guarantees:
+           an oversized extracted value must be truncated, and a key outside slot_schema must be
+           dropped, both before the response is returned; and in both cases the resulting response
+           must itself satisfy current_slots' own validation, proving the round-trip wedge each one
+           guards against is actually closed. Uses FakeGenerator, no real LLM.
 Layer:     test
 May import:   pytest, pydantic, app.services.action_service, app.schemas.actions,
               tests.fakes.fake_generator
@@ -184,6 +185,52 @@ async def test_truncated_extraction_response_round_trips_as_valid_current_slots(
     )
 
 
+async def test_extract_slots_filters_out_keys_not_in_slot_schema() -> None:
+    """A key the model invents outside slot_schema is the same round-trip hazard as an oversized
+    value: merged into the response, persisted by the caller as this draft's current_slots, and —
+    once enough stray keys accumulate — rejected by that field's own max_length=20 item cap on a
+    later turn, permanently wedging the draft the same way. The service must filter these out."""
+    hallucinated = {f"unexpected_field_{i}": "щось зайве" for i in range(25)}
+    scripted = {
+        "slots": {"address": "вул. Соборна, 1", **hallucinated},
+        "wants_cancel": False,
+        "is_unrelated": False,
+    }
+    generator = FakeGenerator(result=(json.dumps(scripted), 0))
+    service = ActionService(generator)
+    request = SlotExtractionRequest(
+        message="Адреса вул. Соборна, 1", slot_schema=_SCHEMA, current_slots={}
+    )
+
+    result = await service.extract_slots(request)
+
+    assert result.slots == {"address": "вул. Соборна, 1"}
+
+
+async def test_hallucinated_key_response_round_trips_as_valid_current_slots() -> None:
+    """The actual proof the wedge is closed: unfiltered, these 25 hallucinated keys would produce a
+    response that itself breaches current_slots' own max_length=20 cap on the very next turn (the
+    exact scenario code review reproduced). Filtered, the response stays within slot_schema's
+    declared fields and round-trips cleanly against that same schema."""
+    hallucinated = {f"unexpected_field_{i}": "щось зайве" for i in range(25)}
+    scripted = {
+        "slots": {"address": "вул. Соборна, 1", **hallucinated},
+        "wants_cancel": False,
+        "is_unrelated": False,
+    }
+    generator = FakeGenerator(result=(json.dumps(scripted), 0))
+    service = ActionService(generator)
+    request = SlotExtractionRequest(
+        message="Адреса вул. Соборна, 1", slot_schema=_SCHEMA, current_slots={}
+    )
+    result = await service.extract_slots(request)
+
+    # Must not raise ValidationError — this is the exact request shape the caller sends next turn.
+    SlotExtractionRequest(
+        message="наступне повідомлення", slot_schema=_SCHEMA, current_slots=result.slots
+    )
+
+
 def test_current_slots_over_max_keys_is_rejected() -> None:
     """current_slots accumulates across many conversation turns and is serialized directly into
     the LLM prompt — an unbounded key count is a real path to runaway prompt size."""
@@ -195,7 +242,9 @@ def test_current_slots_over_max_keys_is_rejected() -> None:
 def test_current_slots_value_over_max_length_is_rejected() -> None:
     with pytest.raises(ValidationError):
         SlotExtractionRequest(
-            message="щось", slot_schema=_SCHEMA, current_slots={"address": "x" * 501}
+            message="щось",
+            slot_schema=_SCHEMA,
+            current_slots={"address": "x" * (MAX_SLOT_VALUE_LENGTH + 1)},
         )
 
 
