@@ -39,6 +39,9 @@ export const config = {
   outageAddressCacheTtlMs: Number(process.env.OUTAGE_ADDRESS_CACHE_TTL_MS || 3 * 24 * 60 * 60 * 1000),
   outageScheduleCacheTtlMs: Number(process.env.OUTAGE_SCHEDULE_CACHE_TTL_MS || 3 * 24 * 60 * 60 * 1000),
   outageRequestTimeoutMs: Number(process.env.OUTAGE_REQUEST_TIMEOUT_MS || 20 * 1000),
+  aerialAlertsBaseUrl: process.env.AERIAL_ALERTS_BASE_URL || "https://ubilling.net.ua/aerialalerts/",
+  aerialAlertsCacheTtlMs: Number(process.env.AERIAL_ALERTS_CACHE_TTL_MS || 60 * 1000),
+  aerialAlertsRequestTimeoutMs: Number(process.env.AERIAL_ALERTS_REQUEST_TIMEOUT_MS || 10 * 1000),
 };
 
 if (config.isProd && (

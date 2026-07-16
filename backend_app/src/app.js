@@ -8,6 +8,7 @@ import swaggerUi from "swagger-ui-express";
 import { openApiSpec } from "./swagger/openapi.js";
 import { config } from "./config/index.js";
 import appealRoutes from "./features/appeal/appeal.routes.js";
+import alertRoutes from "./features/alert/alert.routes.js";
 import assistantRoutes from "./features/assistant/assistant.routes.js";
 import authRoutes from "./features/auth/auth.routes.js";
 import contactRoutes from "./features/contact/contact.routes.js";
@@ -25,6 +26,7 @@ const API_PREFIXES = [
   "/auth",
   "/users",
   "/appeals",
+  "/alerts",
   "/surveys",
   "/contacts",
   "/outages",
@@ -103,6 +105,7 @@ export function createApp() {
   app.use("/auth", authRoutes);
   app.use("/users", userRoutes);
   app.use("/appeals", appealRoutes);
+  app.use("/alerts", alertRoutes);
   app.use("/surveys", surveyRoutes);
   app.use("/contacts", contactRoutes);
   app.use("/outages", outageRoutes);
