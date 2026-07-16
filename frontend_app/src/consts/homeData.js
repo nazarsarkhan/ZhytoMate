@@ -1,17 +1,6 @@
 // Weather used to be a hardcoded placeholder card here too - it's now a real widget
 // (components/widgets/SinoptikWeatherWidget.jsx) rendered separately in Assistant/index.jsx.
 // The electricity card is likewise real now - a live OutageStatusCard driven by the user's queue.
-// Only the air-raid alert stays as a placeholder, deliberately not built out yet.
-export const statusCards = [
-  {
-    label: "Повітряна тривога",
-    icon: "security",
-    title: "Тривоги немає",
-    text: "Безпечно",
-    tone: "text-green-600",
-  },
-];
-
 export const chatSuggestions = [
   "Де ЦНАП?",
   "Створити звернення",
