@@ -11,25 +11,25 @@ import {
   findUserById,
 } from "./user.repository.js";
 import { ApiError } from "../../shared/ApiError.js";
-import { verifyAddress } from "../../shared/geocodeClient.js";
+import { resolveAddressSelection, reverseAddress, searchAddresses } from "../../shared/geocodeClient.js";
 import { toPublicUser } from "./user.model.js";
 import { UPLOAD_DIR } from "./user.upload.js";
 
-// Runs the raw address through Nominatim and returns the object to persist: the address is always
-// saved (verified flag reflects whether it resolved), with normalized components preferred over the
-// user's input when the geocoder supplies them, plus coordinates and a single-line label.
+// Runs the selected address through Nominatim and returns the normalized object to persist. The
+// caller rejects it when Nominatim cannot confirm a real location.
 export async function buildVerifiedAddress(address) {
-  const verification = await verifyAddress(address);
+  const verification = await resolveAddressSelection(address);
   const normalized =
     verification.verified && verification.normalized
       ? verification.normalized
       : {};
 
   return {
-    street: normalized.street || address.street || "",
-    building: normalized.building || address.building || "",
-    district: normalized.district || address.district || "",
-    city: normalized.city || address.city || "",
+    street: normalized.street || "",
+    building: normalized.building || "",
+    neighborhood: normalized.neighborhood || "",
+    district: normalized.district || "",
+    city: normalized.city || "",
     verified: verification.verified,
     lat: verification.lat ?? null,
     lon: verification.lon ?? null,
@@ -89,6 +89,10 @@ export async function updateUserName({ id, firstName, lastName, phone }) {
 
 export async function updateUserAddress({ id, address }) {
   const verifiedAddress = await buildVerifiedAddress(address);
+  if (!verifiedAddress.verified || verifiedAddress.lat === null || verifiedAddress.lon === null) {
+    throw ApiError.badRequest("Choose a valid address from the suggestions");
+  }
+
   const user = await findUserByIdAndUpdateAddress({
     id,
     address: verifiedAddress,
@@ -99,6 +103,14 @@ export async function updateUserAddress({ id, address }) {
   }
 
   return toPublicUser(user);
+}
+
+export function searchUserAddresses(query) {
+  return searchAddresses(query);
+}
+
+export function reverseUserAddress(coordinates) {
+  return reverseAddress(coordinates);
 }
 
 export async function updateUserPreferences({ id, preferences }) {
@@ -154,6 +166,7 @@ export default {
   createUserProfile,
   updateUserName,
   updateUserAddress,
+  searchUserAddresses,
   updateUserPreferences,
   previewUserAddress,
   updateUserAvatarFromUpload,

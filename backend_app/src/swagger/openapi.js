@@ -629,11 +629,10 @@ export const openApiSpec = {
             "application/json": {
               schema: {
                 type: "object",
+                required: ["query"],
                 properties: {
-                  street: { type: "string", example: "вул. Михайлівська" },
-                  building: { type: "string", example: "6" },
-                  district: { type: "string", example: "" },
-                  city: { type: "string", example: "Житомир" },
+                  query: { type: "string", example: "14, к.1.2,3, вулиця Вільський Шлях, Житомир" },
+                  suggestionId: { type: "string", example: "way:1222200052" },
                 },
               },
             },
@@ -658,11 +657,10 @@ export const openApiSpec = {
             "application/json": {
               schema: {
                 type: "object",
+                required: ["query"],
                 properties: {
-                  street: { type: "string" },
-                  building: { type: "string" },
-                  district: { type: "string" },
-                  city: { type: "string" },
+                  query: { type: "string" },
+                  suggestionId: { type: "string" },
                 },
               },
             },

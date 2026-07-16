@@ -1,17 +1,12 @@
 import { getUserById } from "../user/user.service.js";
-import {
-  QUEUE_COUNT,
-  SUBQUEUE_COUNT,
-  buildDaySlots,
-  hourStatus,
-} from "./outage.data.js";
+import { config } from "../../config/index.js";
+import { findSchedule, getAddressCache, touchAddressCache } from "./outage.cache.js";
+import { refreshAddress } from "./outage.sync.js";
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-// Current wall-clock in Kyiv regardless of the server's own timezone (Docker runs UTC), so the
-// "now" status and countdown line up with what the resident actually sees on the wall.
 function kyivNow() {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", {
@@ -34,114 +29,109 @@ function kyivNow() {
   };
 }
 
-function addDays(dateStr, days) {
-  // Anchor at noon UTC so a ±1 day shift never lands on a DST boundary and flips the date.
-  const date = new Date(`${dateStr}T12:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
+function buildNow(slots, hour, minute) {
+  if (!slots?.length) return null;
+  const slotIndex = Math.min(slots.length - 1, Math.floor((hour * 60 + minute) / 30));
+  const current = slots[slotIndex];
+  let changeIndex = slotIndex + 1;
 
-// Address -> queue is genuinely ambiguous and Житомиробленерго exposes no mapping API, so we
-// resolve it deterministically from the street+building: the same address always yields the same
-// черга/підчерга, spread evenly across the six queues. Empty street => no queue (needs address).
-function resolveQueueFromAddress(address) {
-  const street = (address?.street || "").trim();
-  if (!street) return null;
+  while (changeIndex < slots.length && slots[changeIndex].status === current.status) changeIndex += 1;
 
-  const key = `${street}|${(address.building || "").trim()}`.toLowerCase();
-  let hash = 5381;
-  for (let i = 0; i < key.length; i += 1) {
-    hash = ((hash << 5) + hash + key.charCodeAt(i)) >>> 0;
-  }
+  const next = slots[changeIndex] || current;
+  const nextChangeInMinutes = Math.max(1, changeIndex * 30 - (hour * 60 + minute));
 
   return {
-    queueNumber: (hash % QUEUE_COUNT) + 1,
-    subqueue: (Math.floor(hash / QUEUE_COUNT) % SUBQUEUE_COUNT) + 1,
-  };
-}
-
-// Current status plus how long until it next changes. Scans forward hour-by-hour (rolling into the
-// next day) so a block that straddles midnight still reports a correct countdown.
-function computeNow(queueNumber, subqueue, hour, minute) {
-  const current = hourStatus(hour, queueNumber, subqueue, 0);
-
-  let steps = 1;
-  while (steps <= 48) {
-    const absoluteHour = hour + steps;
-    const status = hourStatus(
-      absoluteHour % 24,
-      queueNumber,
-      subqueue,
-      Math.floor(absoluteHour / 24),
-    );
-    if (status !== current) break;
-    steps += 1;
-  }
-
-  const changeHour = hour + steps;
-  const nextChangeInMinutes = changeHour * 60 - (hour * 60 + minute);
-
-  return {
-    status: current,
-    nextStatus: hourStatus(
-      changeHour % 24,
-      queueNumber,
-      subqueue,
-      Math.floor(changeHour / 24),
-    ),
+    status: current.status,
+    nextStatus: next.status,
     nextChangeInMinutes,
-    until: `${String(changeHour % 24).padStart(2, "0")}:00`,
+    until: next === current ? "24:00" : next.from,
   };
 }
 
-function buildScheduleForQueue({ queueNumber, subqueue, resolvedFrom, addressLabel }) {
-  const { hour, minute, dateStr } = kyivNow();
-
+function buildSchedule({ address, cache, source, now, stale = false }) {
   return {
-    queue: `${queueNumber}.${subqueue}`,
-    queueNumber,
-    subqueue,
-    resolvedFrom,
-    addressLabel,
-    updatedAt: new Date().toISOString(),
-    now: computeNow(queueNumber, subqueue, hour, minute),
-    days: [
-      { date: dateStr, label: "today", slots: buildDaySlots(queueNumber, subqueue, 0) },
-      { date: addDays(dateStr, 1), label: "tomorrow", slots: buildDaySlots(queueNumber, subqueue, 1) },
-    ],
+    queue: `${source.queueNumber}.${source.subqueue}`,
+    queueNumber: source.queueNumber,
+    subqueue: source.subqueue,
+    resolvedFrom: "address",
+    addressLabel: address.formatted || [address.street, address.building].filter(Boolean).join(", "),
+    updatedAt: source.fetchedAt?.toISOString?.() || new Date(source.fetchedAt).toISOString(),
+    sourceUpdatedAt: source.sourceUpdatedAt || "",
+    source: "ztoe",
+    stale,
+    now: buildNow(source.slots, now.hour, now.minute),
+    days: [{ date: source.date, label: source.date === now.dateStr ? "today" : "source", slots: source.slots }],
+    cacheExpiresAt: cache?.expiresAt || null,
   };
+}
+
+async function loadCurrentSchedule({ address, queueNumber, subqueue }) {
+  const now = kyivNow();
+  const schedule = await findSchedule({ queueNumber, subqueue, date: now.dateStr });
+  return { now, schedule };
 }
 
 export async function getOutageSchedule({ userId, queueOverride, subqueueOverride }) {
-  // An explicit ?queue override lets the resident browse any queue (e.g. a relative's address)
-  // without touching their saved profile.
+  const now = kyivNow();
+
   if (queueOverride !== null && queueOverride !== undefined) {
+    const queueNumber = clamp(queueOverride, 1, 6);
+    const subqueue = clamp(subqueueOverride || 1, 1, 2);
+    const source = await findSchedule({ queueNumber, subqueue, date: now.dateStr });
+    if (!source) return { needsAddress: false, unavailable: true, schedule: null };
     return {
       needsAddress: false,
-      schedule: buildScheduleForQueue({
-        queueNumber: clamp(queueOverride, 1, QUEUE_COUNT),
-        subqueue: clamp(subqueueOverride || 1, 1, SUBQUEUE_COUNT),
-        resolvedFrom: "query",
-        addressLabel: "",
-      }),
+      unavailable: false,
+      schedule: buildSchedule({ address: {}, cache: null, source, now }),
     };
   }
 
   const user = await getUserById(userId);
-  const resolved = resolveQueueFromAddress(user?.address);
-  if (!resolved) {
-    return { needsAddress: true, schedule: null };
+  const address = user?.address;
+  if (!address?.verified || !address.street || !address.building) {
+    return { needsAddress: true, unavailable: false, schedule: null };
+  }
+
+  const snapshot = await touchAddressCache(address);
+  let cache = await getAddressCache(snapshot.addressKey);
+  let source = cache?.queueNumber && cache?.subqueue
+    ? (await loadCurrentSchedule({ address, queueNumber: cache.queueNumber, subqueue: cache.subqueue })).schedule
+    : null;
+  let stale = false;
+
+  const refreshDue = !cache?.queueNumber
+    || !cache?.nextRefreshAt
+    || new Date(cache.nextRefreshAt) <= new Date()
+    || !source;
+
+  if (refreshDue) {
+    try {
+      await refreshAddress(address);
+      cache = await getAddressCache(snapshot.addressKey);
+      source = cache?.queueNumber && cache?.subqueue
+        ? (await loadCurrentSchedule({ address, queueNumber: cache.queueNumber, subqueue: cache.subqueue })).schedule
+        : null;
+    } catch (error) {
+      stale = Boolean(source);
+      console.warn("[outage] live refresh failed:", error.message);
+    }
+  }
+
+  if (!source) {
+    return {
+      needsAddress: false,
+      unavailable: true,
+      reason: "ztoe_unavailable",
+      schedule: null,
+    };
   }
 
   return {
     needsAddress: false,
-    schedule: buildScheduleForQueue({
-      queueNumber: resolved.queueNumber,
-      subqueue: resolved.subqueue,
-      resolvedFrom: "address",
-      addressLabel: [user.address.street, user.address.building].filter(Boolean).join(", "),
-    }),
+    unavailable: false,
+    schedule: buildSchedule({ address, cache, source, now, stale }),
   };
 }
 
 export default { getOutageSchedule };
+

@@ -2,6 +2,8 @@ import { ApiError } from "../../shared/ApiError.js";
 import {
   getPublicUserById,
   previewUserAddress,
+  reverseUserAddress,
+  searchUserAddresses,
   updateUserAddress,
   updateUserAvatarFromUpload,
   updateUserName,
@@ -56,6 +58,37 @@ export async function updateCurrentUserAddress(req, res, next) {
   }
 }
 
+export async function searchCurrentUserAddresses(req, res, next) {
+  try {
+    const suggestions = await searchUserAddresses(req.validatedQuery.q);
+    return res.json({ suggestions });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function reverseCurrentUserAddress(req, res, next) {
+  try {
+    const address = await reverseUserAddress(req.validatedQuery);
+    return res.json({ address });
+  } catch (err) {
+    return next(err);
+  }
+}
+
+export async function updateCurrentUserPreferences(req, res, next) {
+  try {
+    const user = await updateUserPreferences({
+      id: req.user.id,
+      preferences: req.body,
+    });
+
+    return res.json({ user });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 // Verify/normalize an address without saving it (for the profile's "check address" UX).
 export async function previewCurrentUserAddress(req, res, next) {
   try {
@@ -89,6 +122,8 @@ export default {
   getUserById,
   updateCurrentUserName,
   updateCurrentUserAddress,
+  searchCurrentUserAddresses,
+  reverseCurrentUserAddress,
   updateCurrentUserPreferences,
   previewCurrentUserAddress,
   uploadCurrentUserAvatar,

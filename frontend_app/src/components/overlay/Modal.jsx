@@ -1,4 +1,4 @@
-export default function Modal({ open, title, children, footer, onClose, sheet = false }) {
+export default function Modal({ open, title, children, footer, onClose, sheet = false, tall = false }) {
   if (!open) return null;
 
   return (
@@ -6,7 +6,7 @@ export default function Modal({ open, title, children, footer, onClose, sheet = 
       <button aria-label="Закрити" className="absolute inset-0 bg-black/50 backdrop-blur-sm" type="button" onClick={onClose} />
       <section
         className={`relative z-10 flex w-full max-w-lg flex-col overflow-hidden border border-outline-variant/30 bg-surface-container-lowest shadow-xl ${sheet ? "rounded-t-3xl md:rounded-3xl" : "rounded-3xl"}`}
-        style={{ maxHeight: "calc(100dvh - var(--safe-top) - var(--safe-bottom) - 24px)" }}
+        style={{ maxHeight: tall ? "calc(100dvh - var(--safe-top) - var(--safe-bottom) - 8px)" : "calc(100dvh - var(--safe-top) - var(--safe-bottom) - 24px)" }}
       >
         <header className="flex items-center justify-between border-b border-outline-variant/30 p-4">
           <h2 className="text-lg font-bold text-on-surface md:text-xl">{title}</h2>
