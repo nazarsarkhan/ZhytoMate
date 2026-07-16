@@ -39,6 +39,11 @@ jobs:
     defaults:
       run:
         working-directory: frontend_app
+    env:
+      JWT_ACCESS_SECRET: ci-access-secret
+      JWT_REFRESH_SECRET: ci-refresh-secret
+      INTERNAL_TOKEN: ci-internal-token
+      RATE_LIMIT_PER_MINUTE: 100
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -49,4 +54,24 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium
+      - name: Start backend and ML services for live tests
+        working-directory: .
+        run: docker compose up -d --build mongo postgres ml backend
+      - name: Wait for backend and ML health
+        working-directory: .
+        run: |
+          for attempt in {1..60}; do
+            if curl --fail --silent http://localhost:8000/health/ready >/dev/null \
+              && curl --fail --silent http://localhost:3001/ >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose ps
+          docker compose logs --tail=100 ml backend
+          exit 1
       - run: npm run test:e2e
+      - name: Stop backend and ML services
+        if: always()
+        working-directory: .
+        run: docker compose down -v
