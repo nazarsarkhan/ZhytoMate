@@ -15,9 +15,17 @@ export function upsertNewsByExternalId(fields) {
   );
 }
 
-export function findNews({ category, source, limit }) {
+export function findNews({ category, source, skip = 0, limit }) {
   const filter = { ...(category ? { category } : {}), ...(source ? { source } : {}) };
-  return News.find(filter).sort({ publishedAt: -1 }).limit(limit);
+  return News.find(filter)
+    .sort({ publishedAt: -1, createdAt: -1 })
+    .skip(skip)
+    .limit(limit);
+}
+
+export function countNews({ category, source }) {
+  const filter = { ...(category ? { category } : {}), ...(source ? { source } : {}) };
+  return News.countDocuments(filter);
 }
 
 export function findNewsById(id) {
@@ -47,6 +55,7 @@ export async function findParserNewsById(id) {
 export default {
   upsertNewsByExternalId,
   findNews,
+  countNews,
   findNewsById,
   findParserNews,
   findParserNewsById,

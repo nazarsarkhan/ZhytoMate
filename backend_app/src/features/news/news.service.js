@@ -4,6 +4,7 @@ import {
   findNewsById,
   findParserNews,
   findParserNewsById,
+  countNews,
   upsertNewsByExternalId,
 } from "./news.repository.js";
 import { toPublicNews, toPublicParserNews } from "./news.model.js";
@@ -45,6 +46,26 @@ export async function listNews({ category, source, limit }) {
   return items.map(toPublicNews);
 }
 
+export async function listNewsPage({ category, source, page, limit }) {
+  const skip = (page - 1) * limit;
+  const [items, total] = await Promise.all([
+    findNews({ category, source, skip, limit }),
+    countNews({ category, source }),
+  ]);
+  const news = items.map(toPublicNews);
+
+  return {
+    news,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: total ? Math.ceil(total / limit) : 0,
+      hasMore: skip + news.length < total,
+    },
+  };
+}
+
 export async function getNewsById(id) {
   const news = await findNewsById(id);
   if (news) {
@@ -61,5 +82,6 @@ export async function getNewsById(id) {
 export default {
   ingestNewsItem,
   listNews,
+  listNewsPage,
   getNewsById,
 };
