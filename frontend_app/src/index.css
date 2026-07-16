@@ -84,6 +84,12 @@ input {
   padding-bottom: var(--safe-bottom);
 }
 
+@media (min-width: 1024px) {
+  .desktop-side-nav {
+    left: max(16px, calc((100vw - 1180px) / 2));
+  }
+}
+
 @media (min-width: 768px) {
   .phone-shell {
     max-width: 1180px;

@@ -41,7 +41,7 @@ const newsSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-newsSchema.index({ publishedAt: -1 });
+newsSchema.index({ publishedAt: -1, createdAt: -1 });
 
 export const News = mongoose.model("News", newsSchema);
 

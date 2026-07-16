@@ -9,7 +9,7 @@ export default function SideNav() {
   const visibleItems = currentUser.data?.role === "admin" ? [...navItems, adminNavItem] : navItems;
 
   return (
-    <aside className="absolute inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-white/10 bg-primary-container px-4 pb-6 pt-6 text-on-primary lg:flex">
+    <aside className="desktop-side-nav fixed top-4 z-40 hidden h-[calc(100dvh-32px)] w-60 flex-col overflow-hidden rounded-l-[28px] border-r border-white/10 bg-primary-container px-4 pb-6 pt-6 text-on-primary lg:flex">
       <div className="mb-8 flex items-center gap-3 px-2">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-primary">
           <Icon name="location_city" filled className="text-[24px]" />
@@ -19,7 +19,7 @@ export default function SideNav() {
           <span className="block truncate text-xs text-white/50">Портал міських сервісів</span>
         </span>
       </div>
-      <nav className="flex flex-1 flex-col gap-1.5">
+      <nav className="min-h-0 flex-1 overflow-y-auto pr-1 flex flex-col gap-1.5">
         {visibleItems.map(({ key, href, icon, label }) => (
           <NavLink
             key={key}
@@ -37,7 +37,7 @@ export default function SideNav() {
           </NavLink>
         ))}
       </nav>
-      <div className="border-t border-white/10 pt-4">
+      <div className="shrink-0 border-t border-white/10 pt-4">
         <Link className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-white/70 transition hover:bg-white/5 hover:text-white" to="/profile">
           <Icon name="settings" className="text-[22px]" /> Налаштування
         </Link>
