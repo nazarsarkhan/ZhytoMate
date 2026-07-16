@@ -43,6 +43,7 @@ jobs:
       JWT_ACCESS_SECRET: ci-access-secret
       JWT_REFRESH_SECRET: ci-refresh-secret
       INTERNAL_TOKEN: ci-internal-token
+      OPENAI_API_KEY: ci-openai-placeholder
       RATE_LIMIT_PER_MINUTE: 100
     steps:
       - uses: actions/checkout@v4
