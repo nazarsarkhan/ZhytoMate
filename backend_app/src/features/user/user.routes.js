@@ -1,19 +1,41 @@
 import { Router } from "express";
-import { validate } from "../../shared/validate.js";
+import { validate, validateQuery } from "../../shared/validate.js";
 import { authenticate } from "../auth/auth.middleware.js";
 import {
   getCurrentUser,
   getUserById,
   previewCurrentUserAddress,
+  reverseCurrentUserAddress,
+  searchCurrentUserAddresses,
   updateCurrentUserAddress,
   updateCurrentUserName,
   updateCurrentUserPreferences,
   uploadCurrentUserAvatar,
 } from "./user.controller.js";
-import { updateAddressSchema, updateNameSchema, updatePreferencesSchema } from "./user.schema.js";
+import {
+  addressSuggestionsQuerySchema,
+  addressReverseQuerySchema,
+  updateAddressSchema,
+  updateNameSchema,
+  updatePreferencesSchema,
+} from "./user.schema.js";
 import { uploadAvatarPhoto } from "./user.upload.js";
 
 const router = Router();
+
+router.get(
+  "/me/address/suggestions",
+  authenticate,
+  validateQuery(addressSuggestionsQuerySchema),
+  searchCurrentUserAddresses,
+);
+
+router.get(
+  "/me/address/reverse",
+  authenticate,
+  validateQuery(addressReverseQuerySchema),
+  reverseCurrentUserAddress,
+);
 
 router.get("/me", authenticate, getCurrentUser);
 router.patch(

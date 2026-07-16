@@ -46,6 +46,10 @@ export default function OutageStatusCard() {
     );
   }
 
+  if (data?.unavailable || !data?.schedule?.now) {
+    return <CardFrame to="/services/outages" label={label} icon="power_off" tone="text-on-surface-variant" title="-" subtitle="Графік недоступний" />;
+  }
+
   const { schedule } = data;
   const meta = OUTAGE_STATUS_META[schedule.now.status] || OUTAGE_STATUS_META.on;
 

@@ -33,6 +33,12 @@ export const config = {
   nominatimUserAgent:
     process.env.NOMINATIM_USER_AGENT || "Zhytomate/1.0 (city services app)",
   addressDefaultCity: process.env.ADDRESS_DEFAULT_CITY || "Житомир",
+  ztoeBaseUrl:
+    process.env.ZTOE_BASE_URL || "https://www.ztoe.com.ua/unhooking-search.php",
+  outageSyncIntervalMs: Number(process.env.OUTAGE_SYNC_INTERVAL_MS || 10 * 60 * 1000),
+  outageAddressCacheTtlMs: Number(process.env.OUTAGE_ADDRESS_CACHE_TTL_MS || 3 * 24 * 60 * 60 * 1000),
+  outageScheduleCacheTtlMs: Number(process.env.OUTAGE_SCHEDULE_CACHE_TTL_MS || 3 * 24 * 60 * 60 * 1000),
+  outageRequestTimeoutMs: Number(process.env.OUTAGE_REQUEST_TIMEOUT_MS || 20 * 1000),
 };
 
 if (config.isProd && (

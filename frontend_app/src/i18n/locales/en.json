@@ -264,7 +264,6 @@
     "needsAddressTitle": "No address set",
     "needsAddressHint": "Add your address in the profile and we'll detect your queue and show the outage schedule.",
     "needsAddressCta": "Add address",
-    "estimateNote": "Approximate schedule for the prototype. Exact data —",
-    "openSource": "on the Zhytomyroblenergo site"
+    "sourceNote": "Data received from the Zhytomyroblenergo website"
   }
 }

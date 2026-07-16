@@ -6,6 +6,8 @@ import BottomNav from "../../components/navigation/BottomNav.jsx";
 import Modal from "../../components/overlay/Modal.jsx";
 import Toast from "../../components/ui/Toast.jsx";
 import Icon from "../../components/ui/Icon.jsx";
+import AddressAutocomplete, { formatAddress } from "../../components/address/AddressAutocomplete.jsx";
+import AddressMapPicker from "../../components/address/AddressMapPicker.jsx";
 import { useAuth } from "../../hooks/useAuth.jsx";
 import { useCurrentUser } from "../../hooks/useCurrentUser.js";
 import {
@@ -62,14 +64,18 @@ export default function ProfilePage() {
   const [toast, setToast] = useState("");
 
   const [nameForm, setNameForm] = useState({ firstName: "", lastName: "" });
-  const [addressForm, setAddressForm] = useState({ street: "", building: "", district: "", city: "" });
+  const [addressForm, setAddressForm] = useState({ street: "", building: "", neighborhood: "", district: "", city: "" });
+  const [addressQuery, setAddressQuery] = useState("");
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmNewPassword: "" });
   const [passwordError, setPasswordError] = useState("");
 
   const user = currentUser.data;
 
   useEffect(() => {
-    if (user) setAddressForm(user.address);
+    if (user) {
+      setAddressForm(user.address);
+      setAddressQuery(formatAddress(user.address));
+    }
   }, [user]);
 
   const showToast = (message) => {
@@ -126,11 +132,48 @@ export default function ProfilePage() {
     }
   };
 
+  const openAddressModal = () => {
+    setAddressForm(user.address);
+    setAddressQuery(formatAddress(user.address));
+    setAddressOpen(true);
+  };
+
+  const handleAddressSelect = (suggestion) => {
+    if (!suggestion) {
+      setAddressForm((current) => ({
+        ...current,
+        verified: false,
+        lat: null,
+        lon: null,
+        formatted: "",
+      }));
+      return;
+    }
+
+    setAddressQuery(suggestion.formatted || formatAddress(suggestion));
+    setAddressForm(suggestion);
+  };
+
+  const addressIsSelected = Boolean(
+    addressForm.verified &&
+      addressForm.formatted &&
+      Number.isFinite(addressForm.lat) &&
+      Number.isFinite(addressForm.lon),
+  );
+
   const saveAddress = async () => {
+    if (!addressIsSelected) {
+      showToast("Оберіть адресу зі списку");
+      return;
+    }
+
     try {
       // The backend verifies/normalizes the address via Nominatim and returns the updated user;
       // reflect whether it resolved to a real place in the toast.
-      const result = await updateAddress.mutateAsync(addressForm);
+      const result = await updateAddress.mutateAsync({
+        query: addressQuery.trim(),
+        suggestionId: addressForm.id || "",
+      });
       setAddressOpen(false);
       showToast(
         result?.user?.address?.verified
@@ -218,7 +261,7 @@ export default function ProfilePage() {
           </section>
           <section>
             <h3 className="mb-3 px-1 text-xs font-bold uppercase tracking-wider text-on-surface-variant">Адреса</h3>
-            <button className="flex w-full items-start justify-between rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 text-left shadow-soft active:scale-[0.99]" type="button" onClick={() => setAddressOpen(true)}>
+            <button className="flex w-full items-start justify-between rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-4 text-left shadow-soft active:scale-[0.99]" type="button" onClick={openAddressModal}>
               <span className="flex items-start gap-3">
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-fixed/40 text-on-primary-fixed"><Icon name="home" /></span>
                 <span>
@@ -288,18 +331,32 @@ export default function ProfilePage() {
 
       <Modal
         open={addressOpen}
+        tall
         title="Редагувати адресу"
         onClose={() => setAddressOpen(false)}
-        footer={<button className="h-12 w-full rounded-full bg-secondary-container text-sm font-bold text-on-secondary-container disabled:opacity-50" disabled={updateAddress.isPending} type="button" onClick={saveAddress}>Зберегти адресу</button>}
+        footer={<button className="h-12 w-full rounded-full bg-secondary-container text-sm font-bold text-on-secondary-container disabled:cursor-not-allowed disabled:opacity-50" disabled={updateAddress.isPending || !addressIsSelected} type="button" onClick={saveAddress}>Зберегти адресу</button>}
       >
         <div className="space-y-4">
+          <AddressAutocomplete
+            value={addressQuery}
+            selected={addressIsSelected}
+            onChange={setAddressQuery}
+            onSelect={handleAddressSelect}
+          />
+          <AddressMapPicker address={addressForm} onSelect={handleAddressSelect} />
+          {addressIsSelected ? (
+            <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+              <div className="flex items-center gap-2 font-bold"><Icon name="verified" className="text-base" /> Адресу обрано з OpenStreetMap</div>
+              <p className="mt-1 leading-5">{formatAddress(addressForm)}</p>
+            </div>
+          ) : null}
           {[
             ["street", "Вулиця"],
             ["building", "Будинок / квартира"],
             ["district", "Район"],
             ["city", "Місто"],
           ].map(([key, label]) => (
-            <label key={key} className="block">
+            <label key={key} className="hidden">
               <span className="mb-1 ml-1 block text-xs text-on-surface-variant">{label}</span>
               <input className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-4 outline-none focus:border-on-tertiary-fixed-variant" value={addressForm[key]} onChange={(event) => setAddressForm((current) => ({ ...current, [key]: event.target.value }))} />
             </label>

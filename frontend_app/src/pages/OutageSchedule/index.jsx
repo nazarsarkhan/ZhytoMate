@@ -120,6 +120,14 @@ function NeedsAddress() {
   );
 }
 
+function Unavailable() {
+  return (
+    <p className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 text-center text-sm text-on-surface-variant">
+      Дані графіка зараз недоступні. Спробуйте оновити сторінку трохи пізніше.
+    </p>
+  );
+}
+
 export default function OutageSchedulePage() {
   const { data, isLoading, isError } = useOutageSchedule();
 
@@ -133,6 +141,8 @@ export default function OutageSchedulePage() {
           <p className="rounded-2xl border border-error-container bg-error-container/20 p-6 text-center text-sm text-error">Графік недоступний</p>
         ) : data?.needsAddress ? (
           <NeedsAddress />
+        ) : data?.unavailable ? (
+          <Unavailable />
         ) : (
           <>
             <CurrentStatus schedule={data.schedule} />
@@ -147,8 +157,9 @@ export default function OutageSchedulePage() {
               </section>
             ))}
             <p className="px-2 text-center text-xs leading-5 text-on-surface-variant">
-              Орієнтовний графік для прототипу. Точні дані —{" "}
-              <a href={ZTOE_URL} target="_blank" rel="noreferrer" className="font-semibold text-on-primary-container underline">на сайті Житомиробленерго</a>
+              Дані отримано з{" "}
+              <a href={ZTOE_URL} target="_blank" rel="noreferrer" className="font-semibold text-on-primary-container underline">сайту Житомиробленерго</a>
+              {data.schedule.stale ? " · показано останні доступні дані" : ""}
             </p>
           </>
         )}

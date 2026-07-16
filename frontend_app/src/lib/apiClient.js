@@ -78,7 +78,7 @@ function forceLogout() {
   }
 }
 
-export async function apiFetch(path, { method = "GET", body, isRetry = false } = {}) {
+export async function apiFetch(path, { method = "GET", body, signal, isRetry = false } = {}) {
   const accessToken = getAccessToken();
   const response = await fetch(`${API_BASE}${path}`, {
     method,
@@ -87,11 +87,12 @@ export async function apiFetch(path, { method = "GET", body, isRetry = false } =
       ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal,
   });
 
   if (response.status === 401 && !isRetry && !AUTH_PATHS_WITHOUT_RETRY.has(path)) {
     const refreshed = await refreshAccessToken();
-    if (refreshed) return apiFetch(path, { method, body, isRetry: true });
+    if (refreshed) return apiFetch(path, { method, body, signal, isRetry: true });
     forceLogout();
     throw new ApiError(401, "Session expired");
   }

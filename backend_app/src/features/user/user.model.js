@@ -4,6 +4,7 @@ const addressSchema = new mongoose.Schema(
   {
     street: { type: String, trim: true, default: "" },
     building: { type: String, trim: true, default: "" },
+    neighborhood: { type: String, trim: true, default: "" },
     district: { type: String, trim: true, default: "" },
     city: { type: String, trim: true, default: "" },
     // Set by the Nominatim geocoder on save: whether the address resolved to a real place, its
@@ -55,6 +56,7 @@ export function toPublicUser(user) {
     address: {
       street: user.address?.street || "",
       building: user.address?.building || "",
+      neighborhood: user.address?.neighborhood || "",
       district: user.address?.district || "",
       city: user.address?.city || "",
       verified: user.address?.verified || false,
