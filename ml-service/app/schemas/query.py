@@ -25,6 +25,14 @@ class SourceUsed(BaseModel):
     doc_type: str
     district: str | None
     similarity: float
+    category: str | None = None
+
+
+class AppLink(BaseModel):
+    capability: str
+    label: str
+    route: str
+    reason: str
 
 
 class QueryResponse(BaseModel):
@@ -36,3 +44,4 @@ class QueryResponse(BaseModel):
     grounded: bool = False
     verified: bool = False
     answer_status: str = "ungrounded"
+    app_links: list[AppLink] = Field(default_factory=list)

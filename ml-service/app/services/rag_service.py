@@ -14,6 +14,7 @@ May import:   domain/{classifier, districts}, schemas/query, app.protocols (Gene
 Must NOT import:  other services/*, api/*, FastAPI/Starlette, asyncpg directly, openai directly (LLM
               failure classification now lives in pipeline.base._fallback_reason)
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -28,6 +29,9 @@ from app.components.hybrid_retriever import HybridRetriever
 from app.components.rate_limiter import current_window, evaluate, hash_user_id
 from app.components.repository import KnowledgeRepository
 from app.config import Settings
+from app.domain.app_capabilities import match_app_capabilities
+from app.domain.civic_intent import classify_civic_intent
+from app.domain.civic_verification import is_civic_information_query, is_trusted_civic_source
 from app.domain.classifier import QueryRoute, classify_query
 from app.domain.districts import canonicalize_district
 from app.errors import RateLimitedError
@@ -39,6 +43,18 @@ from app.protocols import Generator
 from app.schemas.query import QueryRequest, QueryResponse
 
 logger = structlog.get_logger(__name__)
+
+
+def _unique_sources(sources):
+    """Keep one evidence item per source URL/name while preserving retrieval order."""
+    seen = set()
+    unique = []
+    for source in sources:
+        if source.source in seen:
+            continue
+        seen.add(source.source)
+        unique.append(source)
+    return unique
 
 
 class _AnswerCache:
@@ -94,10 +110,20 @@ class RagService:
         )
         retriever = HybridRetriever(repo, settings.rrf_k)
         self._simple = SimpleRAGPipeline(
-            embedder, retriever, generator, settings.sim_gate, settings.sim_high
+            embedder,
+            retriever,
+            generator,
+            settings.sim_gate,
+            settings.sim_high,
+            classification_cache_ttl_seconds=settings.classification_cache_ttl_seconds,
+            classification_cache_maxsize=settings.classification_cache_maxsize,
         )
         self._agent = AgentRAGPipeline(
-            embedder, retriever, generator, settings.sim_gate, settings.sim_high,
+            embedder,
+            retriever,
+            generator,
+            settings.sim_gate,
+            settings.sim_high,
             settings.agent_max_subqueries,
         )
 
@@ -143,16 +169,35 @@ class RagService:
 
         # 5. Run the selected pipeline — embedding, retrieval, and the shared confidence-gate ->
         #    generate -> extractive-fallback tail all live behind this call.
-        ctx = RagContext(user_query=request.user_query, district_slug=district_slug, route=route)
+        civic_intent = classify_civic_intent(request.user_query)
+        ctx = RagContext(
+            user_query=request.user_query,
+            district_slug=district_slug,
+            route=route,
+            category=civic_intent.category,
+        )
         result = await pipeline.run(ctx)
 
         # 6. Map to the HTTP contract, log (user_id hashed; raw query only at DEBUG).
         grounded = bool(result.debug.get("grounded", False))
-        verified = grounded and not bool(result.debug.get("verification_failed"))
+        civic_query = is_civic_information_query(request.user_query)
+        civic_sources = [
+            source
+            for source in result.sources_used
+            if is_trusted_civic_source(request.user_query, source.source)
+        ]
+        verified = (
+            grounded
+            and not bool(result.debug.get("verification_failed"))
+            and (not civic_query or bool(civic_sources))
+        )
         # Sources are evidence, not metadata about retrieval. Never expose them for an answer
         # that was not both grounded and verified; this keeps API clients from presenting
         # unrelated retrieval candidates as supporting sources.
-        sources_used = result.sources_used if verified else []
+        sources_used = (
+            civic_sources if civic_query and verified else (result.sources_used if verified else [])
+        )
+        sources_used = _unique_sources(sources_used)
         response = QueryResponse(
             answer=result.answer,
             sources_used=sources_used,
@@ -169,6 +214,9 @@ class RagService:
                 else "grounded"
                 if result.debug.get("grounded")
                 else "ungrounded"
+            ),
+            app_links=(
+                [] if result.debug.get("blocked") else match_app_capabilities(request.user_query)
             ),
         )
         if result.debug.get("blocked"):
@@ -214,7 +262,10 @@ class RagService:
                 route=route.value,
                 # debug is dict[str, object] (heterogeneous by design); top1_sim is always the
                 # float set by pipeline.base's run_shared_tail/no-info branch.
-                top1_sim=round(cast(float, result.debug.get("top1_sim", 0.0)), 3),
+                top1_sim=round(
+                    cast(float, result.debug.get("top1_sim", 0.0)),
+                    3,
+                ),
                 n_chunks=result.debug.get("n_chunks", 0),
                 llm_ok=result.debug.get("llm_ok"),
                 llm_retries=result.debug.get("llm_retries", 0),

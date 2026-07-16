@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import ActionCard from "../../components/assistant/ActionCard.jsx";
+import AppCapabilityLinks from "../../components/assistant/AppCapabilityLinks.jsx";
+import { getSourceLabel, getSourceUrl, isLinkableSource } from "../../lib/sourceDisplay.js";
 import Shell from "../../components/layout/Shell.jsx";
 import AppHeader from "../../components/layout/AppHeader.jsx";
 import BottomNav from "../../components/navigation/BottomNav.jsx";
 import Icon from "../../components/ui/Icon.jsx";
+import LinkifiedText from "../../components/assistant/LinkifiedText.jsx";
 import SinoptikWeatherWidget from "../../components/widgets/SinoptikWeatherWidget.jsx";
 import OutageStatusCard from "../../components/widgets/OutageStatusCard.jsx";
 import { useAutoScrollToBottom } from "../../hooks/useAutoScrollToBottom.js";
@@ -58,6 +61,7 @@ export default function AssistantPage() {
           answerStatus: result.answerStatus || "ungrounded",
           verified: result.verified === true,
           sourcesUsed: Array.isArray(result.sourcesUsed) ? result.sourcesUsed : [],
+          appLinks: Array.isArray(result.appLinks) ? result.appLinks : [],
         },
       ]);
     } catch {
@@ -146,14 +150,21 @@ export default function AssistantPage() {
                       onCancel={async () => applyActionResult(index, await cancelAction.mutateAsync(conversationId))}
                     />
                   ) : (
-                    <div className={`max-w-[85%] rounded-2xl border p-4 text-sm leading-5 ${isUser ? "rounded-tr-sm border-primary-container/20 bg-primary-container text-on-primary" : message.isError ? "rounded-tl-sm border-error-container bg-error-container/30 text-error" : "rounded-tl-sm border-outline-variant/20 bg-surface-container text-on-surface-variant"}`}>
-                      {message.text}
+                    <div className={`max-w-[85%] break-words rounded-2xl border p-4 text-sm leading-5 ${isUser ? "rounded-tr-sm border-primary-container/20 bg-primary-container text-on-primary" : message.isError ? "rounded-tl-sm border-error-container bg-error-container/30 text-error" : "rounded-tl-sm border-outline-variant/20 bg-surface-container text-on-surface-variant"}`}>
+                      <LinkifiedText>{message.text}</LinkifiedText>
+                      <AppCapabilityLinks links={message.appLinks} />
                       {message.verified && message.sourcesUsed?.length ? (
                         <div className="mt-2 border-t border-outline-variant/30 pt-2 text-xs text-on-surface-variant">
                           <p className="font-semibold">Джерела</p>
                           <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                            {message.sourcesUsed.slice(0, 3).map((source, sourceIndex) => (
-                              <li key={`${source.source}-${sourceIndex}`}>{source.source}</li>
+                            {message.sourcesUsed.slice(0, 5).map((source, sourceIndex) => (
+                              <li key={`${getSourceUrl(source)}-${sourceIndex}`}>
+                                {isLinkableSource(source) ? (
+                                  <a href={getSourceUrl(source)} target="_blank" rel="noreferrer" className="underline decoration-outline hover:text-primary-container">
+                                    {getSourceLabel(source)}
+                                  </a>
+                                ) : getSourceLabel(source)}
+                              </li>
                             ))}
                           </ul>
                         </div>

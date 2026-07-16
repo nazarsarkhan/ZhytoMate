@@ -149,6 +149,18 @@ async def test_query_golden_response_shape_on_an_empty_knowledge_base(client) ->
     assert body["grounded"] is False
     assert body["verified"] is False
     assert body["answer_status"] == "ungrounded"
+    assert body["app_links"] == []
+
+
+async def test_query_returns_a_verified_internal_link_for_an_app_capability(client) -> None:
+    response = await client.post(
+        "/api/v1/chat/query",
+        headers=AUTH,
+        json={"user_query": "Де подивитися маршрути та тролейбуси?", "user_id": "app-link-user"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["app_links"][0]["route"] == "/services/transport"
 
 
 async def test_query_response_includes_action_intent_field(client) -> None:
