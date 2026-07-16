@@ -32,7 +32,8 @@ class FakeRetriever(Retriever):
         self.calls: list[tuple[str, str | None, int]] = []
 
     async def retrieve(
-        self, query_text: str, query_vec: np.ndarray, district: str | None, k: int
+        self, query_text: str, query_vec: np.ndarray, district: str | None, k: int,
+        category: str | None = None,
     ) -> RetrievalOutcome:
         self.calls.append((query_text, district, k))
         outcome = self._outcomes.get(query_text, _EMPTY_OUTCOME)

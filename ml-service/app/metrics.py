@@ -78,6 +78,14 @@ embedding_cache_lookups_total = Counter(
     "zhytomate_embedding_cache_lookups_total", "Query-embedding LRU cache lookups (hit or miss)"
 )
 
+# Safe query-classification cache hits/lookups. Unsafe results are never cached.
+classification_cache_hits_total = Counter(
+    "zhytomate_classification_cache_hits_total", "Safe query-classification cache hits"
+)
+classification_cache_lookups_total = Counter(
+    "zhytomate_classification_cache_lookups_total", "Query-classification cache lookups"
+)
+
 # Hits contributed by each retrieval leg. leg: dense | lexical
 retrieval_leg_hits = Counter(
     "zhytomate_retrieval_leg_hits_total", "Hits contributed by each retrieval leg", ["leg"]

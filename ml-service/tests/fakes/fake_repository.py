@@ -45,12 +45,14 @@ class FakeKnowledgeRepository:
         return self._rate_limit_count
 
     async def retrieve_dense(
-        self, query_vec: np.ndarray, district_slug: str | None, limit: int = 10
+        self, query_vec: np.ndarray, district_slug: str | None, limit: int = 10,
+        category: str | None = None,
     ) -> list[RetrievalResult]:
         return self._dense
 
     async def retrieve_lexical(
-        self, query: str, district_slug: str | None, limit: int = 10
+        self, query: str, district_slug: str | None, limit: int = 10,
+        category: str | None = None,
     ) -> list[RetrievalResult]:
         return self._lexical
 

@@ -1,4 +1,5 @@
 export const serviceCards = [
+  { id: "places", titleKey: "services.cards.places.title", subtitleKey: "services.cards.places.subtitle", icon: "place", tone: "bg-primary-fixed text-primary-container", href: "/places" },
   { id: "contacts", titleKey: "services.cards.contacts.title", subtitleKey: "services.cards.contacts.subtitle", icon: "contacts", tone: "bg-primary-fixed text-primary-container", href: "/services/contacts" },
   { id: "polls", titleKey: "services.cards.polls.title", subtitleKey: "services.cards.polls.subtitle", icon: "poll", tone: "bg-green-100 text-green-700", href: "/services/polls" },
   { id: "appeals", titleKey: "services.cards.appeals.title", subtitleKey: "services.cards.appeals.subtitle", icon: "report", tone: "bg-orange-100 text-orange-700", href: "/services/appeals" },

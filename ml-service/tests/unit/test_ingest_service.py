@@ -65,7 +65,8 @@ async def test_duplicate_content_hash_increments_dedup_skips_and_skips_embedding
 async def test_successful_ingest_increments_ingest_chunks_total_by_the_real_chunk_count() -> None:
     repo = FakeKnowledgeRepository(content_hash_exists=False)
     embedder = FakeEmbedder()
-    service = IngestService(repo, embedder, _settings())
+    settings = _settings()
+    service = IngestService(repo, embedder, settings)
     before = _counter_value(ingest_chunks_total)
 
     response = await service.ingest(_request())
@@ -74,6 +75,7 @@ async def test_successful_ingest_increments_ingest_chunks_total_by_the_real_chun
     assert response.chunks_processed >= 1
     assert _counter_value(ingest_chunks_total) == before + response.chunks_processed
     assert len(repo.upsert_calls) == 1
+    assert settings.knowledge_base_version == 2
 
 
 async def test_news_expiry_is_anchored_to_published_at_not_ingest_time() -> None:

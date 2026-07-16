@@ -148,3 +148,29 @@ def test_strong_match_is_false_for_a_higher_but_still_partial_coverage() -> None
     hit = _hit(1, lexical_coverage=2, lexical_terms_total=4)
     outcome = RetrievalOutcome(dense=[], fused=[hit], lexical=[hit])
     assert outcome.has_strong_lexical_match is False
+
+
+async def test_retrieve_reranks_lexical_leg_for_title_evidence() -> None:
+    irrelevant = RetrievalResult(
+        id=2,
+        text="Мер Дортмунда розповів про міські події.",
+        source="news",
+        doc_type="news",
+        district=None,
+        similarity=0.0,
+    )
+    status = RetrievalResult(
+        id=3,
+        text="Мер (міський голова) Житомира наразі офіційно не обраний.",
+        source="manual-curated",
+        doc_type="instruction",
+        district=None,
+        similarity=0.0,
+    )
+    repo = FakeKnowledgeRepository(dense=[status], lexical=[irrelevant, status])
+    retriever = HybridRetriever(repo, 60)
+
+    outcome = await retriever.retrieve("Хто мер?", _QUERY_VEC, None, k=10)
+
+    assert outcome.lexical_top1_id == 3
+    assert outcome.has_strong_lexical_match is True

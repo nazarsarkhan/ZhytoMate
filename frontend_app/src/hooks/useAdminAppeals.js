@@ -15,7 +15,8 @@ export function useAdminAppeals(filters = {}) {
     queryKey: ["appeals", "admin", qs],
     queryFn: async () => {
       const result = await apiFetch(`/appeals?${qs}`);
-      return result.items;
+      const items = result?.items ?? result?.appeals;
+      return Array.isArray(items) ? items : [];
     },
   });
 }

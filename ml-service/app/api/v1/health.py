@@ -75,12 +75,13 @@ async def _probe_db(pool: Any) -> str:
 
 
 async def _probe_openai(client: Any) -> str:
-    # TODO: client is now OpenAILLMClient, not a raw AsyncOpenAI — it has no models.list().
-    # Reports "error: AttributeError" until OpenAILLMClient exposes a lightweight ping method.
     if client is None:
         return "not_ready"
     try:
-        await asyncio.wait_for(client.models.list(), timeout=_PROBE_TIMEOUT_S)
+        probe = getattr(client, "probe", None)
+        if probe is None or not callable(probe):
+            return "error: unsupported_client"
+        await asyncio.wait_for(probe(), timeout=_PROBE_TIMEOUT_S)
         return "ok"
     except TimeoutError:
         return "timeout"

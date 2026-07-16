@@ -148,7 +148,8 @@
       "transport": { "title": "Транспорт", "subtitle": "Маршрути та розклад" },
       "outages": { "title": "Світло", "subtitle": "Графік відключень" },
       "utilities": { "title": "Комунальні платежі", "subtitle": "Тарифи та оплата" },
-      "healthcare": { "title": "Медицина", "subtitle": "Запис до лікаря" }
+      "healthcare": { "title": "Медицина", "subtitle": "Запис до лікаря" },
+      "places": { "title": "Місця міста", "subtitle": "Кафе, магазини та установи" }
     }
   },
   "transport": {

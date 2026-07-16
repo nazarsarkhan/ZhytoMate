@@ -7,8 +7,8 @@ export function useAdminSurveys() {
   return useQuery({
     queryKey: ["surveys"],
     queryFn: async () => {
-      const { surveys } = await apiFetch("/surveys");
-      return surveys;
+      const payload = await apiFetch("/surveys");
+      return Array.isArray(payload?.surveys) ? payload.surveys : [];
     },
   });
 }

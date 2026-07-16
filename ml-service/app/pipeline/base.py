@@ -52,6 +52,7 @@ from openai import APIError, APITimeoutError
 from pydantic import BaseModel, Field
 
 from app.domain.actions import KNOWN_ACTIONS
+from app.domain.civic_verification import is_civic_information_query, is_no_information_answer
 from app.domain.confidence import ConfidenceBand, confidence_band
 from app.domain.context import CONTEXT_TOKEN_BUDGET, assemble_context
 from app.domain.language import detect_query_language, is_ukrainian, resolve_answer_lang
@@ -60,6 +61,7 @@ from app.domain.prompts import (
     build_detect_and_translate_prompt,
     build_general_prompt,
     build_rag_prompt,
+    build_safety_and_translate_prompt,
     build_safety_check_prompt,
 )
 from app.metrics import (
@@ -196,7 +198,18 @@ async def check_query_safety(
         # Strict identity check, not bool(...): a malformed reply (a stray string "false", a
         # missing key, a non-boolean value) must resolve to unsafe, never be coerced to safe by
         # truthiness (e.g. bool("false") is True — a real footgun given the fail-closed policy).
-        is_safe = parsed.get("safe") is True
+        classifier_safe = parsed.get("safe") is True
+        # The LLM safety classifier is intentionally conservative, but it can occasionally
+        # mistake an ordinary civic noun (for example, "where is the court?") for a sensitive
+        # query. A narrow civic allowlist may recover only when the deterministic OPSEC gate also
+        # confirms there is no reconnaissance/security wording; military-location queries remain
+        # blocked regardless of the LLM result.
+        civic_false_positive = (
+            parsed.get("safe") is False
+            and is_civic_information_query(query)
+            and not contains_opsec_risk_terms(query)
+        )
+        is_safe = classifier_safe or civic_false_positive
         conversational = is_safe and parsed.get("conversational") is True
         raw_action_intent = parsed.get("action_intent")
         action_intent = (
@@ -212,12 +225,63 @@ async def check_query_safety(
     return is_safe, refusal, conversational, action_intent
 
 
+async def check_query_safety_and_translate(
+    generator: Generator, query: str
+) -> tuple[bool, str, bool, str | None, str, str]:
+    """Run safety, language detection, and retrieval translation in one structured LLM call.
+
+    The compatibility fallback to ``detect_and_translate`` is intentional: test doubles and older
+    model responses that only return the safety fields retain the previous behavior. Production
+    models return all fields and save one full network round-trip for RU/EN queries.
+    """
+    refusal_lang = resolve_answer_lang(detect_query_language(query))
+    refusal = _REFUSAL_ANSWER_BY_LANG.get(refusal_lang, _REFUSAL_ANSWER_BY_LANG["uk"])
+    if contains_opsec_risk_terms(query):
+        queries_blocked_total.labels(layer="heuristic").inc()
+        return False, refusal, False, None, refusal_lang, query
+    try:
+        raw, _ = await generator.generate(
+            build_safety_and_translate_prompt(query),
+            temperature=_SAFETY_CHECK_TEMPERATURE,
+            max_tokens=160,
+            timeout_s=_SAFETY_CHECK_TIMEOUT_S,
+            json_mode=True,
+        )
+        parsed = json.loads(raw[raw.find("{") : raw.rfind("}") + 1])
+        classifier_safe = parsed.get("safe") is True
+        civic_false_positive = (
+            parsed.get("safe") is False
+            and is_civic_information_query(query)
+            and not contains_opsec_risk_terms(query)
+        )
+        is_safe = classifier_safe or civic_false_positive
+        conversational = is_safe and parsed.get("conversational") is True
+        raw_action_intent = parsed.get("action_intent")
+        action_intent = (
+            raw_action_intent if is_safe and raw_action_intent in KNOWN_ACTIONS else None
+        )
+        if not is_safe:
+            queries_blocked_total.labels(layer="llm").inc()
+            return False, refusal, False, None, refusal_lang, query
+        raw_lang = parsed.get("lang")
+        answer_lang = resolve_answer_lang(raw_lang if raw_lang in _VALID_LANGS else refusal_lang)
+        translated = parsed.get("uk")
+        if not isinstance(translated, str) or not translated.strip():
+            answer_lang, translated = await detect_and_translate(generator, query)
+        return True, refusal, conversational, action_intent, answer_lang, translated.strip()
+    except Exception as exc:  # noqa: BLE001 — fail closed, matching check_query_safety
+        logger.warning("query_safety_translation_failed", err=type(exc).__name__)
+        queries_blocked_total.labels(layer="llm_error").inc()
+        return False, refusal, False, None, refusal_lang, query
+
+
 class RagContext(BaseModel):
     """Internal input to RAGPipeline.run() — not the HTTP request body (that's schemas.query)."""
 
     user_query: str
     district_slug: str | None
     route: QueryRoute
+    category: str | None = None
 
 
 class RagResult(BaseModel):
@@ -302,6 +366,14 @@ async def run_shared_tail(
 
     if grounded:
         top_results = assemble_context(retrieved, CONTEXT_TOKEN_BUDGET, count_tokens_fn)
+        # A high semantic score is already strong evidence. Do not expose the long tail of
+        # unrelated dense candidates (often similarity=0) as if they supported the answer. Keep
+        # the low-score lexical path intact because short civic anchors such as "ЦНАП" and
+        # numbered routes are intentionally grounded by lexical agreement.
+        if top1_sim >= sim_gate:
+            evidence_floor = max(sim_gate * 0.8, top1_sim * 0.55)
+            relevant_results = [item for item in top_results if item.similarity >= evidence_floor]
+            top_results = relevant_results or top_results[:1]
         context_chunks = [r.text for r in top_results]
         prompt = build_rag_prompt(context_chunks, question, answer_lang)
     else:
@@ -343,12 +415,23 @@ async def run_shared_tail(
         llm_elapsed_s = time.perf_counter() - llm_start
         llm_latency_seconds.observe(llm_elapsed_s)
 
+    # A retrieval hit is not evidence when the generated answer explicitly says that the
+    # requested information is unavailable. This commonly happens for semantically similar but
+    # non-answer pages (e.g. a passport query retrieving generic city-service pages). Do not leak
+    # those candidates as sources or mark the response as verified.
+    answer_no_info = grounded and is_no_information_answer(answer)
+    if answer_no_info:
+        grounded = False
+        top_results = []
+        confidence = 0.0
+
     sources = [
         SourceUsed(
             source=r.source,
             doc_type=r.doc_type,
             district=r.district,
             similarity=round(r.similarity, 4),
+            category=r.category,
         )
         for r in top_results
     ]
@@ -359,6 +442,7 @@ async def run_shared_tail(
             "n_chunks": len(top_results), "llm_ok": llm_ok, "llm_retries": retries,
             "llm_ms": round(llm_elapsed_s * 1000, 1),
             "strong_lexical_match": strong_lexical_match,
+            "answer_no_info": answer_no_info,
         },
     )
 

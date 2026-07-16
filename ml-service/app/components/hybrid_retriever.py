@@ -21,6 +21,7 @@ import numpy as np
 
 from app.components.repository import KnowledgeRepository
 from app.domain.fusion import reciprocal_rank_fusion
+from app.domain.reranking import rerank_results
 from app.metrics import retrieval_leg_hits
 from app.protocols import Retriever
 from app.schemas.retrieval import RetrievalOutcome
@@ -36,13 +37,18 @@ class HybridRetriever(Retriever):
         self._rrf_k = rrf_k
 
     async def retrieve(
-        self, query_text: str, query_vec: np.ndarray, district: str | None, k: int
+        self, query_text: str, query_vec: np.ndarray, district: str | None, k: int,
+        category: str | None = None,
     ) -> RetrievalOutcome:
         dense, lexical = await asyncio.gather(
-            self._repo.retrieve_dense(query_vec, district, limit=k),
-            self._repo.retrieve_lexical(query_text, district, limit=k),
+            self._repo.retrieve_dense(query_vec, district, limit=k, category=category),
+            self._repo.retrieve_lexical(query_text, district, limit=k, category=category),
         )
         retrieval_leg_hits.labels(leg="dense").inc(len(dense))
         retrieval_leg_hits.labels(leg="lexical").inc(len(lexical))
-        fused = reciprocal_rank_fusion(dense, lexical, k=self._rrf_k)
-        return RetrievalOutcome(dense=dense, fused=fused, lexical=lexical)
+        ranked_lexical = rerank_results(query_text, lexical)
+        fused = rerank_results(
+            query_text,
+            reciprocal_rank_fusion(dense, ranked_lexical, k=self._rrf_k),
+        )
+        return RetrievalOutcome(dense=dense, fused=fused, lexical=ranked_lexical)

@@ -9,6 +9,7 @@
     "dev": "node --watch index.js",
     "session": "node scripts/generate-session.js",
     "backfill:news": "node scripts/backfill-news-to-backend.js",
+    "import:places": "node scripts/import-osm-places.js",
     "test": "node --test"
   },
   "dependencies": {

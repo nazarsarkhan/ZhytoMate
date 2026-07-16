@@ -628,12 +628,12 @@ function logParsedItem(item) {
   );
 }
 
-function shouldKeepItem(item, cutoff) {
+export function shouldKeepItem(item, cutoff) {
   if (!item.body || item.body.length < 40) {
     return false;
   }
 
-  if (item.sourceKind === "page") {
+  if (item.sourceKind === "page" || item.sourceKind === "section") {
     return true;
   }
 

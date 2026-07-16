@@ -7,6 +7,36 @@ import { ApiError } from "./ApiError.js";
 const CHAT_TIMEOUT_MS = 20_000;
 const VISION_TIMEOUT_MS = 25_000;
 const ACTION_TIMEOUT_MS = 15_000;
+const APP_ROUTE_ALLOWLIST = new Set([
+  "/services",
+  "/services/contacts",
+  "/services/polls",
+  "/services/appeals",
+  "/services/transport",
+  "/services/outages",
+  "/places",
+  "/news",
+  "/notifications",
+  "/profile",
+  "/chat-history",
+]);
+
+export function sanitizeAppLinks(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const links = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const { capability, label, route, reason } = item;
+    if ([capability, label, route, reason].some((field) => typeof field !== "string")) continue;
+    if (!APP_ROUTE_ALLOWLIST.has(route) || route.startsWith("/admin") || route.includes("\\")) continue;
+    if (seen.has(route)) continue;
+    seen.add(route);
+    links.push({ capability, label, route, reason });
+    if (links.length === 3) break;
+  }
+  return links;
+}
 
 async function callMlService(path, body, timeoutMs) {
   const controller = new AbortController();
@@ -68,6 +98,10 @@ export async function queryAssistant({ userQuery, userId, district }) {
     sourcesUsed: result.sources_used,
     confidence: result.confidence,
     actionIntent: result.action_intent || null,
+    grounded: result.grounded === true,
+    verified: result.verified === true,
+    answerStatus: result.answer_status || "ungrounded",
+    appLinks: sanitizeAppLinks(result.app_links),
   };
 }
 

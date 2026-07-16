@@ -16,6 +16,7 @@ import newsRoutes from "./features/news/news.routes.js";
 import outageRoutes from "./features/outage/outage.routes.js";
 import surveyRoutes from "./features/survey/survey.routes.js";
 import userRoutes from "./features/user/user.routes.js";
+import placesRoutes from "./features/places/places.routes.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 const FRONTEND_DIST_DIR = path.join(__dirname, "../../frontend_app/dist");
@@ -32,13 +33,25 @@ const API_PREFIXES = [
   "/conversations",
   "/docs",
   "/openapi.json",
+  "/places",
 ];
 
 export function createApp() {
   const app = express();
 
+  app.disable("x-powered-by");
+  app.use((_req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("Permissions-Policy", "camera=(), geolocation=(), microphone=()");
+    next();
+  });
   app.use(cors({ origin: config.corsOrigins }));
-  app.use(express.json());
+  // Scraped city-council articles may include a large sanitized HTML body and image metadata.
+  // Keep the limit bounded, but above the parser's 50k RAG text plus display payload so a valid
+  // news item cannot fail with PayloadTooLargeError during a full backfill.
+  app.use(express.json({ limit: "512kb" }));
 
   // Strip a leading "/api" so the built frontend's apiClient.js (hardcoded API_BASE = "/api" for
   // every fetch/apiUpload call) reaches these same bare routes in production. Mirrors
@@ -64,6 +77,7 @@ export function createApp() {
   app.use("/news", newsRoutes);
   app.use("/assistant", assistantRoutes);
   app.use("/conversations", conversationRoutes);
+  app.use("/places", placesRoutes);
   app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
   app.get("/openapi.json", (_req, res) => res.json(openApiSpec));
 

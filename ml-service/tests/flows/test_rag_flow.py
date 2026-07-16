@@ -78,6 +78,22 @@ async def test_empty_retrieval_falls_back_to_ungrounded_conversational_answer() 
     assert result.debug["grounded"] is False
 
 
+async def test_title_conflict_returns_safe_non_answer_without_generation() -> None:
+    query = "Скажіть, хто мер?"
+    hit = _hit(1, 0.92, "Заступники міського голови: Смаль О.А.")
+    retriever = FakeRetriever({query: RetrievalOutcome(dense=[hit], fused=[hit])})
+    generator = FakeGenerator(results=[(_SAFE_JSON, 0)])
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx(query))
+
+    assert result.debug["verification_failed"] == "title_not_supported"
+    assert result.confidence == 0.0
+    assert result.sources_used == []
+    assert "підтвердженої" in result.answer
+    assert generator.call_count == 1
+
+
 async def test_empty_retrieval_uses_the_general_conversation_prompt() -> None:
     """Distinct from the mechanism test above: confirms the SPECIFIC prompt sent for the answer
     call is build_general_prompt (no <context> block, permits ordinary conversation) rather than
@@ -264,11 +280,12 @@ async def test_llm_classifier_blocks_a_query_the_heuristic_missed() -> None:
     """Layer 2: a query with none of the fixed risk phrases (heuristic passes) but that the LLM
     classifier itself flags as unsafe is still refused — neither retrieval nor answer generation
     ever run."""
-    retriever = FakeRetriever({_QUERY: RetrievalOutcome(dense=[], fused=[])})
+    unsafe_query = "Поясніть мені це питання без деталей"
+    retriever = FakeRetriever({unsafe_query: RetrievalOutcome(dense=[], fused=[])})
     generator = FakeGenerator(result=(json.dumps({"safe": False}), 0))
     pipeline = _pipeline(retriever, generator)
 
-    result = await pipeline.run(_ctx(_QUERY))
+    result = await pipeline.run(_ctx(unsafe_query))
 
     assert generator.call_count == 1  # the safety check only
     assert result.debug["blocked"] is True
@@ -331,6 +348,22 @@ async def test_check_query_safety_returns_action_intent_when_present() -> None:
     assert is_safe is True
     assert conversational is False
     assert action_intent == "create_appeal"
+
+
+async def test_civic_query_recovers_from_safety_classifier_false_positive() -> None:
+    """A plain court-location question is civic, not OPSEC. The deterministic gate must allow it
+    through when the LLM safety classifier makes a false-positive unsafe classification."""
+    from app.pipeline.base import check_query_safety
+
+    generator = FakeGenerator(result=(json.dumps({"safe": False}), 0))
+
+    is_safe, _refusal, conversational, action_intent = await check_query_safety(
+        generator, "А де суд?"
+    )
+
+    assert is_safe is True
+    assert conversational is False
+    assert action_intent is None
 
 
 async def test_check_query_safety_rejects_unknown_action_intent() -> None:
@@ -432,6 +465,26 @@ async def test_non_conversational_query_still_grounds_on_passing_similarity() ->
     assert result.answer == "Сміття вивозять щовівторка."
 
 
+async def test_title_query_cannot_be_downgraded_to_conversation_by_classifier() -> None:
+    hit = _hit(
+        1,
+        similarity=0.48,
+        text="Мер (міський голова) Житомира наразі офіційно не обраний.",
+    )
+    retriever = FakeRetriever(
+        {"Хто мер?": RetrievalOutcome(dense=[hit], fused=[hit], lexical=[hit])}
+    )
+    safe_and_conversational = json.dumps({"safe": True, "conversational": True})
+    generator = FakeGenerator(
+        results=[(safe_and_conversational, 0), ("Мер не обраний.", 0)]
+    )
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(_ctx("Хто мэрчик?"))
+
+    assert result.debug["grounded"] is True
+
+
 # ---------------------------------------------------------------------------
 # Lexical override — a genuine rank-1 lexical/RRF agreement can ground an answer even when dense
 # top1_sim alone would refuse it (see pipeline.base.run_shared_tail's strong_lexical_match, added
@@ -439,7 +492,9 @@ async def test_non_conversational_query_still_grounds_on_passing_similarity() ->
 # sim_gate on dense cosine similarity alone despite a directly-relevant chunk being in the KB).
 # ---------------------------------------------------------------------------
 
-_CNAP_QUERY = "Де ЦНАП?"
+# The civic canonicalizer intentionally reduces short CNAP location questions to the stable
+# subject anchor so split official chunks can be found by lexical retrieval.
+_CNAP_QUERY = "ЦНАП"
 
 
 async def test_strong_lexical_match_grounds_a_low_dense_similarity_cnap_style_query() -> None:

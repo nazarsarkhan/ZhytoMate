@@ -73,6 +73,19 @@ async def test_health_ready_returns_503_when_embedder_is_absent(test_app, client
     assert response.json() == {"status": "not_ready"}
 
 
+async def test_health_deps_uses_llm_probe_contract(test_app, client) -> None:
+    class ProbeableLLM:
+        async def probe(self) -> None:
+            return None
+
+    test_app.state.llm_client = ProbeableLLM()
+
+    response = await client.get("/health/deps")
+
+    assert response.status_code == 200
+    assert response.json()["openai"] == "ok"
+
+
 async def test_ingest_golden_response_shape(client) -> None:
     response = await client.post(
         "/api/v1/knowledge/ingest",
@@ -133,6 +146,21 @@ async def test_query_golden_response_shape_on_an_empty_knowledge_base(client) ->
     assert body["sources_used"] == []
     assert body["confidence"] == 0.0
     assert body["route"] == "SIMPLE"
+    assert body["grounded"] is False
+    assert body["verified"] is False
+    assert body["answer_status"] == "ungrounded"
+    assert body["app_links"] == []
+
+
+async def test_query_returns_a_verified_internal_link_for_an_app_capability(client) -> None:
+    response = await client.post(
+        "/api/v1/chat/query",
+        headers=AUTH,
+        json={"user_query": "Де подивитися маршрути та тролейбуси?", "user_id": "app-link-user"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["app_links"][0]["route"] == "/services/transport"
 
 
 async def test_query_response_includes_action_intent_field(client) -> None:

@@ -13,13 +13,14 @@ import {
   useDeleteContact,
   useUpdateContact,
 } from "../../hooks/useContacts.js";
+import { useAdminPlaces, useDeletePlace, useUpdatePlace } from "../../hooks/useAdminPlaces.js";
 
 const AdminDataContext = createContext(null);
 
 // Entities backed by real endpoints (create/update/remove route through mutations, list comes from
 // react-query). The rest (users, announcements, news) stay on the in-memory seed prototype until
 // they get their own backend.
-const LIVE_ENTITIES = new Set(["surveys", "appeals", "contacts"]);
+const LIVE_ENTITIES = new Set(["surveys", "appeals", "contacts", "places"]);
 
 function cloneSeedData() {
   return structuredClone(adminSeedData);
@@ -76,6 +77,7 @@ export function AdminDataProvider({ children }) {
   const surveysQuery = useAdminSurveys();
   const appealsQuery = useAdminAppeals();
   const contactsQuery = useAdminContacts();
+  const placesQuery = useAdminPlaces();
 
   const createSurvey = useCreateSurvey();
   const updateSurvey = useUpdateSurvey();
@@ -84,15 +86,18 @@ export function AdminDataProvider({ children }) {
   const createContact = useCreateContact();
   const updateContact = useUpdateContact();
   const deleteContact = useDeleteContact();
+  const updatePlace = useUpdatePlace();
+  const deletePlace = useDeletePlace();
 
   const data = useMemo(
     () => ({
       ...seedData,
-      surveys: (surveysQuery.data ?? []).map(mapSurveyFromApi),
-      appeals: (appealsQuery.data ?? []).map(mapAppealFromApi),
-      contacts: contactsQuery.data ?? [],
+      surveys: (Array.isArray(surveysQuery.data) ? surveysQuery.data : []).filter(Boolean).map(mapSurveyFromApi),
+      appeals: (Array.isArray(appealsQuery.data) ? appealsQuery.data : []).filter(Boolean).map(mapAppealFromApi),
+      contacts: Array.isArray(contactsQuery.data) ? contactsQuery.data : [],
+      places: Array.isArray(placesQuery.data) ? placesQuery.data : [],
     }),
-    [seedData, surveysQuery.data, appealsQuery.data, contactsQuery.data],
+    [seedData, surveysQuery.data, appealsQuery.data, contactsQuery.data, placesQuery.data],
   );
 
   const createItem = (entity, item) => {
@@ -110,6 +115,7 @@ export function AdminDataProvider({ children }) {
       });
       return item;
     }
+    if (entity === "places") return item;
     // Appeals cannot be created from the admin panel; only citizens file them.
     if (entity === "appeals") return item;
 
@@ -145,6 +151,10 @@ export function AdminDataProvider({ children }) {
       });
       return;
     }
+    if (entity === "places") {
+      updatePlace.mutate({ id, updates: { name: updates.name, address: updates.address, phone: updates.phone, openingHours: updates.openingHours, category: updates.category } });
+      return;
+    }
 
     setSeedData((current) => ({
       ...current,
@@ -161,6 +171,10 @@ export function AdminDataProvider({ children }) {
     }
     if (entity === "contacts") {
       deleteContact.mutate(id);
+      return;
+    }
+    if (entity === "places") {
+      deletePlace.mutate(id);
       return;
     }
     // Appeals aren't deletable from the admin panel.

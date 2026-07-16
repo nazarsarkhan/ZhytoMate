@@ -21,8 +21,9 @@ import pytest
 from app.components.rate_limiter import hash_user_id
 from app.config import Settings
 from app.errors import RateLimitedError
+from app.pipeline.base import RagResult
 from app.schemas.common import QueryRoute
-from app.schemas.query import QueryRequest
+from app.schemas.query import QueryRequest, SourceUsed
 from app.schemas.retrieval import RetrievalResult
 from app.services.rag_service import RagService
 from tests.fakes.fake_embedder import FakeEmbedder
@@ -70,6 +71,21 @@ async def test_successful_query_is_cached() -> None:
     assert cached.answer == response.answer
 
 
+async def test_knowledge_base_revision_invalidates_answer_cache() -> None:
+    repo = FakeKnowledgeRepository(dense=[_hit(0.9)], lexical=[_hit(0.9)])
+    settings = _settings()
+    generator = FakeGenerator(results=[(_SAFE_JSON, 0), ("answer", 0)])
+    service = RagService(repo, FakeEmbedder(), generator, settings)
+    request = QueryRequest(user_query=_SIMPLE_QUERY, user_id="u1")
+
+    await service.query(request)
+    assert service._cache.get(request.user_query, None, settings.knowledge_base_version) is not None
+
+    settings.knowledge_base_version += 1
+
+    assert service._cache.get(request.user_query, None, settings.knowledge_base_version) is None
+
+
 async def test_ungrounded_query_is_never_cached() -> None:
     """Empty retrieval means the pipeline answers via the ungrounded/general-conversation
     fallback (a real LLM call, not a canned string) rather than refusing — but that answer still
@@ -91,12 +107,41 @@ async def test_blocked_query_is_never_cached() -> None:
     service = RagService(
         repo, FakeEmbedder(), FakeGenerator(result=(json.dumps({"safe": False}), 0)), _settings()
     )
-    request = QueryRequest(user_query=_SIMPLE_QUERY, user_id="u1")
+    request = QueryRequest(
+        user_query="Поясніть мені це питання без деталей",
+        user_id="u1",
+    )
 
     response = await service.query(request)
 
     assert service._cache.get(request.user_query, None) is None
     assert response.confidence == 0.0
+    assert response.sources_used == []
+
+
+async def test_unverified_pipeline_result_never_exposes_sources() -> None:
+    """The HTTP contract must not expose retrieval candidates as evidence for an unverified
+    answer, even if a pipeline implementation accidentally returns sources alongside its debug
+    flags. This is the service-layer fail-safe for every API client."""
+    repo = FakeKnowledgeRepository(dense=[], lexical=[])
+    service = RagService(repo, FakeEmbedder(), FakeGenerator(result=(_SAFE_JSON, 0)), _settings())
+
+    async def _unverified_result(_ctx):
+        return RagResult(
+            answer="Не підтверджено",
+            sources_used=[
+                SourceUsed(source="src", doc_type="instruction", district=None, similarity=0.91)
+            ],
+            confidence=0.91,
+            route=QueryRoute.SIMPLE,
+            debug={"grounded": True, "verification_failed": "test"},
+        )
+
+    service._simple.run = _unverified_result
+    response = await service.query(QueryRequest(user_query=_SIMPLE_QUERY, user_id="u1"))
+
+    assert response.verified is False
+    assert response.answer_status == "verification_failed"
     assert response.sources_used == []
 
 

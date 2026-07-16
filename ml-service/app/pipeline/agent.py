@@ -31,6 +31,13 @@ import json
 
 import structlog
 
+from app.domain.civic_verification import (
+    TITLE_NOT_SUPPORTED_ANSWER,
+    is_civic_title_query,
+    normalize_civic_information_query,
+    normalize_civic_title_query,
+    verify_civic_context,
+)
 from app.domain.prompts import build_decompose_prompt, build_rewrite_prompt
 from app.domain.sufficiency import is_sufficient
 from app.metrics import agent_subqueries
@@ -96,10 +103,17 @@ class AgentRAGPipeline(RAGPipeline):
         self._max_subqueries = max_subqueries
 
     async def run(self, ctx: RagContext) -> RagResult:
-        subqueries = await self._decompose(ctx.user_query)
+        # Office-holder questions are high-risk and usually short. Decomposition adds an LLM
+        # round-trip without improving retrieval, and can mutate the title relation before the
+        # deterministic evidence guard sees it. Retrieve the original wording directly instead.
+        subqueries = (
+            [normalize_civic_information_query(normalize_civic_title_query(ctx.user_query))]
+            if is_civic_title_query(ctx.user_query)
+            else await self._decompose(ctx.user_query)
+        )
         agent_subqueries.observe(len(subqueries))
 
-        outcomes = await self._retrieve_all(subqueries, ctx.district_slug)
+        outcomes = await self._retrieve_all(subqueries, ctx.district_slug, ctx.category)
 
         dry_indices = [
             i for i, outcome in enumerate(outcomes)
@@ -110,10 +124,21 @@ class AgentRAGPipeline(RAGPipeline):
             # rewritten and re-retried, even if others are also dry.
             first_dry = dry_indices[0]
             outcomes[first_dry] = await self._reretry_dry(
-                subqueries[first_dry], outcomes[first_dry], ctx.district_slug
+                subqueries[first_dry], outcomes[first_dry], ctx.district_slug, ctx.category
             )
 
         flattened = _interleave_by_rank(outcomes)
+        verification = verify_civic_context(
+            ctx.user_query, [item.text for item in flattened]
+        )
+        if verification.blocked:
+            return RagResult(
+                answer=TITLE_NOT_SUPPORTED_ANSWER,
+                sources_used=[],
+                confidence=0.0,
+                route=ctx.route,
+                debug={"grounded": False, "verification_failed": verification.reason},
+            )
         agent_top1 = max((outcome.dense_top1_sim for outcome in outcomes), default=0.0)
         # True when ANY sub-query's own outcome has a strong lexical match (RetrievalOutcome
         # .has_strong_lexical_match — mirrors SimpleRAGPipeline's per-outcome check), reduced with
@@ -135,14 +160,14 @@ class AgentRAGPipeline(RAGPipeline):
         )
 
     async def _retrieve_all(
-        self, subqueries: list[str], district: str | None
+        self, subqueries: list[str], district: str | None, category: str | None = None
     ) -> list[RetrievalOutcome]:
         """Fan out one retrieval per sub-query in parallel. return_exceptions=True: a single
         sub-query's transient retrieval failure (e.g. a dropped DB connection) must not abort the
         whole request (ADR-007) — _outcome_or_dry turns it into an empty (dry) outcome instead,
         which the existing is_sufficient/re-query logic then treats like any other dry sub-query."""
         raw_results = await asyncio.gather(
-            *(self._retrieve_one(sq, district) for sq in subqueries),
+            *(self._retrieve_one(sq, district, category) for sq in subqueries),
             return_exceptions=True,
         )
         return [
@@ -151,21 +176,22 @@ class AgentRAGPipeline(RAGPipeline):
         ]
 
     async def _reretry_dry(
-        self, subquery: str, current: RetrievalOutcome, district: str | None
+        self, subquery: str, current: RetrievalOutcome, district: str | None,
+        category: str | None = None,
     ) -> RetrievalOutcome:
         """Rewrites `subquery` and re-retrieves once — the single shared re-query budget. A failed
         re-query keeps `current` (the sub-query's original, already-dry outcome) rather than 500ing
         the whole request — same graceful-degradation contract as the initial fan-out."""
         rewritten = await self._rewrite(subquery)
         try:
-            return await self._retrieve_one(rewritten, district)
+            return await self._retrieve_one(rewritten, district, category)
         except Exception as exc:  # noqa: BLE001
             logger.warning("agent_retrieve_failed", subquery=rewritten, err=type(exc).__name__)
             return current
 
-    async def _retrieve_one(self, query_text: str, district: str | None) -> RetrievalOutcome:
+    async def _retrieve_one(self, query_text: str, district: str | None, category: str | None = None) -> RetrievalOutcome:
         query_vec = await self._embedder.encode_query(query_text)
-        return await self._retriever.retrieve(query_text, query_vec, district, k=RETRIEVE_LIMIT)
+        return await self._retriever.retrieve(query_text, query_vec, district, k=RETRIEVE_LIMIT, category=category)
 
     async def _decompose(self, query: str) -> list[str]:
         """1 Generator call. Any parse failure, non-list, empty list, or non-string element degrades

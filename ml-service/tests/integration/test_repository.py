@@ -174,6 +174,32 @@ async def test_district_canonicalization_end_to_end(pg_pool):
     assert len(results) == 1, "city-wide query (district=None) must return all matching rows"
 
 
+async def test_category_filter_keeps_service_retrieval_in_domain(pg_pool):
+    repo = KnowledgeRepository(pg_pool)
+    seed_vec = make_random_vec()
+    query_vec = make_target_vec(seed_vec, noise=0.01)
+    chunks = [
+        ChunkRecord(
+            document_id="civic_services", chunk_index=0, text="ЦНАП і паспортні послуги",
+            embedding=seed_vec, doc_type="instruction", category="services", district=None,
+            source="https://zt-rada.gov.ua/services", content_hash="f" * 64,
+            expires_at=None,
+        ),
+        ChunkRecord(
+            document_id="civic_utilities", chunk_index=0, text="Графік подачі води",
+            embedding=seed_vec, doc_type="instruction", category="utilities", district=None,
+            source="https://zt-rada.gov.ua/water", content_hash="0" * 64,
+            expires_at=None,
+        ),
+    ]
+    await repo.upsert_chunks("civic_services", [chunks[0]])
+    await repo.upsert_chunks("civic_utilities", [chunks[1]])
+
+    results = await repo.retrieve_dense(query_vec, None, limit=10, category="services")
+    assert results
+    assert all(result.category == "services" for result in results)
+
+
 async def test_incr_rate_limit_counter_increments_within_same_window(pg_pool):
     """Repeated calls with the same hashed key + window accumulate, proving the upsert's
     ON CONFLICT DO UPDATE branch runs (not just the initial INSERT)."""

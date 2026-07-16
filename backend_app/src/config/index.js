@@ -35,4 +35,13 @@ export const config = {
   addressDefaultCity: process.env.ADDRESS_DEFAULT_CITY || "Житомир",
 };
 
+if (config.isProd && (
+  !process.env.JWT_ACCESS_SECRET
+  || !process.env.JWT_REFRESH_SECRET
+  || process.env.JWT_ACCESS_SECRET === "dev-access-secret-change-me"
+  || process.env.JWT_REFRESH_SECRET === "dev-refresh-secret-change-me"
+)) {
+  throw new Error("Production requires distinct JWT_ACCESS_SECRET and JWT_REFRESH_SECRET values");
+}
+
 export default config;

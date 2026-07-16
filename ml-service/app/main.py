@@ -89,6 +89,7 @@ async def lifespan(app: FastAPI):
         reaper.cancel()
         with suppress(asyncio.CancelledError):
             await reaper
+        await llm_client.close()
         await pool.close()
 
 

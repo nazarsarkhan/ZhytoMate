@@ -89,6 +89,7 @@ class IngestService:
             for index, chunk in enumerate(chunks)
         ]
         await self._repo.upsert_chunks(request.document_id, records)
+        self._settings.knowledge_base_version += 1
 
         took_ms = (time.perf_counter() - start) * 1000
         logger.info(
@@ -106,6 +107,8 @@ class IngestService:
     async def delete(self, document_id: str) -> DeleteResponse:
         """Delete a document and all its chunks (idempotent — an absent id returns 0)."""
         count = await self._repo.delete_document(document_id)
+        if count:
+            self._settings.knowledge_base_version += 1
         logger.info("delete_doc doc=%s chunks=%d", document_id, count)
         return DeleteResponse(document_id=document_id, chunks_deleted=count)
 

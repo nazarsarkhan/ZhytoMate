@@ -1,4 +1,5 @@
 export const adminSeedData = {
+  places: [],
   users: [
     {
       id: "usr-001",

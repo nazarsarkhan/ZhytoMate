@@ -46,7 +46,8 @@ class _FakeCompletions:
 
 def _make_client(monkeypatch: pytest.MonkeyPatch, completions: _FakeCompletions) -> OpenAILLMClient:
     fake_openai_client = SimpleNamespace(chat=SimpleNamespace(completions=completions))
-    monkeypatch.setattr("app.components.llm.AsyncOpenAI", lambda api_key: fake_openai_client)
+    monkeypatch.setattr("app.components.llm.DefaultAioHttpClient", lambda: object())
+    monkeypatch.setattr("app.components.llm.AsyncOpenAI", lambda **_kwargs: fake_openai_client)
     monkeypatch.setattr(asyncio, "sleep", _no_sleep)  # skip the real backoff delay in tests
     return OpenAILLMClient(api_key="test-key", model="gpt-4o-mini")
 

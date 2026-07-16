@@ -101,6 +101,14 @@ export async function updateUserAddress({ id, address }) {
   return toPublicUser(user);
 }
 
+export async function updateUserPreferences({ id, preferences }) {
+  const user = await findUserByIdAndUpdatePreferences({ id, preferences });
+  if (!user) {
+    throw ApiError.notFound("User not found");
+  }
+  return toPublicUser(user);
+}
+
 // Preview verification without persisting - lets the profile show a normalized suggestion and the
 // verified flag before the user commits to saving.
 export async function previewUserAddress(address) {
@@ -142,6 +150,7 @@ export default {
   createUserProfile,
   updateUserName,
   updateUserAddress,
+  updateUserPreferences,
   previewUserAddress,
   updateUserAvatarFromUpload,
   updateUserPassword,

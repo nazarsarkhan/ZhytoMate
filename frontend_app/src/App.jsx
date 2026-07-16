@@ -13,6 +13,7 @@ import NotificationsPage from "./pages/Notifications/index.jsx";
 import OutageSchedulePage from "./pages/OutageSchedule/index.jsx";
 import PollDetailPage from "./pages/PollDetail/index.jsx";
 import PollsPage from "./pages/Polls/index.jsx";
+import PlacesPage from "./pages/Places/index.jsx";
 import ProfilePage from "./pages/Profile/index.jsx";
 import RegisterPage from "./pages/Register/index.jsx";
 import ServicesPage from "./pages/Services/index.jsx";
@@ -37,6 +38,7 @@ export default function App() {
       <Route path="/news/:newsId" element={<RequireAuth><NewsDetailPage /></RequireAuth>} />
       <Route path="/profile" element={<RequireAuth><ProfilePage /></RequireAuth>} />
       <Route path="/services" element={<RequireAuth><ServicesPage /></RequireAuth>} />
+      <Route path="/places" element={<RequireAuth><PlacesPage /></RequireAuth>} />
       <Route path="/services/contacts" element={<RequireAuth><ContactsPage /></RequireAuth>} />
       <Route path="/services/polls" element={<RequireAuth><PollsPage /></RequireAuth>} />
       <Route path="/services/polls/:pollId" element={<RequireAuth><PollDetailPage /></RequireAuth>} />

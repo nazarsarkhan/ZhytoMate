@@ -50,6 +50,8 @@ services:
       AGENT_MAX_SUBQUERIES: ${AGENT_MAX_SUBQUERIES:-3}
       ANSWER_CACHE_TTL_SECONDS: ${ANSWER_CACHE_TTL_SECONDS:-120}
       ANSWER_CACHE_MAXSIZE: ${ANSWER_CACHE_MAXSIZE:-200}
+      CLASSIFICATION_CACHE_TTL_SECONDS: ${CLASSIFICATION_CACHE_TTL_SECONDS:-30}
+      CLASSIFICATION_CACHE_MAXSIZE: ${CLASSIFICATION_CACHE_MAXSIZE:-256}
       EMBED_CACHE_MAXSIZE: ${EMBED_CACHE_MAXSIZE:-1000}
       RRF_K: ${RRF_K:-60}
     depends_on:
@@ -107,19 +109,17 @@ services:
     volumes:
       - backend_uploads:/app/backend_app/uploads
 
-  # Optional: the real Collector stand-in (see parser/README.md). OFF by default - it needs real
-  # Telegram credentials most people won't have, and its job (populating the KB) is an occasional
-  # maintenance task, not something the live demo depends on running continuously.
-  # Opt in with: docker compose --profile collector up
+  # Collector runs web sources without requiring Telegram credentials. Telegram ingestion is
+  # enabled automatically when TG_API_ID/TG_API_HASH/TG_SESSION are configured.
   parser:
-    profiles: ["collector"]
     build:
       context: ./parser
       dockerfile: Dockerfile
-    restart: "no"
+    restart: unless-stopped
     environment:
       PORT: 3000
       MONGO_URI: mongodb://mongo:27017/future_in_action_scraper
+      PLACES_MONGO_URI: mongodb://mongo:27017/zhytomate
       TG_API_ID: ${TG_API_ID}
       TG_API_HASH: ${TG_API_HASH}
       TG_SESSION: ${TG_SESSION}
@@ -134,7 +134,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       RAG_URL: http://ml:8000/api/v1/knowledge/ingest
-      RAG_SEND_ENABLED: ${RAG_SEND_ENABLED:-false}
+      RAG_SEND_ENABLED: ${RAG_SEND_ENABLED:-true}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
       NEWS_API_URL: http://backend:3000/news/ingest
       NEWS_SEND_ENABLED: ${NEWS_SEND_ENABLED:-true}
@@ -145,6 +145,11 @@ services:
       ZT_RADA_CONCURRENCY: ${ZT_RADA_CONCURRENCY:-3}
       TG_BACKFILL_ON_START: ${TG_BACKFILL_ON_START:-true}
       TG_BACKFILL_LIMIT: ${TG_BACKFILL_LIMIT:-1000}
+      PLACES_IMPORT_ENABLED: ${PLACES_IMPORT_ENABLED:-false}
+      PLACES_IMPORT_DRY_RUN: ${PLACES_IMPORT_DRY_RUN:-false}
+      PLACES_IMPORT_SCHEDULE: ${PLACES_IMPORT_SCHEDULE:-0 3 * * *}
+      OVERPASS_URL: ${OVERPASS_URL:-https://overpass-api.de/api/interpreter}
+      PLACES_BBOX: ${PLACES_BBOX:-50.20,28.60,50.30,28.75}
     depends_on:
       mongo:
         condition: service_healthy
@@ -155,6 +160,21 @@ services:
       # regardless, so this is just start-order best-effort.
       backend:
         condition: service_started
+
+  places-sync:
+    build:
+      context: ./parser
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["node", "scripts/places-worker.js"]
+    environment:
+      PLACES_MONGO_URI: mongodb://mongo:27017/zhytomate
+      OVERPASS_URL: ${OVERPASS_URL:-https://overpass-api.de/api/interpreter}
+      PLACES_BBOX: ${PLACES_BBOX:-50.20,28.60,50.30,28.75}
+      PLACES_IMPORT_SCHEDULE: ${PLACES_IMPORT_SCHEDULE:-0 3 * * *}
+    depends_on:
+      mongo:
+        condition: service_healthy
 
 volumes:
   pgdata: {}

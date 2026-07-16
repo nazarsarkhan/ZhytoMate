@@ -70,11 +70,12 @@ _INSERT_SQL = """
 """
 
 _DENSE_SQL = """
-    SELECT id, text, source, doc_type, district,
+    SELECT id, text, source, doc_type, category, district,
            1 - (embedding <=> $1::vector) AS similarity
     FROM knowledge_base
     WHERE (expires_at IS NULL OR expires_at > now())
       AND ($2::text IS NULL OR district = $2 OR district IS NULL)
+      AND ($4::text IS NULL OR category = $4)
     ORDER BY embedding <=> $1::vector
     LIMIT $3
 """
@@ -82,12 +83,13 @@ _DENSE_SQL = """
 # {tsquery} is substituted ONLY with the two fixed identifiers below (never user input);
 # the search text is always bound as $1, so this is injection-safe.
 _LEXICAL_SQL = """
-    SELECT id, text, source, doc_type, district,
+    SELECT id, text, source, doc_type, category, district,
            ts_rank_cd(tsv, query) AS rank
     FROM knowledge_base, {tsquery}('simple', $1) AS query
     WHERE tsv @@ query
       AND (expires_at IS NULL OR expires_at > now())
       AND ($2::text IS NULL OR district = $2 OR district IS NULL)
+      AND ($4::text IS NULL OR category = $4)
     ORDER BY rank DESC
     LIMIT $3
 """
@@ -96,13 +98,14 @@ _LEXICAL_SQL = """
 # DISTINCT query terms a chunk covers, so a chunk mentioning several of the words beats one that
 # just repeats a single common word (e.g. a price list full of "послуга"); ts_rank_cd breaks ties.
 _OR_LEXICAL_SQL = """
-    SELECT id, text, source, doc_type, district,
+    SELECT id, text, source, doc_type, category, district,
            (SELECT count(*) FROM unnest($4::text[]) AS term
             WHERE tsv @@ plainto_tsquery('simple', term)) AS coverage
     FROM knowledge_base, to_tsquery('simple', $1) AS query
     WHERE tsv @@ query
       AND (expires_at IS NULL OR expires_at > now())
       AND ($2::text IS NULL OR district = $2 OR district IS NULL)
+      AND ($5::text IS NULL OR category = $5)
     ORDER BY coverage DESC, ts_rank_cd(tsv, query) DESC
     LIMIT $3
 """
@@ -121,6 +124,7 @@ def _to_result(
         doc_type=row["doc_type"],
         district=row["district"],
         similarity=similarity,
+        category=row.get("category") if hasattr(row, "get") else row["category"],
         lexical_coverage=lexical_coverage,
         lexical_terms_total=lexical_terms_total,
     )
@@ -129,6 +133,22 @@ def _to_result(
 # Letters-only tokens of length >= 3 — drops stopword-ish short words and digits. Letters only, so
 # the joined result is always a syntactically valid to_tsquery input (no operators to escape).
 _TSQUERY_WORD = re.compile(r"[^\W\d_]{3,}", re.UNICODE)
+_LEXICAL_STOPWORDS = frozenset(
+    {
+        "хто", "кто", "who", "що", "что", "what", "де", "где", "where",
+        "коли", "когда", "when", "який", "яка", "какой", "какая", "which",
+        "як", "как", "how",
+    }
+)
+_LEXICAL_STOPWORD_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(word) for word in _LEXICAL_STOPWORDS) + r")\b",
+    re.IGNORECASE,
+)
+
+
+def _lexical_query(query: str) -> str:
+    """Remove interrogative filler before PostgreSQL's AND lexical search."""
+    return _LEXICAL_STOPWORD_RE.sub(" ", query).strip()
 
 
 def _significant_terms(query: str) -> list[str]:
@@ -151,6 +171,8 @@ def _significant_terms(query: str) -> list[str]:
     first place) remains a follow-up — see ml-service/CLAUDE.md's Known Issues."""
     seen: list[str] = []
     for token in _TSQUERY_WORD.findall(query.lower()):
+        if token in _LEXICAL_STOPWORDS:
+            continue
         if token not in seen:
             seen.append(token)
     return seen[:12]
@@ -201,7 +223,8 @@ class KnowledgeRepository:
         return len(rows)
 
     async def retrieve_dense(
-        self, query_vec: np.ndarray, district_slug: str | None, limit: int = 10
+        self, query_vec: np.ndarray, district_slug: str | None, limit: int = 10,
+        category: str | None = None,
     ) -> list[RetrievalResult]:
         start = time.perf_counter()
         # CRITICAL: SET LOCAL must share the SAME explicit transaction as the SELECT.
@@ -212,14 +235,15 @@ class KnowledgeRepository:
             await conn.execute("SET LOCAL hnsw.ef_search = 100")
             await conn.execute("SET LOCAL hnsw.iterative_scan = 'relaxed_order'")
             await conn.execute("SET LOCAL hnsw.max_scan_tuples = 40000")
-            rows = await conn.fetch(_DENSE_SQL, query_vec, district_slug, limit)
+            rows = await conn.fetch(_DENSE_SQL, query_vec, district_slug, limit, category)
         logger.debug(
             "retrieve_dense", rows=len(rows), took_ms=round((time.perf_counter() - start) * 1000, 1)
         )
         return [_to_result(r, float(r["similarity"])) for r in rows]
 
     async def retrieve_lexical(
-        self, query: str, district_slug: str | None, limit: int = 10
+        self, query: str, district_slug: str | None, limit: int = 10,
+        category: str | None = None,
     ) -> list[RetrievalResult]:
         """Full-text leg (§2.8). websearch_to_tsquery primary; plainto_tsquery fallback on 0
         rows; coverage-ranked OR fallback when both AND queries are empty. AND-tier hits carry
@@ -231,13 +255,22 @@ class KnowledgeRepository:
         word out of several, in an otherwise off-topic query) — a plain minimum coverage count
         can't tell those two apart, since both can read coverage=1."""
         start = time.perf_counter()
+        lexical_query = _lexical_query(query)
         rows = await self._pool.fetch(
-            _LEXICAL_SQL.format(tsquery="websearch_to_tsquery"), query, district_slug, limit
+            _LEXICAL_SQL.format(tsquery="websearch_to_tsquery"),
+            lexical_query,
+            district_slug,
+            limit,
+            category,
         )
         if not rows:
             # plainto_tsquery is more forgiving for short / single-word queries.
             rows = await self._pool.fetch(
-                _LEXICAL_SQL.format(tsquery="plainto_tsquery"), query, district_slug, limit
+                _LEXICAL_SQL.format(tsquery="plainto_tsquery"),
+                lexical_query,
+                district_slug,
+                limit,
+                category,
             )
         coverage_by_id: dict[int, int] = {}
         terms_total: int | None = None
@@ -245,10 +278,10 @@ class KnowledgeRepository:
             # Both of the above AND every term, so a verbose question matches no single chunk. Fall
             # back to an OR of the significant terms, ranked by how many DISTINCT terms each chunk
             # covers so a chunk mentioning several of the words beats one repeating a common filler.
-            terms = _significant_terms(query)
+            terms = _significant_terms(lexical_query)
             if terms:
                 rows = await self._pool.fetch(
-                    _OR_LEXICAL_SQL, " | ".join(terms), district_slug, limit, terms
+                    _OR_LEXICAL_SQL, " | ".join(terms), district_slug, limit, terms, category
                 )
                 coverage_by_id = {row["id"]: row["coverage"] for row in rows}
                 terms_total = len(terms)

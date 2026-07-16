@@ -38,8 +38,8 @@ export async function ingestNewsItem(payload) {
   return toPublicNews(news);
 }
 
-export async function listNews({ category, limit }) {
-  const items = await findNews({ category, limit });
+export async function listNews({ category, source, limit }) {
+  const items = await findNews({ category, source, limit });
   return items.map(toPublicNews);
 }
 

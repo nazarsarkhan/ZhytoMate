@@ -56,6 +56,15 @@ export async function updateCurrentUserAddress(req, res, next) {
   }
 }
 
+export async function updateCurrentUserPreferences(req, res, next) {
+  try {
+    const user = await updateUserPreferences({ id: req.user.id, preferences: req.body });
+    return res.json({ user });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 // Verify/normalize an address without saving it (for the profile's "check address" UX).
 export async function previewCurrentUserAddress(req, res, next) {
   try {
@@ -89,6 +98,7 @@ export default {
   getUserById,
   updateCurrentUserName,
   updateCurrentUserAddress,
+  updateCurrentUserPreferences,
   previewCurrentUserAddress,
   uploadCurrentUserAvatar,
 };
