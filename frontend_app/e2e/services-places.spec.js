@@ -6,6 +6,9 @@ async function login(page) {
     if (url.pathname.endsWith('/auth/login')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ accessToken: 'e2e-token', refreshToken: 'e2e-refresh', user: { firstName: 'E2E' } }) });
     }
+    if (url.pathname.endsWith('/auth/refresh')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ accessToken: 'e2e-token', refreshToken: 'e2e-refresh' }) });
+    }
     if (url.pathname.endsWith('/users/me')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { firstName: 'E2E', lastName: 'Test', role: 'user' } }) });
     }

@@ -19,6 +19,9 @@ test('admin sections render an authenticated page or explicit empty state', asyn
     if (url.pathname.endsWith('/auth/login')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ accessToken: 'admin-e2e-token', refreshToken: 'admin-e2e-refresh', user: { firstName: 'Admin', role: 'admin' } }) });
     }
+    if (url.pathname.endsWith('/auth/refresh')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ accessToken: 'admin-e2e-token', refreshToken: 'admin-e2e-refresh' }) });
+    }
     if (url.pathname.endsWith('/users/me')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { firstName: 'Admin', lastName: 'E2E', role: 'admin', address: {}, preferences: {} } }) });
     }
