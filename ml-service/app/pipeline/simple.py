@@ -19,6 +19,9 @@ Must NOT import:  api/*, services/*; concrete components/*; FastAPI, asyncpg, se
 """
 from __future__ import annotations
 
+import asyncio
+import time
+
 from app.domain.civic_verification import (
     TITLE_NOT_SUPPORTED_ANSWER,
     is_civic_information_query,
@@ -31,10 +34,10 @@ from app.pipeline.base import (
     RagContext,
     RAGPipeline,
     RagResult,
-    check_query_safety,
-    detect_and_translate,
+    check_query_safety_and_translate,
     run_shared_tail,
 )
+from app.metrics import classification_cache_hits_total, classification_cache_lookups_total
 from app.protocols import Embedder, Generator, Retriever
 
 
@@ -49,12 +52,39 @@ class SimpleRAGPipeline(RAGPipeline):
         generator: Generator,
         sim_gate: float,
         sim_high: float,
+        classification_cache_ttl_seconds: int = 30,
+        classification_cache_maxsize: int = 256,
     ) -> None:
         self._embedder = embedder
         self._retriever = retriever
         self._generator = generator
         self._sim_gate = sim_gate
         self._sim_high = sim_high
+        self._classification_cache_ttl = max(0, classification_cache_ttl_seconds)
+        self._classification_cache_maxsize = max(1, classification_cache_maxsize)
+        self._classification_cache: dict[str, tuple[float, tuple[bool, str, bool, str | None, str, str]]] = {}
+        self._classification_lock = asyncio.Lock()
+
+    async def _classify(self, query: str) -> tuple[bool, str, bool, str | None, str, str]:
+        key = " ".join(query.lower().split())
+        now = time.monotonic()
+        classification_cache_lookups_total.inc()
+        cached = self._classification_cache.get(key)
+        if cached and cached[0] > now:
+            classification_cache_hits_total.inc()
+            return cached[1]
+        async with self._classification_lock:
+            now = time.monotonic()
+            cached = self._classification_cache.get(key)
+            if cached and cached[0] > now:
+                classification_cache_hits_total.inc()
+                return cached[1]
+            result = await check_query_safety_and_translate(self._generator, query)
+            if result[0] and self._classification_cache_ttl:
+                if len(self._classification_cache) >= self._classification_cache_maxsize:
+                    self._classification_cache.pop(next(iter(self._classification_cache)))
+                self._classification_cache[key] = (now + self._classification_cache_ttl, result)
+            return result
 
     async def run(self, ctx: RagContext) -> RagResult:
         # Wartime OPSEC gate first, before any retrieval/generation work — see
@@ -62,26 +92,22 @@ class SimpleRAGPipeline(RAGPipeline):
         # fail-closed policy. conversational feeds run_shared_tail's force_ungrounded below, so a
         # greeting doesn't get routed to the civic RAG prompt just because retrieval's similarity
         # gate happened to clear on vocabulary/style noise.
-        is_safe, refusal, conversational, action_intent = await check_query_safety(
-            self._generator, ctx.user_query
-        )
+        is_safe, refusal, conversational, action_intent, answer_lang, retrieval_query = await self._classify(ctx.user_query)
         if not is_safe:
             return RagResult(
                 answer=refusal, sources_used=[], confidence=0.0, route=ctx.route,
                 debug={"blocked": True},
             )
 
-        # The KB is Ukrainian; for a RU/EN query, detect its language and translate it to Ukrainian
-        # for retrieval in one call (a Ukrainian query skips it). Generation still gets the ORIGINAL
-        # query and answers in answer_lang, so the reply comes back in the user's language (never
-        # Russian — answer_lang is already policy-resolved by detect_and_translate).
-        retrieval_input = normalize_civic_information_query(
-            normalize_civic_title_query(ctx.user_query)
+        # The combined classifier already translated non-Ukrainian input. Apply the deterministic
+        # civic canonicalizers after that translation so short title/service queries retrieve the
+        # canonical KB wording without spending another LLM round-trip.
+        retrieval_query = normalize_civic_information_query(
+            normalize_civic_title_query(retrieval_query)
         )
-        answer_lang, retrieval_query = await detect_and_translate(self._generator, retrieval_input)
         query_vec = await self._embedder.encode_query(retrieval_query)
         outcome = await self._retriever.retrieve(
-            retrieval_query, query_vec, ctx.district_slug, k=RETRIEVE_LIMIT
+            retrieval_query, query_vec, ctx.district_slug, k=RETRIEVE_LIMIT, category=ctx.category
         )
         verification = verify_civic_context(
             ctx.user_query, [item.text for item in outcome.fused]

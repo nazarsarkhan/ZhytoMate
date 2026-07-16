@@ -5,7 +5,17 @@ import { apiFetch } from "../lib/apiClient.js";
 export function useContacts() {
   return useQuery({
     queryKey: ["contacts"],
-    queryFn: () => apiFetch("/contacts"),
+    queryFn: async () => {
+      const payload = await apiFetch("/contacts");
+      const groups = Array.isArray(payload?.groups)
+        ? payload.groups.map((group) => ({ ...group, items: Array.isArray(group?.items) ? group.items : [] }))
+        : [];
+      return {
+        ...(payload && typeof payload === "object" ? payload : {}),
+        emergency: Array.isArray(payload?.emergency) ? payload.emergency : [],
+        groups,
+      };
+    },
   });
 }
 
@@ -14,8 +24,8 @@ export function useAdminContacts() {
   return useQuery({
     queryKey: ["contacts", "admin"],
     queryFn: async () => {
-      const { contacts } = await apiFetch("/contacts/admin");
-      return contacts;
+      const payload = await apiFetch("/contacts/admin");
+      return Array.isArray(payload?.contacts) ? payload.contacts : [];
     },
   });
 }

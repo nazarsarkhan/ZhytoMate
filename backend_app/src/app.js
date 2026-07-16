@@ -39,8 +39,19 @@ const API_PREFIXES = [
 export function createApp() {
   const app = express();
 
+  app.disable("x-powered-by");
+  app.use((_req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("Permissions-Policy", "camera=(), geolocation=(), microphone=()");
+    next();
+  });
   app.use(cors({ origin: config.corsOrigins }));
-  app.use(express.json());
+  // Scraped city-council articles may include a large sanitized HTML body and image metadata.
+  // Keep the limit bounded, but above the parser's 50k RAG text plus display payload so a valid
+  // news item cannot fail with PayloadTooLargeError during a full backfill.
+  app.use(express.json({ limit: "512kb" }));
 
   // Strip a leading "/api" so the built frontend's apiClient.js (hardcoded API_BASE = "/api" for
   // every fetch/apiUpload call) reaches these same bare routes in production. Mirrors

@@ -1,0 +1,144 @@
+from app.domain.civic_verification import (
+    is_civic_information_query,
+    is_civic_title_query,
+    is_no_information_answer,
+    normalize_civic_information_query,
+    normalize_civic_title_query,
+    is_trusted_title_source,
+    is_trusted_civic_source,
+    verify_civic_context,
+)
+
+
+def test_recognizes_ukrainian_and_russian_no_information_answers() -> None:
+    assert is_no_information_answer(
+        "Інформації про те, де зробити паспорт у Житомирі, немає."
+    ) is True
+    assert is_no_information_answer(
+        "На жаль, у мене немає підтвердженої інформації про суд."
+    ) is True
+    assert is_no_information_answer("На жаль, точних даних немає.") is True
+
+
+def test_does_not_classify_a_real_answer_as_no_information() -> None:
+    assert is_no_information_answer(
+        "Паспорт можна оформити у ЦНАП за адресою: вул. Ватутіна, 2/1."
+    ) is False
+
+
+def test_recognizes_factual_city_service_questions() -> None:
+    assert is_civic_information_query("А где суд?") is True
+    assert is_civic_information_query("Где сделать паспорт?") is True
+    assert is_civic_information_query("Куда пойти поесть в Житомире?") is True
+    assert is_civic_information_query("Привіт, як справи?") is False
+
+
+def test_normalizes_short_civic_location_questions() -> None:
+    assert normalize_civic_information_query("А где суд?") == "Де суд у Житомирі?"
+    assert normalize_civic_information_query(
+        "где сделать паспорт?"
+    ) == "Де зробити паспорт у Житомирі?"
+
+
+def test_rejects_promoting_deputy_mayor_to_mayor() -> None:
+    result = verify_civic_context(
+        "Скажіть, хто мер?",
+        ["Заступники міського голови: Смаль О.А."],
+    )
+
+    assert result.blocked is True
+    assert result.reason == "title_not_supported"
+
+
+def test_rejects_directory_boilerplate_without_punctuation() -> None:
+    result = verify_civic_context(
+        "Скажіть, хто мер?",
+        ["Заступники міського головиСмаль О.А."],
+    )
+
+    assert result.blocked is True
+
+
+def test_accepts_explicit_mayor_context() -> None:
+    result = verify_civic_context(
+        "Хто мер Житомира?",
+        ["Міський голова Житомира — Ім'я Прізвище."],
+    )
+
+    assert result.blocked is False
+
+
+def test_accepts_explicit_unfilled_mayor_status_and_acting_official() -> None:
+    result = verify_civic_context(
+        "А хто мер Житомира?",
+        [
+            "Мер (міський голова) Житомира наразі офіційно не обраний. "
+            "Обов'язки міського голови виконує секретар міської ради "
+            "Галина Степанівна Шиманська."
+        ],
+    )
+
+    assert result.blocked is False
+
+
+def test_rejects_title_question_without_explicit_title_evidence() -> None:
+    result = verify_civic_context(
+        "Хто мер Житомира?",
+        ["Житомирська міська рада. Контакти та перелік установ."],
+    )
+
+    assert result.blocked is True
+
+
+def test_does_not_block_unrelated_civic_question() -> None:
+    result = verify_civic_context(
+        "Де ЦНАП?",
+        ["ЦНАП розташований на вул. Михайлівській, 4."],
+    )
+
+    assert result.blocked is False
+
+
+def test_recognizes_colloquial_and_typo_title_forms() -> None:
+    assert is_civic_title_query("Хто мэрчик?") is True
+    assert is_civic_title_query("Кто мэрито?") is True
+    assert is_civic_title_query("Кто руководит городом Житомиром?") is True
+    assert is_civic_title_query("Хто очолює місто?") is True
+    assert is_civic_title_query("Хто голова міста Житомир?") is True
+
+
+def test_normalizes_colloquial_and_typo_title_forms_for_retrieval() -> None:
+    assert normalize_civic_title_query("Хто мэрчик?") == "Хто мер?"
+    assert normalize_civic_title_query("Кто мэрито?") == "Кто мер?"
+    assert normalize_civic_title_query("кто глава города Житомир") == "Хто мер Житомира?"
+    assert normalize_civic_title_query("Хто голова міста Житомир?") == "Хто мер Житомира?"
+
+
+def test_title_sources_are_limited_to_official_or_curated_facts() -> None:
+    assert is_trusted_title_source("manual-curated")
+    assert is_trusted_title_source("https://zt-rada.gov.ua/page")
+    assert not is_trusted_title_source("https://t.me/zhtmr/27699")
+
+
+def test_normalizes_russian_cnap_location_query() -> None:
+    assert normalize_civic_information_query("где находится ЦНАП?") == "ЦНАП"
+
+
+def test_normalizes_ukrainian_cnap_location_query_to_subject_anchor() -> None:
+    assert normalize_civic_information_query("Де ЦНАП у Житомирі?") == "ЦНАП"
+
+
+def test_normalizes_numbered_transport_query_to_route_anchor() -> None:
+    assert normalize_civic_information_query("Який маршрут тролейбуса №15А?") == "тролейбус 15а"
+
+
+def test_recognizes_and_normalizes_city_council_queries() -> None:
+    assert is_civic_information_query("Де міська рада Житомира?") is True
+    assert normalize_civic_information_query("где находится горсовет Житомира") == "Міська рада Житомира адреса контакти"
+
+
+def test_civic_service_sources_reject_social_and_place_catalogs() -> None:
+    assert is_trusted_civic_source("Де ЦНАП?", "https://zt-rada.gov.ua/?departments=159")
+    assert is_trusted_civic_source("Де зробити паспорт?", "https://dmsu.gov.ua/services")
+    assert not is_trusted_civic_source("Де ЦНАП?", "https://t.me/zhtmr/27699")
+    assert not is_trusted_civic_source("Де ЦНАП?", "openstreetmap")

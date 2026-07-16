@@ -31,6 +31,11 @@ def test_unknown_query_returns_no_capability_links() -> None:
     assert match_app_capabilities("Яка погода завтра?") == []
 
 
+def test_matches_natural_food_and_news_phrasings() -> None:
+    assert match_app_capabilities("Куда пойти поесть в Житомире?")[0].route == "/places"
+    assert match_app_capabilities("Що нового в Житомирі сьогодні?")[0].route == "/news"
+
+
 def test_route_validator_rejects_admin_external_and_unknown_paths() -> None:
     assert validate_app_route("/services/transport") == "/services/transport"
     assert validate_app_route("/admin/users") is None

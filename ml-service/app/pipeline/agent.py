@@ -113,7 +113,7 @@ class AgentRAGPipeline(RAGPipeline):
         )
         agent_subqueries.observe(len(subqueries))
 
-        outcomes = await self._retrieve_all(subqueries, ctx.district_slug)
+        outcomes = await self._retrieve_all(subqueries, ctx.district_slug, ctx.category)
 
         dry_indices = [
             i for i, outcome in enumerate(outcomes)
@@ -124,7 +124,7 @@ class AgentRAGPipeline(RAGPipeline):
             # rewritten and re-retried, even if others are also dry.
             first_dry = dry_indices[0]
             outcomes[first_dry] = await self._reretry_dry(
-                subqueries[first_dry], outcomes[first_dry], ctx.district_slug
+                subqueries[first_dry], outcomes[first_dry], ctx.district_slug, ctx.category
             )
 
         flattened = _interleave_by_rank(outcomes)
@@ -160,14 +160,14 @@ class AgentRAGPipeline(RAGPipeline):
         )
 
     async def _retrieve_all(
-        self, subqueries: list[str], district: str | None
+        self, subqueries: list[str], district: str | None, category: str | None = None
     ) -> list[RetrievalOutcome]:
         """Fan out one retrieval per sub-query in parallel. return_exceptions=True: a single
         sub-query's transient retrieval failure (e.g. a dropped DB connection) must not abort the
         whole request (ADR-007) — _outcome_or_dry turns it into an empty (dry) outcome instead,
         which the existing is_sufficient/re-query logic then treats like any other dry sub-query."""
         raw_results = await asyncio.gather(
-            *(self._retrieve_one(sq, district) for sq in subqueries),
+            *(self._retrieve_one(sq, district, category) for sq in subqueries),
             return_exceptions=True,
         )
         return [
@@ -176,21 +176,22 @@ class AgentRAGPipeline(RAGPipeline):
         ]
 
     async def _reretry_dry(
-        self, subquery: str, current: RetrievalOutcome, district: str | None
+        self, subquery: str, current: RetrievalOutcome, district: str | None,
+        category: str | None = None,
     ) -> RetrievalOutcome:
         """Rewrites `subquery` and re-retrieves once — the single shared re-query budget. A failed
         re-query keeps `current` (the sub-query's original, already-dry outcome) rather than 500ing
         the whole request — same graceful-degradation contract as the initial fan-out."""
         rewritten = await self._rewrite(subquery)
         try:
-            return await self._retrieve_one(rewritten, district)
+            return await self._retrieve_one(rewritten, district, category)
         except Exception as exc:  # noqa: BLE001
             logger.warning("agent_retrieve_failed", subquery=rewritten, err=type(exc).__name__)
             return current
 
-    async def _retrieve_one(self, query_text: str, district: str | None) -> RetrievalOutcome:
+    async def _retrieve_one(self, query_text: str, district: str | None, category: str | None = None) -> RetrievalOutcome:
         query_vec = await self._embedder.encode_query(query_text)
-        return await self._retriever.retrieve(query_text, query_vec, district, k=RETRIEVE_LIMIT)
+        return await self._retriever.retrieve(query_text, query_vec, district, k=RETRIEVE_LIMIT, category=category)
 
     async def _decompose(self, query: str) -> list[str]:
         """1 Generator call. Any parse failure, non-list, empty list, or non-string element degrades

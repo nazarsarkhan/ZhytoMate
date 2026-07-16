@@ -46,6 +46,7 @@ class RetrievalResult:
     doc_type: str
     district: str | None
     similarity: float                # cosine [0,1] for the dense leg; 0.0 for the lexical leg
+    category: str | None = None
     # Only meaningful on a lexical-leg result from the OR-fallback tier: how many of the query's
     # significant terms this chunk covered, and how many significant terms the query had in total.
     # Both None for a dense-leg result or an AND-tier lexical hit (an all-or-nothing match, so

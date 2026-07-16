@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     embed_cache_maxsize: int = 1000
     answer_cache_ttl_seconds: int = 120
     answer_cache_maxsize: int = 200
+    classification_cache_ttl_seconds: int = 30
+    classification_cache_maxsize: int = 256
     rrf_k: int = 60                  # RRF smoothing constant
     knowledge_base_version: int = 1  # incremented after successful ingest/delete
 

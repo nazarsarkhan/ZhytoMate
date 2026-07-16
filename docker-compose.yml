@@ -50,6 +50,8 @@ services:
       AGENT_MAX_SUBQUERIES: ${AGENT_MAX_SUBQUERIES:-3}
       ANSWER_CACHE_TTL_SECONDS: ${ANSWER_CACHE_TTL_SECONDS:-120}
       ANSWER_CACHE_MAXSIZE: ${ANSWER_CACHE_MAXSIZE:-200}
+      CLASSIFICATION_CACHE_TTL_SECONDS: ${CLASSIFICATION_CACHE_TTL_SECONDS:-30}
+      CLASSIFICATION_CACHE_MAXSIZE: ${CLASSIFICATION_CACHE_MAXSIZE:-256}
       EMBED_CACHE_MAXSIZE: ${EMBED_CACHE_MAXSIZE:-1000}
       RRF_K: ${RRF_K:-60}
     depends_on:
@@ -107,16 +109,13 @@ services:
     volumes:
       - backend_uploads:/app/backend_app/uploads
 
-  # Optional: the real Collector stand-in (see parser/README.md). OFF by default - it needs real
-  # Telegram credentials most people won't have, and its job (populating the KB) is an occasional
-  # maintenance task, not something the live demo depends on running continuously.
-  # Opt in with: docker compose --profile collector up
+  # Collector runs web sources without requiring Telegram credentials. Telegram ingestion is
+  # enabled automatically when TG_API_ID/TG_API_HASH/TG_SESSION are configured.
   parser:
-    profiles: ["collector"]
     build:
       context: ./parser
       dockerfile: Dockerfile
-    restart: "no"
+    restart: unless-stopped
     environment:
       PORT: 3000
       MONGO_URI: mongodb://mongo:27017/future_in_action_scraper
@@ -135,7 +134,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       RAG_URL: http://ml:8000/api/v1/knowledge/ingest
-      RAG_SEND_ENABLED: ${RAG_SEND_ENABLED:-false}
+      RAG_SEND_ENABLED: ${RAG_SEND_ENABLED:-true}
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
       NEWS_API_URL: http://backend:3000/news/ingest
       NEWS_SEND_ENABLED: ${NEWS_SEND_ENABLED:-true}

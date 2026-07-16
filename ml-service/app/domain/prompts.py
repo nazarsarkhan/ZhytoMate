@@ -215,6 +215,24 @@ def build_safety_check_prompt(query: str) -> str:
     return f"{_SAFETY_CHECK_INSTRUCTION}\n\n<text>\n{query}\n</text>"
 
 
+def build_safety_and_translate_prompt(query: str) -> str:
+    """Build the single-pass safety + language/translation classifier used by the hot path.
+
+    Keeping translation in the same structured response removes a second network round-trip for
+    non-Ukrainian queries while retaining the same fail-closed safety contract.
+    """
+    instruction = _SAFETY_CHECK_INSTRUCTION.rsplit("Поверни ВИКЛЮЧНО JSON", 1)[0]
+    return (
+        f"{instruction}Також визнач мову запиту та переклади його українською для пошуку в базі "
+        "знань міста Житомир. Код мови: 'uk', 'ru' або 'en'; для іншої мови постав 'uk'. "
+        "Якщо запит уже українською — поверни його без змін. Збережи власні назви, адреси та "
+        "числа. "
+        'Поверни ВИКЛЮЧНО JSON без markdown: {"safe": true, "conversational": false, '
+        '"action_intent": null, "lang": "uk", "uk": "переклад"} з реальними значеннями.'
+        f"\n\n<text>\n{query}\n</text>"
+    )
+
+
 def build_slot_extraction_prompt(
     message: str, slot_schema: list[SlotFieldSchema], current_slots: dict[str, str]
 ) -> str:

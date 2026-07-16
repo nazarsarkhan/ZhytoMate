@@ -148,7 +148,8 @@
       "transport": { "title": "Transport", "subtitle": "Routes & schedules" },
       "outages": { "title": "Power", "subtitle": "Outage schedule" },
       "utilities": { "title": "Utilities & Payments", "subtitle": "Tariffs & bills" },
-      "healthcare": { "title": "Healthcare", "subtitle": "Book a doctor" }
+      "healthcare": { "title": "Healthcare", "subtitle": "Book a doctor" },
+      "places": { "title": "City places", "subtitle": "Cafes, shops and institutions" }
     }
   },
   "transport": {

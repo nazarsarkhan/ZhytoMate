@@ -37,11 +37,12 @@ class HybridRetriever(Retriever):
         self._rrf_k = rrf_k
 
     async def retrieve(
-        self, query_text: str, query_vec: np.ndarray, district: str | None, k: int
+        self, query_text: str, query_vec: np.ndarray, district: str | None, k: int,
+        category: str | None = None,
     ) -> RetrievalOutcome:
         dense, lexical = await asyncio.gather(
-            self._repo.retrieve_dense(query_vec, district, limit=k),
-            self._repo.retrieve_lexical(query_text, district, limit=k),
+            self._repo.retrieve_dense(query_vec, district, limit=k, category=category),
+            self._repo.retrieve_lexical(query_text, district, limit=k, category=category),
         )
         retrieval_leg_hits.labels(leg="dense").inc(len(dense))
         retrieval_leg_hits.labels(leg="lexical").inc(len(lexical))

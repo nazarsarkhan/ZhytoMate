@@ -14,6 +14,7 @@ const sections = [
   { entity: "news", path: "news", label: "Новини", singular: "новину", icon: "newspaper", searchable: ["title", "body", "source", "category", "status", "tags"] },
   { entity: "appeals", path: "appeals", label: "Звернення", singular: "звернення", icon: "assignment", searchable: ["user", "category", "address", "description", "status"] },
   { entity: "contacts", path: "contacts", label: "Контакти", singular: "контакт", icon: "contacts", searchable: ["name", "phone", "group", "kind"] },
+  { entity: "places", path: "places", label: "Місця", singular: "місце", icon: "place", searchable: ["name", "address", "phone", "category", "source"] },
 ];
 
 const sectionByEntity = Object.fromEntries(sections.map((section) => [section.entity, section]));
@@ -106,6 +107,13 @@ const fieldsByEntity = {
     ["group", "Група"],
     ["kind", "Тип", "select", ["emergency", "utility"]],
   ],
+  places: [
+    ["name", "Назва"],
+    ["address", "Адреса"],
+    ["phone", "Телефон"],
+    ["openingHours", "Години роботи"],
+    ["category", "Категорія", "select", ["food", "shopping", "health", "services", "education", "government", "culture", "transport", "other"]],
+  ],
 };
 
 const dateFieldNames = new Set(["startsAt", "endsAt", "publishAt", "date", "createdAt"]);
@@ -134,7 +142,7 @@ function normalizeItemForForm(entity, item) {
 
 function normalizeFormForSave(entity, form, options = {}) {
   if (entity !== "surveys") return form;
-  const surveyOptions = form.options
+  const surveyOptions = (form.options || [])
     .map((option, index) => ({
       id: option.id || `opt-${Date.now().toString(36)}-${index}`,
       label: option.label.trim(),
@@ -165,6 +173,7 @@ function emptyItem(entity) {
     news: { title: "", body: "", source: "Житомирська міська рада", category: "Офіційно", status: "draft", date: today, tags: "" },
     appeals: { user: "", userId: "", category: "", address: "", description: "", status: "new", response: "", imageUrl: "", createdAt: today },
     contacts: { name: "", phone: "", icon: "call", group: "", kind: "utility" },
+    places: { name: "", address: "", phone: "", openingHours: "", category: "other" },
   };
   return defaults[entity];
 }
@@ -389,7 +398,7 @@ function AdminHeader({ section, onCreate }) {
               <h1 className="truncate text-2xl font-bold text-on-surface">{section.label}</h1>
             </div>
           </div>
-          {!["users", "appeals"].includes(section.entity) ? (
+          {!["users", "appeals", "places"].includes(section.entity) ? (
             <button className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-secondary-container text-on-secondary-container active:scale-[0.98] sm:w-auto sm:px-4" type="button" aria-label={`Додати ${section.singular}`} onClick={onCreate}>
               <Icon name="add" className="text-lg" />
               <span className="hidden text-sm font-bold sm:inline">Додати</span>
@@ -444,7 +453,7 @@ function AdminEditorModal({ entity, item, open, onClose }) {
   const updateSurveyOption = (optionId, label) => {
     setForm((current) => ({
       ...current,
-      options: current.options.map((option) => (option.id === optionId ? { ...option, label } : option)),
+      options: (current.options || []).map((option) => (option.id === optionId ? { ...option, label } : option)),
     }));
     setFormError("");
   };
@@ -452,15 +461,16 @@ function AdminEditorModal({ entity, item, open, onClose }) {
   const addSurveyOption = () => {
     setForm((current) => ({
       ...current,
-      options: [...current.options, { id: `opt-${Date.now().toString(36)}`, label: "", votes: 0, percent: 0 }],
+      options: [...(current.options || []), { id: `opt-${Date.now().toString(36)}`, label: "", votes: 0, percent: 0 }],
     }));
     setFormError("");
   };
 
   const removeSurveyOption = (optionId) => {
     setForm((current) => {
-      if (current.options.length <= 2) return current;
-      return { ...current, options: current.options.filter((option) => option.id !== optionId) };
+      const options = current.options || [];
+      if (options.length <= 2) return current;
+      return { ...current, options: options.filter((option) => option.id !== optionId) };
     });
     setFormError("");
   };
@@ -524,7 +534,7 @@ function AdminEditorModal({ entity, item, open, onClose }) {
                 </button>
               </div>
               <div className="space-y-2">
-                {form.options.map((option, index) => (
+                {(form.options || []).map((option, index) => (
                   <div key={option.id} className="flex items-center gap-2 rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-2">
                     <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-fixed/50 text-xs font-bold text-primary-container">{index + 1}</span>
                     <input
@@ -535,7 +545,7 @@ function AdminEditorModal({ entity, item, open, onClose }) {
                     />
                     <button
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-error transition hover:bg-error-container disabled:cursor-not-allowed disabled:opacity-30"
-                      disabled={form.options.length <= 2}
+                      disabled={(form.options || []).length <= 2}
                       type="button"
                       aria-label="Видалити варіант"
                       onClick={() => removeSurveyOption(option.id)}
@@ -591,7 +601,7 @@ function AdminListPage({ entity }) {
   const [filters, setFilters] = useState([]);
   const [editorOpen, setEditorOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
-  const items = data[entity];
+  const items = Array.isArray(data[entity]) ? data[entity] : [];
 
   const filterItems = useMemo(() => {
     const values = Array.from(new Set(items.map((item) => filterValue(entity, item)).filter(Boolean)));
@@ -708,7 +718,7 @@ function AdminDetailPage({ entity }) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
-  const item = data[entity].find((entry) => entry.id === id);
+  const item = (Array.isArray(data[entity]) ? data[entity] : []).find((entry) => entry.id === id);
 
   const confirmLogout = () => {
     logout();

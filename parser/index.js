@@ -35,9 +35,14 @@ app.listen(port, () => {
   console.log(`Scraper service listening on port ${port}`);
 });
 
-// Start scheduled web scraping and Telegram listeners.
+// Start scheduled web scraping and Telegram listeners. Web sources do not require Telegram
+// credentials, so a local deployment can still ingest civic/news sites without a TG session.
 startScheduler(webPlugins);
-await startTelegramClient(tgPlugins);
+if (process.env.TG_API_ID && process.env.TG_API_HASH && process.env.TG_SESSION) {
+  await startTelegramClient(tgPlugins);
+} else {
+  console.warn('Telegram credentials are missing; web sources will continue without Telegram ingestion');
+}
 
 if (process.env.PLACES_IMPORT_ENABLED === 'true') {
   const placesUri = process.env.PLACES_MONGO_URI || process.env.MONGO_URI;

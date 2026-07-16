@@ -20,7 +20,7 @@ import random
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
-from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI
+from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI, DefaultAioHttpClient
 from openai.types.chat.completion_create_params import ResponseFormat
 from tenacity import AsyncRetrying, RetryCallState, retry_if_exception, stop_after_attempt
 
@@ -53,8 +53,19 @@ class OpenAILLMClient(Generator, VisionGenerator):
     across requests."""
 
     def __init__(self, api_key: str, model: str) -> None:
-        self._client = AsyncOpenAI(api_key=api_key)
+        # The project owns retry policy below (bounded attempts + jittered backoff). OpenAI's
+        # SDK defaults to two additional automatic retries, which would multiply the retry
+        # budget and make a transient failure look like a very slow RAG response.
+        self._client = AsyncOpenAI(
+            api_key=api_key,
+            max_retries=0,
+            http_client=DefaultAioHttpClient(),
+        )
         self._model = model
+
+    async def close(self) -> None:
+        """Release the shared aiohttp connection pool during application shutdown."""
+        await self._client.close()
 
     async def probe(self) -> None:
         """Perform a bounded dependency probe used by /health/deps."""

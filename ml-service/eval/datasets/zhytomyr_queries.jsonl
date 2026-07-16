@@ -1,0 +1,151 @@
+{"query":"Кто мэр Житомира?","kind":"civic"}
+{"query":"Хто мер Житомира?","kind":"civic"}
+{"query":"где сделать паспорт в Житомире?","kind":"government"}
+{"query":"А где суд?","kind":"government"}
+{"query":"где находится ЦНАП?","kind":"services"}
+{"query":"Де ЦНАП у Житомирі?","kind":"services"}
+{"query":"Куда пойти поесть в Житомире?","kind":"food"}
+{"query":"Где можно купить воду в центре?","kind":"shopping"}
+{"query":"Какие супермаркеты есть в Житомире?","kind":"shopping"}
+{"query":"Где ближайшая аптека?","kind":"health"}
+{"query":"Где остановка троллейбуса?","kind":"transport"}
+{"query":"Как доехать маршруткой?","kind":"transport"}
+{"query":"Який маршрут тролейбуса №15А?","kind":"transport_route"}
+{"query":"Какие музеи есть в центре?","kind":"culture"}
+{"query":"Где библиотека в Житомире?","kind":"culture"}
+{"query":"Расскажи случайный факт, не связанный с Житомиром.","kind":"general"}
+{"query":"хто зараз мер Житомира","kind":"civic"}
+{"query":"мэр Житомира кто он","kind":"civic"}
+{"query":"мерчик Житомира","kind":"civic"}
+{"query":"Хто міський голова Житомира?","kind":"civic"}
+{"query":"а хто мерито?","kind":"civic"}
+{"query":"Кто руководит городом Житомиром?","kind":"civic"}
+{"query":"кто глава города Житомир","kind":"civic"}
+{"query":"Де міська рада Житомира?","kind":"government"}
+{"query":"где находится горсовет Житомира","kind":"government"}
+{"query":"адрес Житомирского горсовета","kind":"government"}
+{"query":"Як звернутися до міської ради?","kind":"government"}
+{"query":"телефон міської ради Житомира","kind":"government"}
+{"query":"куда позвонить в мэрию Житомира","kind":"government"}
+{"query":"Где сделать загранпаспорт в Житомире?","kind":"government"}
+{"query":"де оформити паспорт","kind":"government"}
+{"query":"паспорт громадянина де роблять","kind":"government"}
+{"query":"куда идти за айди картой в Житомире","kind":"government"}
+{"query":"Де отримати ID-картку?","kind":"government"}
+{"query":"как заменить паспорт после 45","kind":"government"}
+{"query":"де зробити закордонний паспорт у Житомирі","kind":"government"}
+{"query":"Где оформить документы ребенку","kind":"government"}
+{"query":"як записатися в ЦНАП","kind":"services"}
+{"query":"ЦНАП адреса Житомир","kind":"services"}
+{"query":"цнап график работы","kind":"services"}
+{"query":"Цнап работает в субботу?","kind":"services"}
+{"query":"Як додзвонитися до ЦНАПу?","kind":"services"}
+{"query":"где прозрачный офис Житомир","kind":"services"}
+{"query":"де отримати адміністративні послуги","kind":"services"}
+{"query":"потрібна довідка в Житомирі де взяти","kind":"services"}
+{"query":"куда обращаться за субсидией","kind":"services"}
+{"query":"де оформити пільгу","kind":"services"}
+{"query":"Як подати звернення громадянина?","kind":"services"}
+{"query":"куда пожаловаться на коммунальную службу","kind":"services"}
+{"query":"Де суд у Житомирі?","kind":"government"}
+{"query":"какой суд есть в Житомире","kind":"government"}
+{"query":"адрес апелляционного суда Житомир","kind":"government"}
+{"query":"де районний суд","kind":"government"}
+{"query":"куда нести иск в Житомире","kind":"government"}
+{"query":"Где находится суд по гражданским делам?","kind":"government"}
+{"query":"суд телефон Житомир","kind":"government"}
+{"query":"Де купити питну воду?","kind":"shopping"}
+{"query":"где купить воду в центре Житомира","kind":"shopping"}
+{"query":"вода магазин рядом центр","kind":"shopping"}
+{"query":"де найближчий супермаркет","kind":"shopping"}
+{"query":"супермаркеты возле Королева","kind":"shopping"}
+{"query":"какие магазины продуктов работают сейчас","kind":"shopping"}
+{"query":"де купити продукти в Житомирі","kind":"shopping"}
+{"query":"магазин у центрі Житомира","kind":"shopping"}
+{"query":"Где рынок в Житомире?","kind":"shopping"}
+{"query":"ринок Житній адреса","kind":"shopping"}
+{"query":"де купити ліки","kind":"health"}
+{"query":"где аптека в центре Житомира","kind":"health"}
+{"query":"ближайшая аптека к вокзалу","kind":"health"}
+{"query":"Які аптеки працюють цілодобово?","kind":"health"}
+{"query":"где детская больница Житомир","kind":"health"}
+{"query":"де міська лікарня","kind":"health"}
+{"query":"как вызвать скорую в Житомире","kind":"health"}
+{"query":"телефон поликлиники Житомир","kind":"health"}
+{"query":"Де здати аналізи?","kind":"health"}
+{"query":"куда обратиться к семейному врачу","kind":"health"}
+{"query":"Куда пойти поесть в центре?","kind":"food"}
+{"query":"де поїсти недорого","kind":"food"}
+{"query":"кафе возле Михайловской","kind":"food"}
+{"query":"найкращі кафе Житомира","kind":"food"}
+{"query":"где ресторан с украинской кухней","kind":"food"}
+{"query":"де випити кави в центрі","kind":"food"}
+{"query":"кафе с детской комнатой Житомир","kind":"food"}
+{"query":"пицца Житомир центр где поесть","kind":"food"}
+{"query":"де замовити їжу","kind":"food"}
+{"query":"какие кофейни открыты вечером","kind":"food"}
+{"query":"маршрут троллейбуса 15а","kind":"transport_route"}
+{"query":"тролейбус № 15А маршрут","kind":"transport_route"}
+{"query":"куди їде тролейбус 15А","kind":"transport_route"}
+{"query":"Гідропарк Селецька тролейбус","kind":"transport_route"}
+{"query":"какой автобус ходит до вокзала","kind":"transport"}
+{"query":"де зупинка автобуса","kind":"transport"}
+{"query":"где остановка возле площади","kind":"transport"}
+{"query":"Як доїхати маршруткою до центру?","kind":"transport"}
+{"query":"маршрутки Житомира расписание","kind":"transport"}
+{"query":"де автовокзал Житомир","kind":"transport"}
+{"query":"як доїхати до вокзалу","kind":"transport"}
+{"query":"где купить билет на автобус","kind":"transport"}
+{"query":"Де музей у Житомирі?","kind":"culture"}
+{"query":"музеи Житомира список","kind":"culture"}
+{"query":"какие театры есть в Житомире","kind":"culture"}
+{"query":"де театр у центрі","kind":"culture"}
+{"query":"где кинотеатр в центре","kind":"culture"}
+{"query":"бібліотека Житомир адреса","kind":"culture"}
+{"query":"куда сходить на выставку","kind":"culture"}
+{"query":"музей космонавтики график","kind":"culture"}
+{"query":"де погуляти в Житомирі","kind":"culture"}
+{"query":"парки Житомира","kind":"culture"}
+{"query":"где школа рядом с домом","kind":"education"}
+{"query":"де дитячий садок","kind":"education"}
+{"query":"школи Житомира адреси","kind":"education"}
+{"query":"как записать ребенка в садик","kind":"education"}
+{"query":"де університет у Житомирі","kind":"education"}
+{"query":"кружки для детей Житомир","kind":"education"}
+{"query":"де спортивна школа","kind":"education"}
+{"query":"где оформить льготу на питание в школе","kind":"education"}
+{"query":"коли вивозять сміття","kind":"utilities"}
+{"query":"где узнать график вывоза мусора","kind":"utilities"}
+{"query":"куди повідомити про яму на дорозі","kind":"utilities"}
+{"query":"куда звонить если нет воды","kind":"utilities"}
+{"query":"де перевірити відключення води","kind":"utilities"}
+{"query":"нет отопления куда обращаться","kind":"utilities"}
+{"query":"як передати показники лічильника","kind":"utilities"}
+{"query":"где узнать тарифы Житомир","kind":"utilities"}
+{"query":"телефон водоканала Житомир","kind":"utilities"}
+{"query":"что делать если не работает лифт","kind":"utilities"}
+{"query":"Останні новини Житомира","kind":"news"}
+{"query":"що нового в Житомирі сьогодні","kind":"news"}
+{"query":"последние новости города","kind":"news"}
+{"query":"новости Житомир инфо","kind":"news"}
+{"query":"які новини міської ради","kind":"news"}
+{"query":"покажи свежие новости","kind":"news"}
+{"query":"Что сейчас происходит в Житомире?","kind":"news"}
+{"query":"новости за сегодня Житомир","kind":"news"}
+{"query":"де подивитися новини міста","kind":"news"}
+{"query":"дай последние пять новостей","kind":"news"}
+{"query":"привет","kind":"general"}
+{"query":"добрий день","kind":"general"}
+{"query":"что умеет этот помощник","kind":"general"}
+{"query":"розкажи про себе","kind":"general"}
+{"query":"расскажи анекдот","kind":"general"}
+{"query":"какая столица Франции","kind":"general"}
+{"query":"кто выиграл чемпионат мира","kind":"general"}
+{"query":"сколько будет два плюс два","kind":"general"}
+{"query":"переведи это на английский","kind":"general"}
+{"query":"помоги написать поздравление","kind":"general"}
+{"query":"какая погода в Житомире","kind":"live"}
+{"query":"погода сегодня в Житомире","kind":"live"}
+{"query":"котра зараз година в Житомирі","kind":"live"}
+{"query":"когда восход солнца в Житомире","kind":"live"}
+{"query":"температура сейчас Житомир","kind":"live"}

@@ -28,6 +28,9 @@ export class ApiError extends Error {
   static gatewayTimeout(message = "Upstream service timed out") {
     return new ApiError(504, message);
   }
+  static tooManyRequests(message = "Too many requests") {
+    return new ApiError(429, message);
+  }
 }
 
 export default ApiError;

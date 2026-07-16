@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import Shell from "../../components/layout/Shell.jsx";
 import PageHero from "../../components/layout/PageHero.jsx";
@@ -8,13 +9,14 @@ import SearchInput from "../../components/ui/SearchInput.jsx";
 import { serviceCards } from "../../consts/serviceData.js";
 
 export default function ServicesPage() {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
 
   const filteredCards = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return serviceCards.filter((card) => {
-      const title = card.title.toLowerCase();
-      const subtitle = card.subtitle.toLowerCase();
+      const title = t(card.titleKey).toLowerCase();
+      const subtitle = t(card.subtitleKey).toLowerCase();
       return !normalizedQuery || `${title} ${subtitle}`.includes(normalizedQuery);
     });
   }, [query]);
@@ -35,8 +37,8 @@ export default function ServicesPage() {
                   <Icon name={card.icon} filled className="text-3xl" />
                 </span>
                 <span>
-                  <span className="block text-base font-bold text-primary">{card.title}</span>
-                  <span className="mt-1 block text-xs text-on-surface-variant">{card.subtitle}</span>
+                  <span className="block text-base font-bold text-primary">{t(card.titleKey)}</span>
+                  <span className="mt-1 block text-xs text-on-surface-variant">{t(card.subtitleKey)}</span>
                 </span>
               </>
             );

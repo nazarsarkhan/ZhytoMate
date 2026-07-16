@@ -492,7 +492,9 @@ async def test_title_query_cannot_be_downgraded_to_conversation_by_classifier() 
 # sim_gate on dense cosine similarity alone despite a directly-relevant chunk being in the KB).
 # ---------------------------------------------------------------------------
 
-_CNAP_QUERY = "Де ЦНАП?"
+# The civic canonicalizer intentionally reduces short CNAP location questions to the stable
+# subject anchor so split official chunks can be found by lexical retrieval.
+_CNAP_QUERY = "ЦНАП"
 
 
 async def test_strong_lexical_match_grounds_a_low_dense_similarity_cnap_style_query() -> None:

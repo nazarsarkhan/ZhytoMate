@@ -9,6 +9,7 @@ import { useAutoScrollToBottom } from "../../hooks/useAutoScrollToBottom.js";
 import { useAssistantChat, useCancelAction, useConfirmAction } from "../../hooks/useAssistantChat.js";
 import { useConversation } from "../../hooks/useConversation.js";
 import { formatDate } from "../../lib/formatDate.js";
+import LinkifiedText from "../../components/assistant/LinkifiedText.jsx";
 
 // The backend never clears a message's own stored actionCard once set - confirming, cancelling, or
 // superseding a draft only ever APPENDS a new message (see assistantActions.service.js and
@@ -51,7 +52,7 @@ function MessageBubble({ message, index, conversationId, confirmAction, cancelAc
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div className={`max-w-[86%] rounded-2xl px-4 py-3 text-sm leading-5 shadow-soft ${isUser ? "rounded-br-sm bg-primary-container text-on-primary" : message.isError ? "rounded-bl-sm border border-error-container bg-error-container/30 text-error" : "rounded-bl-sm border border-outline-variant/30 bg-surface-container-lowest text-on-surface-variant"}`}>
-        <p>{message.text}</p>
+        <p className="break-words"><LinkifiedText>{message.text}</LinkifiedText></p>
       </div>
     </div>
   );

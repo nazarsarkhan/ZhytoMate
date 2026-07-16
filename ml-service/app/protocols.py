@@ -80,5 +80,6 @@ class Retriever(ABC):
 
     @abstractmethod
     async def retrieve(
-        self, query_text: str, query_vec: np.ndarray, district: str | None, k: int
+        self, query_text: str, query_vec: np.ndarray, district: str | None, k: int,
+        category: str | None = None,
     ) -> RetrievalOutcome: ...

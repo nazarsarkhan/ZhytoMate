@@ -11,8 +11,8 @@ export function upsertNewsByExternalId(fields) {
   );
 }
 
-export function findNews({ category, limit }) {
-  const filter = category ? { category } : {};
+export function findNews({ category, source, limit }) {
+  const filter = { ...(category ? { category } : {}), ...(source ? { source } : {}) };
   return News.find(filter).sort({ publishedAt: -1 }).limit(limit);
 }
 
