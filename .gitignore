@@ -7,4 +7,5 @@ CLAUDE.md
 .worktrees/
 .playwright-mcp/
 backend_app/uploads/
+zhytomate_backup.sql
 docker-compose.override.yml

@@ -36,6 +36,35 @@ const API_PREFIXES = [
   "/places",
 ];
 
+function isDevCorsOriginAllowed(origin) {
+  if (!origin) return true;
+
+  try {
+    const { hostname } = new URL(origin);
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "::1" ||
+      hostname.startsWith("192.168.") ||
+      hostname.startsWith("10.") ||
+      /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function corsOrigin(origin, callback) {
+  if (
+    config.corsOrigins.includes(origin) ||
+    (!config.isProd && isDevCorsOriginAllowed(origin))
+  ) {
+    return callback(null, true);
+  }
+
+  return callback(null, false);
+}
+
 export function createApp() {
   const app = express();
 
@@ -44,7 +73,10 @@ export function createApp() {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-    res.setHeader("Permissions-Policy", "camera=(), geolocation=(), microphone=()");
+    res.setHeader(
+      "Permissions-Policy",
+      "camera=(), geolocation=(), microphone=()",
+    );
     next();
   });
   app.use(cors({ origin: config.corsOrigins }));
@@ -97,7 +129,9 @@ export function createApp() {
   // of dead-ending in assistantRoutes with a JSON 404 - which is exactly what a hard refresh on
   // the app's own home page used to do.
   app.use((req, res, next) => {
-    const isApiPath = API_PREFIXES.some((prefix) => req.path.startsWith(`${prefix}/`));
+    const isApiPath = API_PREFIXES.some((prefix) =>
+      req.path.startsWith(`${prefix}/`),
+    );
     if (req.method !== "GET" || isApiPath) {
       return next();
     }

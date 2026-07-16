@@ -1,8 +1,7 @@
-// Shared presentation for the three outage states, so the home card and the schedule page render
-// the same icon/colour language. Keys ("on" | "off" | "maybe") mirror OUTAGE_STATUS on the backend.
+// Shared presentation for the three outage states. Keys mirror OUTAGE_STATUS on the backend.
 export const OUTAGE_STATUS_META = {
   on: {
-    labelKey: "outages.status.on",
+    label: "Світло є",
     icon: "bolt",
     tone: "text-green-600",
     bar: "bg-emerald-500",
@@ -10,7 +9,7 @@ export const OUTAGE_STATUS_META = {
     soft: "border-green-200 bg-green-50",
   },
   off: {
-    labelKey: "outages.status.off",
+    label: "Немає світла",
     icon: "power_off",
     tone: "text-error",
     bar: "bg-red-500",
@@ -18,7 +17,7 @@ export const OUTAGE_STATUS_META = {
     soft: "border-error-container bg-error-container/20",
   },
   maybe: {
-    labelKey: "outages.status.maybe",
+    label: "Можливе відключення",
     icon: "schedule",
     tone: "text-amber-600",
     bar: "bg-amber-400",
@@ -27,20 +26,17 @@ export const OUTAGE_STATUS_META = {
   },
 };
 
-// Order used in the legend and any status summaries (worst-to-best reads naturally here).
 export const OUTAGE_LEGEND_ORDER = ["off", "maybe", "on"];
 
-// Slot times come as "HH:00" strings ("24:00" for end-of-day); the leading two digits are the hour.
 export function parseHour(label) {
   return Number(label.slice(0, 2));
 }
 
-// "95" -> "1 год 35 хв" style, via i18n unit keys. Never returns a negative duration.
-export function formatOutageDuration(minutes, t) {
+export function formatOutageDuration(minutes) {
   const safe = Math.max(0, minutes ?? 0);
   const hours = Math.floor(safe / 60);
   const mins = safe % 60;
-  if (hours && mins) return t("outages.durationHM", { h: hours, m: mins });
-  if (hours) return t("outages.durationH", { h: hours });
-  return t("outages.durationM", { m: mins });
+  if (hours && mins) return `${hours} год ${mins} хв`;
+  if (hours) return `${hours} год`;
+  return `${mins} хв`;
 }

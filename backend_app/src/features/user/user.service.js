@@ -115,7 +115,11 @@ export async function previewUserAddress(address) {
   return buildVerifiedAddress(address);
 }
 
-export async function updateUserAvatarFromUpload({ userId, filename, hostUrl }) {
+export async function updateUserAvatarFromUpload({
+  userId,
+  filename,
+  hostUrl,
+}) {
   const previousUser = await findUserById(userId);
   const avatarUrl = `${hostUrl}/uploads/avatars/${filename}`;
   const user = await findUserByIdAndUpdateAvatar({ id: userId, avatarUrl });

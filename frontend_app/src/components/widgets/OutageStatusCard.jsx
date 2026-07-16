@@ -1,11 +1,8 @@
 import { Link } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import Icon from "../ui/Icon.jsx";
 import { useOutageSchedule } from "../../hooks/useOutageSchedule.js";
 import { OUTAGE_STATUS_META, formatOutageDuration } from "../../consts/outageStatus.js";
 
-// Matches the sibling status <article> on the home screen (see statusCards in Assistant/index.jsx)
-// so the row stays visually uniform - this one is just live and clickable.
 const CARD_CLASS =
   "motion-card interactive-card flex min-h-[136px] w-[82%] max-w-[320px] shrink-0 snap-center flex-col rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-3.5 shadow-sm sm:w-[46%] sm:p-4 md:min-h-40 md:w-auto md:max-w-none md:p-5";
 
@@ -25,16 +22,15 @@ function CardFrame({ to, label, icon, tone, title, subtitle }) {
 }
 
 export default function OutageStatusCard() {
-  const { t } = useTranslation();
   const { data, isLoading, isError } = useOutageSchedule();
-  const label = t("outages.cardLabel");
+  const label = "Світло";
 
   if (isLoading) {
-    return <CardFrame to="/services/outages" label={label} icon="bolt" tone="text-on-surface-variant" title={t("outages.cardLoading")} subtitle="" />;
+    return <CardFrame to="/services/outages" label={label} icon="bolt" tone="text-on-surface-variant" title="Завантаження..." subtitle="" />;
   }
 
   if (isError) {
-    return <CardFrame to="/services/outages" label={label} icon="power_off" tone="text-on-surface-variant" title="—" subtitle={t("outages.unavailable")} />;
+    return <CardFrame to="/services/outages" label={label} icon="power_off" tone="text-on-surface-variant" title="-" subtitle="Графік недоступний" />;
   }
 
   if (data?.needsAddress) {
@@ -44,8 +40,8 @@ export default function OutageStatusCard() {
         label={label}
         icon="wrong_location"
         tone="text-on-surface-variant"
-        title={t("outages.needsAddressTitle")}
-        subtitle={t("outages.needsAddressCta")}
+        title="Адресу не вказано"
+        subtitle="Додати адресу"
       />
     );
   }
@@ -56,11 +52,11 @@ export default function OutageStatusCard() {
   return (
     <CardFrame
       to="/services/outages"
-      label={`${label} · ${t("outages.queue", { queue: schedule.queue })}`}
+      label={`${label} · Черга ${schedule.queue}`}
       icon={meta.icon}
       tone={meta.tone}
-      title={t(meta.labelKey)}
-      subtitle={t("outages.changeIn", { time: formatOutageDuration(schedule.now.nextChangeInMinutes, t) })}
+      title={meta.label}
+      subtitle={`Зміна через ${formatOutageDuration(schedule.now.nextChangeInMinutes)}`}
     />
   );
 }

@@ -1,19 +1,14 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import Shell from "../../components/layout/Shell.jsx";
 import BottomNav from "../../components/navigation/BottomNav.jsx";
 import Modal from "../../components/overlay/Modal.jsx";
 import FilterChips from "../../components/ui/FilterChips.jsx";
 import Icon from "../../components/ui/Icon.jsx";
-import { appealCategories, appealStatusLabels, appealStatusTone } from "../../consts/appealCategories.js";
+import { appealCategoryMeta, appealCategories, appealStatusLabels, appealStatusTone } from "../../consts/appealCategories.js";
 import { useAppeals } from "../../hooks/useAppeals.js";
 import { formatDate } from "../../lib/formatDate.js";
 import AppealFormModal from "./components/AppealFormModal.jsx";
-
-function categoryLabelKey(slug) {
-  return appealCategories.find((category) => category.slug === slug)?.label || "Інше";
-}
 
 export default function AppealsPage() {
   const appealsQuery = useAppeals();
@@ -24,7 +19,7 @@ export default function AppealsPage() {
 
   const statusItems = [
     { value: "all", label: "Усі" },
-    ...Array.from(new Set(appeals.map((item) => item.status))).map((status) => ({ value: status, label: appealStatusLabels[status] })),
+    ...Array.from(new Set(appeals.map((item) => item.status))).map((status) => ({ value: status, label: appealStatusLabels[status] || status })),
   ];
   const filteredAppeals = selectedStatuses.length ? appeals.filter((item) => selectedStatuses.includes(item.status)) : appeals;
 
@@ -64,18 +59,18 @@ export default function AppealsPage() {
               >
                 <div className="mb-3 flex items-start justify-between gap-2">
                   <span className="flex items-center gap-1 text-xs text-on-surface-variant"><Icon name="calendar_today" className="text-base" /> {formatDate(item.createdAt)}</span>
-                  <span className={`rounded-md px-2.5 py-1 text-xs font-bold ${appealStatusTone[item.status] || appealStatusTone.new}`}>{appealStatusLabels[item.status]}</span>
+                  <span className={`rounded-md px-2.5 py-1 text-xs font-bold ${appealStatusTone[item.status] || appealStatusTone.new}`}>{appealStatusLabels[item.status] || item.status}</span>
                 </div>
-                <h4 className="text-lg font-bold text-on-surface">{categoryLabelKey(item.category)}</h4>
+                <h4 className="text-lg font-bold text-on-surface">{appealCategoryMeta(item.category).label}</h4>
                 <p className="mt-2 line-clamp-2 text-sm leading-5 text-on-surface-variant">{item.description}</p>
                 <div className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-surface-container-low px-2 py-1.5 text-xs text-on-surface-variant">
                   <Icon name="location_on" className="text-base" /> {item.address}
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-2 border-t border-outline-variant/20 pt-3">
                   {item.response ? (
-                    <span className="inline-flex items-center gap-1 text-xs font-bold text-green-700"><Icon name="mark_chat_read" className="text-base" /> {t("appeals.detail.hasResponse")}</span>
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-green-700"><Icon name="mark_chat_read" className="text-base" /> Є відповідь</span>
                   ) : <span />}
-                  <span className="inline-flex items-center gap-1 text-xs font-bold text-primary">{t("appeals.detail.open")} <Icon name="arrow_forward" className="text-base" /></span>
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-primary">Детальніше <Icon name="arrow_forward" className="text-base" /></span>
                 </div>
               </Link>
             ))}

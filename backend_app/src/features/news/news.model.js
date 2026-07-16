@@ -78,4 +78,37 @@ export function toPublicNews(news) {
   };
 }
 
+export function toPublicParserNews(news) {
+  return {
+    id: news._id.toString(),
+    externalId: news.external_id,
+    title: news.title,
+    summary: news.summary || "",
+    body: news.body || "",
+    bodyHtml: news.body_html || null,
+    source: news.source || "",
+    sourceUrl: news.source_url || null,
+    coverImageUrl: news.cover_image_url || null,
+    images: Array.isArray(news.images)
+      ? news.images.map((image) => ({
+          url: image.url,
+          alt: image.alt || "",
+          caption: image.caption || "",
+        }))
+      : [],
+    category: news.category || "other",
+    district: news.district || null,
+    importance: news.importance,
+    importanceLabel: news.importance_label || "normal",
+    isAnnouncement: Boolean(news.is_announcement),
+    eventDate: news.event_date || null,
+    publishedAt: news.published_at || null,
+    expiresAt: news.expires_at || null,
+    tags: Array.isArray(news.tags) ? news.tags : [],
+    lang: news.lang || "uk",
+    createdAt: news.createdAt,
+    updatedAt: news.updatedAt,
+  };
+}
+
 export default News;

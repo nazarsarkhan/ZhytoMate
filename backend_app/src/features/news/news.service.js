@@ -2,9 +2,11 @@ import { ApiError } from "../../shared/ApiError.js";
 import {
   findNews,
   findNewsById,
+  findParserNews,
+  findParserNewsById,
   upsertNewsByExternalId,
 } from "./news.repository.js";
-import { toPublicNews } from "./news.model.js";
+import { toPublicNews, toPublicParserNews } from "./news.model.js";
 
 // The parser (parser/core/news/news-mapper.js) emits snake_case; the model is camelCase. This is
 // the single place that bridges the two shapes on ingest.
@@ -45,10 +47,15 @@ export async function listNews({ category, source, limit }) {
 
 export async function getNewsById(id) {
   const news = await findNewsById(id);
-  if (!news) {
+  if (news) {
+    return toPublicNews(news);
+  }
+
+  const parserNews = await findParserNewsById(id);
+  if (!parserNews) {
     throw ApiError.notFound("News not found");
   }
-  return toPublicNews(news);
+  return toPublicParserNews(parserNews);
 }
 
 export default {

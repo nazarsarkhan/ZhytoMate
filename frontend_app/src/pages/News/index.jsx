@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 import Shell from "../../components/layout/Shell.jsx";
 import PageHero from "../../components/layout/PageHero.jsx";
 import BottomNav from "../../components/navigation/BottomNav.jsx";
@@ -12,17 +11,7 @@ import { newsCategory } from "../../consts/newsCategories.js";
 import { useNews } from "../../hooks/useNews.js";
 import { formatDate } from "../../lib/formatDate.js";
 
-const categoryLabels = {
-  all: "Усі",
-  utilities: "Комуналка",
-  transport: "Транспорт",
-  official: "Офіційно",
-  events: "Події",
-};
-
 export default function NewsPage() {
-  const { t, i18n } = useTranslation();
-  const locale = i18n.resolvedLanguage;
   const newsQuery = useNews();
   const news = newsQuery.data || [];
 
@@ -30,15 +19,13 @@ export default function NewsPage() {
   const [selectedCategories, setSelectedCategories] = useState([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  // Only offer chips for categories actually present in the fetched news (plus "all"), so the
-  // filter never lists an empty bucket. FilterChips treats the "all" chip as "clear selection".
   const categories = useMemo(() => {
     const present = Array.from(new Set(news.map((item) => item.category).filter(Boolean)));
     return [
-      { value: "all", label: t("categories.all") },
-      ...present.map((value) => ({ value, label: t(newsCategory(value).labelKey) })),
+      { value: "all", label: "Усі" },
+      ...present.map((value) => ({ value, label: newsCategory(value).label })),
     ];
-  }, [news, t]);
+  }, [news]);
 
   const filteredNews = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -73,7 +60,7 @@ export default function NewsPage() {
               <span className="min-w-0 flex-1">
                 <span className="mb-2 flex items-center justify-between gap-2 text-xs text-on-surface-variant">
                   <span className="truncate">{item.source}</span>
-                  <span className="shrink-0">{formatDate(item.publishedAt, locale)}</span>
+                  <span className="shrink-0">{formatDate(item.publishedAt)}</span>
                 </span>
                 <span className="block text-base font-bold leading-tight text-on-surface">{item.title}</span>
                 <span className="mt-2 block line-clamp-3 text-sm leading-5 text-on-surface-variant">{item.summary}</span>
@@ -82,10 +69,10 @@ export default function NewsPage() {
           );
         })}
         {newsQuery.isLoading ? (
-          <p className="col-span-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-6 text-center text-sm text-on-surface-variant">{t("common.loading")}</p>
+          <p className="col-span-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-6 text-center text-sm text-on-surface-variant">Завантаження...</p>
         ) : null}
         {!newsQuery.isLoading && !filteredNews.length ? (
-          <p className="col-span-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-6 text-center text-sm text-on-surface-variant">{t("news.empty")}</p>
+          <p className="col-span-full rounded-xl border border-outline-variant/30 bg-surface-container-lowest p-6 text-center text-sm text-on-surface-variant">Новини не знайдено</p>
         ) : null}
       </main>
       <BottomNav active="news" />

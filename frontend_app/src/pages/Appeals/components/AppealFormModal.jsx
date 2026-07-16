@@ -49,16 +49,12 @@ export default function AppealFormModal({ open, onClose }) {
       const result = await uploadPhoto.mutateAsync(file);
       setUploadedImageUrl(result.imageUrl);
       setTriage(result.triage);
-      // The category is always the citizen's own choice from the chip list below - AI triage only
-      // offers an optional pre-fill. When ml-service is available we suggest a category/description,
-      // but never overwrite whatever the user has already picked or typed (current || ...); when it
-      // is unavailable (triage: null) nothing is pre-filled and the user simply chooses manually.
       if (result.triage) {
         setCategory((current) => current || result.triage.category);
         setDescription((current) => current || result.triage.description);
       }
     } catch {
-      // uploadPhoto.error is rendered below; the preview stays so the user can pick another file.
+      // Error is rendered below.
     }
   };
 
@@ -81,7 +77,7 @@ export default function AppealFormModal({ open, onClose }) {
       setSubmitted(true);
       resetForm();
     } catch {
-      // createAppeal.error is rendered below
+      // Error is rendered below.
     }
   };
 
@@ -146,7 +142,7 @@ export default function AppealFormModal({ open, onClose }) {
             <p className="mt-1.5 ml-1 text-xs text-on-surface-variant">Це може не бути міською проблемою — перевірте перед надсиланням.</p>
           ) : null}
           {uploadedImageUrl && !triage && !uploadPhoto.isPending ? (
-            <p className="mt-1.5 ml-1 text-xs text-on-surface-variant">{t("appeals.photoSavedManual")}</p>
+            <p className="mt-1.5 ml-1 text-xs text-on-surface-variant">Фото збережено. AI недоступний — оберіть категорію та опишіть проблему вручну.</p>
           ) : null}
         </div>
 
