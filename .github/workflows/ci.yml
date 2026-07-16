@@ -58,11 +58,9 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - name: Start backend and ML services for live tests
-        if: env.RUN_LIVE_RAG == 'true'
         working-directory: .
         run: docker compose up -d --build mongo postgres ml backend
       - name: Wait for backend and ML health
-        if: env.RUN_LIVE_RAG == 'true'
         working-directory: .
         run: |
           for attempt in {1..60}; do
@@ -77,6 +75,6 @@ jobs:
           exit 1
       - run: npm run test:e2e
       - name: Stop backend and ML services
-        if: always() && env.RUN_LIVE_RAG == 'true'
+        if: always()
         working-directory: .
         run: docker compose down -v
