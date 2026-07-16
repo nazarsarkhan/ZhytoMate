@@ -14,7 +14,7 @@ Must NOT import:  a live asyncpg pool (the function under test touches no I/O)
 """
 from __future__ import annotations
 
-from app.components.repository import _significant_terms
+from app.components.repository import _lexical_query, _significant_terms
 
 
 def test_extracts_significant_terms_and_drops_short_stopwords() -> None:
@@ -30,3 +30,13 @@ def test_dedupes_and_lowercases() -> None:
 
 def test_empty_when_only_short_or_numeric_tokens() -> None:
     assert _significant_terms("як у на 2026 12") == []
+
+
+def test_drops_question_words_so_short_title_queries_match_the_evidence_term() -> None:
+    assert _significant_terms("Хто мер?") == ["мер"]
+    assert _significant_terms("Кто мэр?") == ["мэр"]
+
+
+def test_removes_question_words_before_the_and_lexical_query() -> None:
+    assert _lexical_query("Хто мер?") == "мер?"
+    assert _lexical_query("Кто сейчас мэр?") == "сейчас мэр?"

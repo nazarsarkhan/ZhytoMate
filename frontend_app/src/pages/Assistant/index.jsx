@@ -51,7 +51,14 @@ export default function AssistantPage() {
       if (result.conversationId) setConversationId(result.conversationId);
       setMessages((current) => [
         ...(result.actionCard ? collapseEarlierActionCards(current) : current),
-        { role: "assistant", text: result.answer, actionCard: result.actionCard || null },
+        {
+          role: "assistant",
+          text: result.answer,
+          actionCard: result.actionCard || null,
+          answerStatus: result.answerStatus || "ungrounded",
+          verified: result.verified === true,
+          sourcesUsed: Array.isArray(result.sourcesUsed) ? result.sourcesUsed : [],
+        },
       ]);
     } catch {
       setMessages((current) => [...current, { role: "assistant", text: "Щось пішло не так. Спробуйте ще раз.", isError: true }]);
@@ -141,6 +148,21 @@ export default function AssistantPage() {
                   ) : (
                     <div className={`max-w-[85%] rounded-2xl border p-4 text-sm leading-5 ${isUser ? "rounded-tr-sm border-primary-container/20 bg-primary-container text-on-primary" : message.isError ? "rounded-tl-sm border-error-container bg-error-container/30 text-error" : "rounded-tl-sm border-outline-variant/20 bg-surface-container text-on-surface-variant"}`}>
                       {message.text}
+                      {message.verified && message.sourcesUsed?.length ? (
+                        <div className="mt-2 border-t border-outline-variant/30 pt-2 text-xs text-on-surface-variant">
+                          <p className="font-semibold">Джерела</p>
+                          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                            {message.sourcesUsed.slice(0, 3).map((source, sourceIndex) => (
+                              <li key={`${source.source}-${sourceIndex}`}>{source.source}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {!isUser && message.answerStatus === "verification_failed" ? (
+                        <p className="mt-2 border-t border-outline-variant/30 pt-2 text-xs font-semibold text-on-surface-variant">
+                          Інформацію не вдалося підтвердити офіційними джерелами.
+                        </p>
+                      ) : null}
                     </div>
                   )}
                 </div>

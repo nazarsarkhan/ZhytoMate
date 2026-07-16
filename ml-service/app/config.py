@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     answer_cache_ttl_seconds: int = 120
     answer_cache_maxsize: int = 200
     rrf_k: int = 60                  # RRF smoothing constant
+    knowledge_base_version: int = 1  # incremented after successful ingest/delete
 
     model_config = SettingsConfigDict(
         env_file=".env",

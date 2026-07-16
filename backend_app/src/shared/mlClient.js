@@ -68,6 +68,9 @@ export async function queryAssistant({ userQuery, userId, district }) {
     sourcesUsed: result.sources_used,
     confidence: result.confidence,
     actionIntent: result.action_intent || null,
+    grounded: result.grounded === true,
+    verified: result.verified === true,
+    answerStatus: result.answer_status || "ungrounded",
   };
 }
 

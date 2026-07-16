@@ -56,6 +56,10 @@ class OpenAILLMClient(Generator, VisionGenerator):
         self._client = AsyncOpenAI(api_key=api_key)
         self._model = model
 
+    async def probe(self) -> None:
+        """Perform a bounded dependency probe used by /health/deps."""
+        await self._client.models.list()
+
     async def generate(
         self,
         prompt: str,

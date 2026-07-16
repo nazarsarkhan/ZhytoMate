@@ -19,6 +19,13 @@ Must NOT import:  api/*, services/*; concrete components/*; FastAPI, asyncpg, se
 """
 from __future__ import annotations
 
+from app.domain.civic_verification import (
+    TITLE_NOT_SUPPORTED_ANSWER,
+    is_civic_information_query,
+    normalize_civic_information_query,
+    normalize_civic_title_query,
+    verify_civic_context,
+)
 from app.pipeline.base import (
     RETRIEVE_LIMIT,
     RagContext,
@@ -68,11 +75,26 @@ class SimpleRAGPipeline(RAGPipeline):
         # for retrieval in one call (a Ukrainian query skips it). Generation still gets the ORIGINAL
         # query and answers in answer_lang, so the reply comes back in the user's language (never
         # Russian — answer_lang is already policy-resolved by detect_and_translate).
-        answer_lang, retrieval_query = await detect_and_translate(self._generator, ctx.user_query)
+        retrieval_input = normalize_civic_information_query(
+            normalize_civic_title_query(ctx.user_query)
+        )
+        answer_lang, retrieval_query = await detect_and_translate(self._generator, retrieval_input)
         query_vec = await self._embedder.encode_query(retrieval_query)
         outcome = await self._retriever.retrieve(
             retrieval_query, query_vec, ctx.district_slug, k=RETRIEVE_LIMIT
         )
+        verification = verify_civic_context(
+            ctx.user_query, [item.text for item in outcome.fused]
+        )
+        if verification.blocked:
+            return RagResult(
+                answer=TITLE_NOT_SUPPORTED_ANSWER,
+                sources_used=[],
+                confidence=0.0,
+                route=ctx.route,
+                action_intent=action_intent,
+                debug={"grounded": False, "verification_failed": verification.reason},
+            )
         # A genuine rank-1 agreement between the fused list and the raw lexical leg (excluding a
         # degenerate single-common-word OR-fallback coincidence — see RetrievalOutcome
         # .has_strong_lexical_match) grounds an answer even when dense top1_sim alone sits below
@@ -88,7 +110,7 @@ class SimpleRAGPipeline(RAGPipeline):
             question=ctx.user_query,
             route=ctx.route,
             answer_lang=answer_lang,
-            force_ungrounded=conversational,
+            force_ungrounded=conversational and not is_civic_information_query(ctx.user_query),
             strong_lexical_match=strong_lexical_match,
         )
         return result.model_copy(update={"action_intent": action_intent})

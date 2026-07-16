@@ -52,6 +52,7 @@ from openai import APIError, APITimeoutError
 from pydantic import BaseModel, Field
 
 from app.domain.actions import KNOWN_ACTIONS
+from app.domain.civic_verification import is_civic_information_query, is_no_information_answer
 from app.domain.confidence import ConfidenceBand, confidence_band
 from app.domain.context import CONTEXT_TOKEN_BUDGET, assemble_context
 from app.domain.language import detect_query_language, is_ukrainian, resolve_answer_lang
@@ -196,7 +197,18 @@ async def check_query_safety(
         # Strict identity check, not bool(...): a malformed reply (a stray string "false", a
         # missing key, a non-boolean value) must resolve to unsafe, never be coerced to safe by
         # truthiness (e.g. bool("false") is True — a real footgun given the fail-closed policy).
-        is_safe = parsed.get("safe") is True
+        classifier_safe = parsed.get("safe") is True
+        # The LLM safety classifier is intentionally conservative, but it can occasionally
+        # mistake an ordinary civic noun (for example, "where is the court?") for a sensitive
+        # query. A narrow civic allowlist may recover only when the deterministic OPSEC gate also
+        # confirms there is no reconnaissance/security wording; military-location queries remain
+        # blocked regardless of the LLM result.
+        civic_false_positive = (
+            parsed.get("safe") is False
+            and is_civic_information_query(query)
+            and not contains_opsec_risk_terms(query)
+        )
+        is_safe = classifier_safe or civic_false_positive
         conversational = is_safe and parsed.get("conversational") is True
         raw_action_intent = parsed.get("action_intent")
         action_intent = (
@@ -343,6 +355,16 @@ async def run_shared_tail(
         llm_elapsed_s = time.perf_counter() - llm_start
         llm_latency_seconds.observe(llm_elapsed_s)
 
+    # A retrieval hit is not evidence when the generated answer explicitly says that the
+    # requested information is unavailable. This commonly happens for semantically similar but
+    # non-answer pages (e.g. a passport query retrieving generic city-service pages). Do not leak
+    # those candidates as sources or mark the response as verified.
+    answer_no_info = grounded and is_no_information_answer(answer)
+    if answer_no_info:
+        grounded = False
+        top_results = []
+        confidence = 0.0
+
     sources = [
         SourceUsed(
             source=r.source,
@@ -359,6 +381,7 @@ async def run_shared_tail(
             "n_chunks": len(top_results), "llm_ok": llm_ok, "llm_retries": retries,
             "llm_ms": round(llm_elapsed_s * 1000, 1),
             "strong_lexical_match": strong_lexical_match,
+            "answer_no_info": answer_no_info,
         },
     )
 

@@ -24,9 +24,10 @@ from __future__ import annotations
 
 import json
 
+from app.domain.civic_verification import TITLE_NOT_SUPPORTED_ANSWER
 from app.domain.context import CONTEXT_TOKEN_BUDGET
 from app.pipeline.agent import AgentRAGPipeline
-from app.pipeline.base import RagContext
+from app.pipeline.base import RETRIEVE_LIMIT, RagContext
 from app.schemas.common import QueryRoute
 from app.schemas.retrieval import RetrievalOutcome, RetrievalResult
 from tests.fakes.fake_embedder import FakeEmbedder
@@ -98,6 +99,29 @@ async def test_all_subqueries_sufficient_synthesizes_without_any_rewrite() -> No
     call_texts = [c[0] for c in retriever.calls]
     assert call_texts.count(_TRASH_Q) == 1
     assert call_texts.count(_LIGHT_Q) == 1
+
+
+async def test_agent_blocks_unsupported_title_before_decomposition_or_retrieval() -> None:
+    retriever = FakeRetriever(
+        {
+            "Хто зараз мер Житомира?": _outcome(
+                _hit(1, 0.95, "Заступник міського голови Смаль О.А.")
+            )
+        }
+    )
+    generator = FakeGenerator(result=(json.dumps(["Хто мер Житомира?"]), 0))
+    pipeline = _pipeline(retriever, generator)
+
+    result = await pipeline.run(
+        RagContext(
+            user_query="Хто зараз мер Житомира?", district_slug=None, route=QueryRoute.COMPLEX
+        )
+    )
+
+    assert result.answer == TITLE_NOT_SUPPORTED_ANSWER
+    assert result.debug["verification_failed"] == "title_not_supported"
+    assert generator.call_count == 0
+    assert retriever.calls == [("Хто зараз мер Житомира?", None, RETRIEVE_LIMIT)]
 
 
 async def test_only_the_first_dry_subquery_is_rewritten_and_reretried() -> None:

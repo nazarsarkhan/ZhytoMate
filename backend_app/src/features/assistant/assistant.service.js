@@ -9,6 +9,8 @@ import {
   setPendingAction,
 } from "../conversation/conversation.repository.js";
 import { deriveConversationTitle } from "../conversation/conversation.model.js";
+import { searchPlaces } from "../places/places.repository.js";
+import { detectPlaceQuery, formatPlaceAnswer } from "../places/places-assistant.js";
 
 const UNABLE_TO_PROCESS_MESSAGE =
   "Вибачте, не вдалося обробити повідомлення. Спробуйте ще раз.";
@@ -76,11 +78,34 @@ async function resolveDraftState({ conversation, action, extraction, isOpeningTu
 // message alone already contains every required slot, resolveDraftState takes the confirming
 // branch immediately rather than forcing an unnecessary extra "collecting" turn.
 async function handleNoPendingAction({ conversation, userQuery, userId, district }) {
+  const placeIntent = detectPlaceQuery(userQuery);
+  if (placeIntent) {
+    const catalog = await searchPlaces({ category: placeIntent.category, limit: 10, offset: 0, radius_m: 5000 });
+    const answer = formatPlaceAnswer(catalog.items);
+    if (answer) {
+      await appendAssistantMessage(conversation, { text: answer });
+      return {
+        answer,
+        sourcesUsed: catalog.items.slice(0, 10).map((item) => item.sourceUrl),
+        confidence: 0.9,
+        grounded: true,
+        verified: true,
+        answerStatus: "grounded",
+      };
+    }
+  }
   const result = await callAssistant({ userQuery, userId, district });
 
   if (!result.actionIntent) {
     await appendAssistantMessage(conversation, { text: result.answer });
-    return { answer: result.answer, sourcesUsed: result.sourcesUsed, confidence: result.confidence };
+    return {
+      answer: result.answer,
+      sourcesUsed: result.sourcesUsed,
+      confidence: result.confidence,
+      grounded: result.grounded,
+      verified: result.verified,
+      answerStatus: result.answerStatus,
+    };
   }
 
   const action = getAction(result.actionIntent);
@@ -89,7 +114,14 @@ async function handleNoPendingAction({ conversation, userQuery, userId, district
     // fall back to answering normally rather than starting a flow for an action that doesn't
     // exist here.
     await appendAssistantMessage(conversation, { text: result.answer });
-    return { answer: result.answer, sourcesUsed: result.sourcesUsed, confidence: result.confidence };
+    return {
+      answer: result.answer,
+      sourcesUsed: result.sourcesUsed,
+      confidence: result.confidence,
+      grounded: result.grounded,
+      verified: result.verified,
+      answerStatus: result.answerStatus,
+    };
   }
 
   let extraction;
@@ -111,7 +143,14 @@ async function handleNoPendingAction({ conversation, userQuery, userId, district
     // real answer instead of discarding it for a generic apology; the message WAS processed.
     console.error("[assistant-actions] slot extraction failed, falling back to plain answer", err);
     await appendAssistantMessage(conversation, { text: result.answer });
-    return { answer: result.answer, sourcesUsed: result.sourcesUsed, confidence: result.confidence };
+    return {
+      answer: result.answer,
+      sourcesUsed: result.sourcesUsed,
+      confidence: result.confidence,
+      grounded: result.grounded,
+      verified: result.verified,
+      answerStatus: result.answerStatus,
+    };
   }
 
   return resolveDraftState({ conversation, action, extraction, isOpeningTurn: true });
@@ -158,7 +197,14 @@ async function handlePendingAction({ conversation, userQuery, userId, district }
   if (extraction.isUnrelated) {
     const result = await callAssistant({ userQuery, userId, district });
     await appendAssistantMessage(conversation, { text: result.answer });
-    return { answer: result.answer, sourcesUsed: result.sourcesUsed, confidence: result.confidence };
+    return {
+      answer: result.answer,
+      sourcesUsed: result.sourcesUsed,
+      confidence: result.confidence,
+      grounded: result.grounded,
+      verified: result.verified,
+      answerStatus: result.answerStatus,
+    };
   }
 
   return resolveDraftState({ conversation, action, extraction, isOpeningTurn: false });

@@ -51,8 +51,8 @@ class _AnswerCache:
         self._ttl = ttl_seconds
         self._store: OrderedDict[str, tuple[QueryResponse, float]] = OrderedDict()
 
-    def get(self, query: str, district: str | None) -> QueryResponse | None:
-        key = self._make_key(query, district)
+    def get(self, query: str, district: str | None, revision: int = 1) -> QueryResponse | None:
+        key = self._make_key(query, district, revision)
         entry = self._store.get(key)
         if entry is None:
             return None
@@ -63,16 +63,18 @@ class _AnswerCache:
         self._store.move_to_end(key)
         return response
 
-    def put(self, query: str, district: str | None, response: QueryResponse) -> None:
-        key = self._make_key(query, district)
+    def put(
+        self, query: str, district: str | None, response: QueryResponse, revision: int = 1
+    ) -> None:
+        key = self._make_key(query, district, revision)
         self._store[key] = (response, time.monotonic())
         self._store.move_to_end(key)
         if len(self._store) > self._maxsize:
             self._store.popitem(last=False)
 
     @staticmethod
-    def _make_key(query: str, district: str | None) -> str:
-        raw = f"{query.lower().strip()}|{district or ''}"
+    def _make_key(query: str, district: str | None, revision: int = 1) -> str:
+        raw = f"{query.lower().strip()}|{district or ''}|kb:{revision}"
         return hashlib.sha1(raw.encode("utf-8")).hexdigest()
 
 
@@ -132,7 +134,9 @@ class RagService:
             pipeline = self._simple
 
         # 4. Answer cache (route re-stamped on the cached copy for observability).
-        cached = self._cache.get(request.user_query, district_slug)
+        cached = self._cache.get(
+            request.user_query, district_slug, self._settings.knowledge_base_version
+        )
         if cached is not None:
             logger.info("query_cache_hit", user=user_hash, route=route.value)
             return cached.model_copy(update={"route": route})
@@ -143,12 +147,29 @@ class RagService:
         result = await pipeline.run(ctx)
 
         # 6. Map to the HTTP contract, log (user_id hashed; raw query only at DEBUG).
+        grounded = bool(result.debug.get("grounded", False))
+        verified = grounded and not bool(result.debug.get("verification_failed"))
+        # Sources are evidence, not metadata about retrieval. Never expose them for an answer
+        # that was not both grounded and verified; this keeps API clients from presenting
+        # unrelated retrieval candidates as supporting sources.
+        sources_used = result.sources_used if verified else []
         response = QueryResponse(
             answer=result.answer,
-            sources_used=result.sources_used,
+            sources_used=sources_used,
             confidence=result.confidence,
             route=result.route,
             action_intent=result.action_intent,
+            grounded=grounded,
+            verified=verified,
+            answer_status=(
+                "blocked"
+                if result.debug.get("blocked")
+                else "verification_failed"
+                if result.debug.get("verification_failed")
+                else "grounded"
+                if result.debug.get("grounded")
+                else "ungrounded"
+            ),
         )
         if result.debug.get("blocked"):
             # Refused by the OPSEC content-safety gate (pipeline.base.check_query_safety) before
@@ -180,7 +201,12 @@ class RagService:
                 took_ms=round(self._elapsed_ms(start), 1),
             )
         else:
-            self._cache.put(request.user_query, district_slug, response)
+            self._cache.put(
+                request.user_query,
+                district_slug,
+                response,
+                self._settings.knowledge_base_version,
+            )
             logger.info(
                 "query_ok",
                 user=user_hash,

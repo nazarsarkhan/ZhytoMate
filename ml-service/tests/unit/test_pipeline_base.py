@@ -110,6 +110,26 @@ async def test_high_dense_similarity_grounds_regardless_of_strong_lexical_match(
     assert result.debug["grounded"] is True
 
 
+async def test_no_information_answer_discards_retrieved_sources() -> None:
+    """A semantically similar retrieval hit is not evidence when synthesis explicitly says the
+    requested information is unavailable."""
+    hit = _hit(1, similarity=0.9, text="Загальна інформація про міські послуги.")
+    generator = FakeGenerator(
+        result=("Інформації про те, де зробити паспорт у Житомирі, немає.", 0)
+    )
+
+    result = await run_shared_tail(
+        generator=generator, sim_gate=_SIM_GATE, sim_high=_SIM_HIGH,
+        count_tokens_fn=_COUNT_TOKENS, retrieved=[hit], top1_sim=0.9,
+        question="Де зробити паспорт?", route=QueryRoute.SIMPLE,
+    )
+
+    assert result.debug["grounded"] is False
+    assert result.debug["answer_no_info"] is True
+    assert result.sources_used == []
+    assert result.confidence == 0.0
+
+
 # ---------------------------------------------------------------------------
 # grounded_via_lexical_total — increments ONLY when the lexical signal was the actual deciding
 # factor (dense similarity was in the NO_INFO band and strong_lexical_match flipped the outcome to

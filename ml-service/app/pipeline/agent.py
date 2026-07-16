@@ -31,6 +31,13 @@ import json
 
 import structlog
 
+from app.domain.civic_verification import (
+    TITLE_NOT_SUPPORTED_ANSWER,
+    is_civic_title_query,
+    normalize_civic_information_query,
+    normalize_civic_title_query,
+    verify_civic_context,
+)
 from app.domain.prompts import build_decompose_prompt, build_rewrite_prompt
 from app.domain.sufficiency import is_sufficient
 from app.metrics import agent_subqueries
@@ -96,7 +103,14 @@ class AgentRAGPipeline(RAGPipeline):
         self._max_subqueries = max_subqueries
 
     async def run(self, ctx: RagContext) -> RagResult:
-        subqueries = await self._decompose(ctx.user_query)
+        # Office-holder questions are high-risk and usually short. Decomposition adds an LLM
+        # round-trip without improving retrieval, and can mutate the title relation before the
+        # deterministic evidence guard sees it. Retrieve the original wording directly instead.
+        subqueries = (
+            [normalize_civic_information_query(normalize_civic_title_query(ctx.user_query))]
+            if is_civic_title_query(ctx.user_query)
+            else await self._decompose(ctx.user_query)
+        )
         agent_subqueries.observe(len(subqueries))
 
         outcomes = await self._retrieve_all(subqueries, ctx.district_slug)
@@ -114,6 +128,17 @@ class AgentRAGPipeline(RAGPipeline):
             )
 
         flattened = _interleave_by_rank(outcomes)
+        verification = verify_civic_context(
+            ctx.user_query, [item.text for item in flattened]
+        )
+        if verification.blocked:
+            return RagResult(
+                answer=TITLE_NOT_SUPPORTED_ANSWER,
+                sources_used=[],
+                confidence=0.0,
+                route=ctx.route,
+                debug={"grounded": False, "verification_failed": verification.reason},
+            )
         agent_top1 = max((outcome.dense_top1_sim for outcome in outcomes), default=0.0)
         # True when ANY sub-query's own outcome has a strong lexical match (RetrievalOutcome
         # .has_strong_lexical_match — mirrors SimpleRAGPipeline's per-outcome check), reduced with

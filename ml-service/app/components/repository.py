@@ -129,6 +129,22 @@ def _to_result(
 # Letters-only tokens of length >= 3 — drops stopword-ish short words and digits. Letters only, so
 # the joined result is always a syntactically valid to_tsquery input (no operators to escape).
 _TSQUERY_WORD = re.compile(r"[^\W\d_]{3,}", re.UNICODE)
+_LEXICAL_STOPWORDS = frozenset(
+    {
+        "хто", "кто", "who", "що", "что", "what", "де", "где", "where",
+        "коли", "когда", "when", "який", "яка", "какой", "какая", "which",
+        "як", "как", "how",
+    }
+)
+_LEXICAL_STOPWORD_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(word) for word in _LEXICAL_STOPWORDS) + r")\b",
+    re.IGNORECASE,
+)
+
+
+def _lexical_query(query: str) -> str:
+    """Remove interrogative filler before PostgreSQL's AND lexical search."""
+    return _LEXICAL_STOPWORD_RE.sub(" ", query).strip()
 
 
 def _significant_terms(query: str) -> list[str]:
@@ -151,6 +167,8 @@ def _significant_terms(query: str) -> list[str]:
     first place) remains a follow-up — see ml-service/CLAUDE.md's Known Issues."""
     seen: list[str] = []
     for token in _TSQUERY_WORD.findall(query.lower()):
+        if token in _LEXICAL_STOPWORDS:
+            continue
         if token not in seen:
             seen.append(token)
     return seen[:12]
@@ -231,13 +249,20 @@ class KnowledgeRepository:
         word out of several, in an otherwise off-topic query) — a plain minimum coverage count
         can't tell those two apart, since both can read coverage=1."""
         start = time.perf_counter()
+        lexical_query = _lexical_query(query)
         rows = await self._pool.fetch(
-            _LEXICAL_SQL.format(tsquery="websearch_to_tsquery"), query, district_slug, limit
+            _LEXICAL_SQL.format(tsquery="websearch_to_tsquery"),
+            lexical_query,
+            district_slug,
+            limit,
         )
         if not rows:
             # plainto_tsquery is more forgiving for short / single-word queries.
             rows = await self._pool.fetch(
-                _LEXICAL_SQL.format(tsquery="plainto_tsquery"), query, district_slug, limit
+                _LEXICAL_SQL.format(tsquery="plainto_tsquery"),
+                lexical_query,
+                district_slug,
+                limit,
             )
         coverage_by_id: dict[int, int] = {}
         terms_total: int | None = None
@@ -245,7 +270,7 @@ class KnowledgeRepository:
             # Both of the above AND every term, so a verbose question matches no single chunk. Fall
             # back to an OR of the significant terms, ranked by how many DISTINCT terms each chunk
             # covers so a chunk mentioning several of the words beats one repeating a common filler.
-            terms = _significant_terms(query)
+            terms = _significant_terms(lexical_query)
             if terms:
                 rows = await self._pool.fetch(
                     _OR_LEXICAL_SQL, " | ".join(terms), district_slug, limit, terms
