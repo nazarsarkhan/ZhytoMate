@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test';
 
 test.setTimeout(120_000);
+const liveRagEnabled = !process.env.CI || process.env.RUN_LIVE_RAG === 'true';
 
 test('routes origin-destination transport questions to the transport capability', async ({ page }) => {
+  test.skip(!liveRagEnabled, 'requires OPENAI_API_KEY for live RAG integration');
   const username = `transportqa${Date.now()}`;
   await page.goto('/register');
   await page.getByLabel('Логін').fill(username);

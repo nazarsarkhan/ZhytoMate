@@ -43,9 +43,10 @@ jobs:
       JWT_ACCESS_SECRET: ci-access-secret
       JWT_REFRESH_SECRET: ci-refresh-secret
       INTERNAL_TOKEN: ci-internal-token
-      OPENAI_API_KEY: ci-openai-placeholder
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'ci-openai-placeholder' }}
       RATE_LIMIT_PER_MINUTE: 100
       VITE_API_TARGET: http://localhost:3000
+      RUN_LIVE_RAG: ${{ secrets.OPENAI_API_KEY != '' && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -57,9 +58,11 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - name: Start backend and ML services for live tests
+        if: env.RUN_LIVE_RAG == 'true'
         working-directory: .
         run: docker compose up -d --build mongo postgres ml backend
       - name: Wait for backend and ML health
+        if: env.RUN_LIVE_RAG == 'true'
         working-directory: .
         run: |
           for attempt in {1..60}; do
@@ -74,6 +77,6 @@ jobs:
           exit 1
       - run: npm run test:e2e
       - name: Stop backend and ML services
-        if: always()
+        if: always() && env.RUN_LIVE_RAG == 'true'
         working-directory: .
         run: docker compose down -v

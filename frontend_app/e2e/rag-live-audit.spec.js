@@ -38,12 +38,14 @@ const queries = [
 ];
 
 test.setTimeout(15 * 60 * 1000);
+const liveRagEnabled = !process.env.CI || process.env.RUN_LIVE_RAG === 'true';
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 test('live RAG understands app capabilities and civic queries through the UI', async ({ page }) => {
+  test.skip(!liveRagEnabled, 'requires OPENAI_API_KEY for live RAG integration');
   const username = `ragqa${Date.now()}`;
   const email = `${username}@example.com`;
   const password = 'RagAudit2026!';
