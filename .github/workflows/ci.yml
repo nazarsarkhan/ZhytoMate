@@ -45,7 +45,7 @@ jobs:
       INTERNAL_TOKEN: ci-internal-token
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || 'ci-openai-placeholder' }}
       RATE_LIMIT_PER_MINUTE: 100
-      VITE_API_TARGET: http://localhost:3000
+      VITE_API_TARGET: http://127.0.0.1:3000
       RUN_LIVE_RAG: ${{ secrets.OPENAI_API_KEY != '' && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v4
