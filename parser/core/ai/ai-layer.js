@@ -19,7 +19,7 @@ const allowedCategories = new Set([
 ]);
 
 const allowedDistricts = new Set(['bohunskyi', 'korolovskyi']);
-const allowedDocTypes = new Set(['news', 'instruction']);
+const allowedDocTypes = new Set(['news', 'document', 'instruction']);
 const allowedImportanceLabels = new Set(['critical', 'high', 'normal', 'low', 'archive']);
 const importanceByLabel = new Map([
   ['critical', 5],

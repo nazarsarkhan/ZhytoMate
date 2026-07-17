@@ -4,6 +4,10 @@ export function findUserById(id) {
   return User.findById(id);
 }
 
+export function findAllUserIds() {
+  return User.find({}, { _id: 1 }).lean().then((users) => users.map(({ _id }) => _id));
+}
+
 export function findUserByIdAndUpdateName({ id, firstName, lastName, phone }) {
   return User.findByIdAndUpdate(
     id,
@@ -76,6 +80,7 @@ export function createUser({
 
 export default {
   findUserById,
+  findAllUserIds,
   findUserByIdAndUpdateName,
   findUserByIdAndUpdateAddress,
   findUserByIdAndUpdatePreferences,

@@ -1,15 +1,17 @@
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import Icon from "../ui/Icon.jsx";
 import { adminNavItem, navItems } from "../../consts/navItems.js";
+import { useAuth } from "../../hooks/useAuth.jsx";
 import { useCurrentUser } from "../../hooks/useCurrentUser.js";
 
 export default function SideNav() {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const currentUser = useCurrentUser();
   const visibleItems = currentUser.data?.role === "admin" ? [...navItems, adminNavItem] : navItems;
 
   return (
-    <aside className="desktop-side-nav fixed top-4 z-40 hidden h-[calc(100dvh-32px)] w-60 flex-col overflow-hidden rounded-l-[28px] border-r border-white/10 bg-primary-container px-4 pb-6 pt-6 text-on-primary lg:flex">
+    <aside className="desktop-side-nav relative hidden h-auto min-h-full w-60 shrink-0 flex-col overflow-hidden rounded-l-[28px] border-r border-white/10 bg-primary-container px-4 pb-6 pt-6 text-on-primary lg:flex lg:min-h-[calc(100dvh-32px)]">
       <div className="mb-8 flex items-center gap-3 px-2">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-primary">
           <Icon name="location_city" filled className="text-[24px]" />
@@ -38,10 +40,14 @@ export default function SideNav() {
         ))}
       </nav>
       <div className="shrink-0 border-t border-white/10 pt-4">
-        <Link className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-white/70 transition hover:bg-white/5 hover:text-white" to="/profile">
-          <Icon name="settings" className="text-[22px]" /> Налаштування
-        </Link>
-        <button className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-white/70 transition hover:bg-white/5 hover:text-white" type="button" onClick={() => navigate("/assistant")}>
+        <button
+          className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-white/70 transition hover:bg-white/5 hover:text-white"
+          type="button"
+          onClick={() => {
+            logout();
+            navigate("/login", { replace: true });
+          }}
+        >
           <Icon name="logout" className="text-[22px]" /> Вийти
         </button>
       </div>

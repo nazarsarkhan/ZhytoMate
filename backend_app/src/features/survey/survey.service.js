@@ -18,6 +18,7 @@ import {
   toPublicSurvey,
   toPublicSurveyVote,
 } from "./survey.model.js";
+import { notifySurveyPublished } from "../notification/notification.service.js";
 
 function assertAdmin(role) {
   if (role !== "admin") {
@@ -54,6 +55,14 @@ export async function createSurveyForUsers({
     endsAt,
     isActive,
   });
+
+  if (isSurveyOpen(survey)) {
+    try {
+      await notifySurveyPublished(survey);
+    } catch (err) {
+      console.warn("[notifications] survey notification skipped:", err.message);
+    }
+  }
 
   return toPublicSurvey(survey);
 }
@@ -102,6 +111,13 @@ export async function updateSurvey({ surveyId, updates }) {
   }
 
   const updated = await updateSurveyById(surveyId, patch);
+  if (isSurveyOpen(updated)) {
+    try {
+      await notifySurveyPublished(updated);
+    } catch (err) {
+      console.warn("[notifications] survey notification skipped:", err.message);
+    }
+  }
   const tallies = await countVotesByOption(surveyId);
   return toPublicSurvey(updated, null, tallies);
 }

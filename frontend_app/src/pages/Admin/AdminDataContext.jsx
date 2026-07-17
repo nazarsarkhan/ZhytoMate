@@ -14,6 +14,7 @@ import {
   useUpdateContact,
 } from "../../hooks/useContacts.js";
 import { useAdminPlaces, useDeletePlace, useUpdatePlace } from "../../hooks/useAdminPlaces.js";
+import { apiFetch } from "../../lib/apiClient.js";
 
 const AdminDataContext = createContext(null);
 
@@ -28,6 +29,17 @@ function cloneSeedData() {
 
 function makeId(entity) {
   return `${entity.slice(0, 3)}-${Date.now().toString(36)}`;
+}
+
+function publishAnnouncementIfNeeded(item) {
+  if (item.status !== "published") return;
+
+  apiFetch("/notifications/announcements", {
+    method: "POST",
+    body: { id: item.id, title: item.title, body: item.body },
+  }).catch((error) => {
+    console.warn("[notifications] announcement notification skipped:", error.message);
+  });
 }
 
 // --- API <-> admin-form mappers -------------------------------------------------------------
@@ -120,6 +132,7 @@ export function AdminDataProvider({ children }) {
     if (entity === "appeals") return item;
 
     const nextItem = { ...item, id: makeId(entity) };
+    if (entity === "announcements") publishAnnouncementIfNeeded(nextItem);
     setSeedData((current) => ({ ...current, [entity]: [nextItem, ...current[entity]] }));
     return nextItem;
   };
@@ -154,6 +167,11 @@ export function AdminDataProvider({ children }) {
     if (entity === "places") {
       updatePlace.mutate({ id, updates: { name: updates.name, address: updates.address, phone: updates.phone, openingHours: updates.openingHours, category: updates.category } });
       return;
+    }
+
+    if (entity === "announcements") {
+      const currentItem = data.announcements.find((entry) => entry.id === id);
+      publishAnnouncementIfNeeded({ ...currentItem, ...updates, id });
     }
 
     setSeedData((current) => ({

@@ -6,6 +6,7 @@ import {
   saveNewsItem,
 } from '../storage/mongo.js';
 import { buildCollectorOutputs } from '../ai/ai-layer.js';
+import { shouldSendToNews } from './routes.js';
 
 const retryDelayMs = 5000;
 const queue = [];
@@ -139,12 +140,16 @@ async function drainQueue() {
         }
 
         console.log(`AI layer mode: ${outputs.ai.mode}`);
-        await saveNewsItem(outputs.newsItem, item);
+        const sendToNews = shouldSendToNews(item, outputs.ingestRequest);
+
+        if (sendToNews) {
+          await saveNewsItem(outputs.newsItem, item);
+        }
+
         const ragStatus = await postItem(outputs.ingestRequest);
-        // Instructions and evergreen service pages belong in RAG only. Sending every scraped
-        // zt-rada page to the news API caused full backfills to create invalid/oversized news
-        // payloads and polluted the latest-news feed with navigation sections.
-        if (outputs.ingestRequest.doc_type === 'news') {
+        // RAG receives both news and reference/instruction content. The news output is
+        // deliberately narrower for broad sources such as zt-rada.
+        if (sendToNews) {
           await postNewsItem(outputs.newsItem);
         }
 

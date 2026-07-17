@@ -10,6 +10,7 @@ function parseArgs(argv) {
     limit: 0,
     quiet: false,
     since: null,
+    excludeSources: [],
   };
 
   for (const arg of argv) {
@@ -39,6 +40,15 @@ function parseArgs(argv) {
         throw new Error('--since must be a valid date or ISO datetime');
       }
       options.since = date.toISOString();
+      continue;
+    }
+
+    if (arg.startsWith('--exclude-source=')) {
+      const source = arg.slice('--exclude-source='.length).trim();
+      if (!source) {
+        throw new Error('--exclude-source must not be empty');
+      }
+      options.excludeSources.push(source);
       continue;
     }
 
@@ -72,14 +82,18 @@ function toBackendPayload(document) {
 }
 
 function buildQuery(options) {
-  if (!options.since) {
-    return {};
+  const query = {};
+
+  if (options.since) {
+    const sinceDate = options.since.slice(0, 10);
+    query.publishedDate = { $gte: sinceDate };
   }
 
-  const sinceDate = options.since.slice(0, 10);
-  return {
-    publishedDate: { $gte: sinceDate },
-  };
+  if (options.excludeSources.length) {
+    query.source = { $nin: options.excludeSources };
+  }
+
+  return query;
 }
 
 async function postNewsItem(newsApiUrl, token, newsItem) {

@@ -12,6 +12,7 @@ import {
 } from "./appeal.repository.js";
 import { toPublicAppeal } from "./appeal.model.js";
 import { UPLOAD_DIR } from "./appeal.upload.js";
+import { notifyAppealStatusChanged } from "../notification/notification.service.js";
 
 export async function createUserAppeal({
   userId,
@@ -93,6 +94,11 @@ export async function getAllAppeals({ status, category, page = 1, limit = 20 }) 
 
 // Admin: set the status and/or the citizen-facing response on an appeal.
 export async function respondToAppeal({ appealId, status, response }) {
+  const currentAppeal = await findAppealById(appealId);
+  if (!currentAppeal) {
+    throw ApiError.notFound("Appeal not found");
+  }
+
   const updates = {};
   if (status !== undefined) updates.status = status;
   if (response !== undefined) updates.response = response;
@@ -100,6 +106,15 @@ export async function respondToAppeal({ appealId, status, response }) {
   const appeal = await updateAppealById(appealId, updates);
   if (!appeal) {
     throw ApiError.notFound("Appeal not found");
+  }
+
+  try {
+    await notifyAppealStatusChanged({
+      appeal,
+      previousStatus: currentAppeal.status,
+    });
+  } catch (err) {
+    console.warn("[notifications] appeal status notification skipped:", err.message);
   }
 
   return toPublicAppeal(appeal);

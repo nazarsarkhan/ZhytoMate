@@ -8,6 +8,7 @@ import Icon from "../../components/ui/Icon.jsx";
 import { newsCategory } from "../../consts/newsCategories.js";
 import { useNewsItem } from "../../hooks/useNews.js";
 import { formatDate } from "../../lib/formatDate.js";
+import { getNewsImages } from "../../lib/newsImages.js";
 
 export default function NewsDetailPage() {
   const { newsId } = useParams();
@@ -37,22 +38,25 @@ export default function NewsDetailPage() {
   if (!item) return null;
 
   const meta = newsCategory(item.category);
+  const images = getNewsImages(item);
+  const coverImage = images[0];
+  const additionalImages = images.slice(1);
 
   return (
     <Shell className="bg-surface-bright pb-28">
       <AppHeader title="Новини" backTo="/news" rightIcon="share" rightLabel="Поділитися" onRightClick={handleShare} />
       <main className="mx-auto w-full max-w-5xl px-container-padding pb-section-margin sm:px-6 md:px-8">
-        {item.coverImageUrl ? (
+        {coverImage ? (
           <div className="motion-card relative mt-4 overflow-hidden rounded-2xl bg-surface-container-low shadow-soft md:mt-8 md:rounded-3xl">
-            <img className="h-56 w-full object-cover md:h-[380px]" alt="" src={item.coverImageUrl} />
+            <img className="h-56 w-full object-cover md:h-[380px]" alt={coverImage.alt} src={coverImage.url} />
             <div className="absolute left-4 top-4 flex items-center gap-1 rounded-full border border-outline-variant/30 bg-white/90 px-3 py-1 shadow-sm backdrop-blur-sm">
               <Icon name={meta.icon} filled className="text-base text-tertiary-container" />
               <span className="text-[10px] font-bold uppercase tracking-wider text-tertiary-container">{meta.label}</span>
             </div>
           </div>
         ) : null}
-        <article className={`motion-card relative z-10 rounded-2xl border border-outline-variant/20 bg-white p-5 shadow-soft md:mx-auto md:max-w-3xl md:p-8 ${item.coverImageUrl ? "-mt-10" : "mt-4 md:mt-8"}`}>
-          {!item.coverImageUrl ? (
+        <article className={`motion-card relative z-10 rounded-2xl border border-outline-variant/20 bg-white p-5 shadow-soft md:mx-auto md:max-w-3xl md:p-8 ${coverImage ? "-mt-10" : "mt-4 md:mt-8"}`}>
+          {!coverImage ? (
             <span className="mb-3 inline-flex items-center gap-1 rounded-full bg-primary-container px-3 py-1 text-xs font-bold text-on-primary">
               <Icon name={meta.icon} filled className="text-base" /> {meta.label}
             </span>
@@ -73,6 +77,19 @@ export default function NewsDetailPage() {
           <div className={`space-y-4 text-base leading-7 text-on-background md:text-lg md:leading-8 ${item.summary ? "" : "border-t border-outline-variant/30 pt-5"}`}>
             <p className="whitespace-pre-line">{item.body}</p>
           </div>
+          {additionalImages.length ? (
+            <div className="mt-8 border-t border-outline-variant/30 pt-5">
+              <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-on-surface-variant">Фото</h3>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {additionalImages.map((image) => (
+                  <figure key={image.url} className="overflow-hidden rounded-xl bg-surface-container-low">
+                    <img className="h-48 w-full object-cover" src={image.url} alt={image.alt} loading="lazy" />
+                    {image.caption ? <figcaption className="px-3 py-2 text-xs text-on-surface-variant">{image.caption}</figcaption> : null}
+                  </figure>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {item.sourceUrl ? (
             <a href={item.sourceUrl} target="_blank" rel="noreferrer" className="mt-6 inline-flex items-center gap-1.5 text-sm font-bold text-primary">
               Читати в джерелі <Icon name="open_in_new" className="text-base" />

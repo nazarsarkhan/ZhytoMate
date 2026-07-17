@@ -7,6 +7,19 @@ base. This is the real, working stand-in for the "Collector" role described in
 describes the originally-planned design; this service is a separate, since-built implementation of
 the same job, not a literal build of that spec.
 
+## zt-rada: news and RAG outputs
+
+The `zt-rada` plugin uses one crawl so the city council site is not requested twice, but it has two
+explicit output policies:
+
+- the RAG output receives all useful city-council content, including news, documents, calendar
+  entries and evergreen pages;
+- the news output receives only articles discovered from `/press-center/news` and sends them to the
+  parser news collection and the main backend.
+
+This keeps the news feed clean without losing reference material for retrieval. Calendar entries,
+documents and other council pages are marked as `document` and remain RAG-only.
+
 ## What it does
 
 - **Web scraping** (`plugins/web/`, e.g. `zt-rada.js` for the city council site): scheduled crawls
@@ -86,6 +99,17 @@ npm run session    # first time only — interactive, writes a session string to
 npm start          # node index.js
 npm run dev         # node --watch index.js, for local iteration
 ```
+
+To copy already collected news into the main backend without sending `zt-rada` knowledge-base
+pages, run a dry-run first and then remove `--dry-run`:
+
+```bash
+npm run backfill:news -- --exclude-source=zt-rada --dry-run
+npm run backfill:news -- --exclude-source=zt-rada --quiet
+```
+
+The backfill uses the parser item's `external_id`; the main backend upserts by that key, so
+re-running it does not create duplicate news.
 
 `GET /health` reports Mongo connectivity and which web/Telegram plugins are currently enabled.
 

@@ -17,6 +17,7 @@ const CONFIG = {
 };
 const baseUrl = "https://zt-rada.gov.ua/";
 const host = "zt-rada.gov.ua";
+export const NEWS_SECTION_PATH = "/press-center/news";
 const documentExtensions = new Set(["pdf", "doc", "docx", "txt"]);
 const imageExtensions = new Set(["jpg", "jpeg", "png", "webp", "gif"]);
 const contentSelectors = [
@@ -66,13 +67,34 @@ const safeHtmlTags = new Set([
   "figcaption",
   "img",
 ]);
-const staticSeeds = [
-  "/?items=67",
-  "/?items=73",
-  "/?items=42",
+// Curated entry points for evergreen council documents and resident-facing reference pages.
+// News has its own seed and Telegram items are handled by the Telegram plugins.
+export const IMPORTANT_PAGE_SEEDS = [
+  "/documents",
   "/perelikdiychuhprogram",
   "/Strategic_sectoral",
   "/MonitoringOfAir",
+  "/mistobuddoc",
+  "/?items=42",
+  "/?items=67",
+  "/?items=73",
+  "/dostypdopubl",
+  "/admintasocposlygu",
+  "/waterzt",
+  "/miscevybudjet",
+  "/AirQualityMonitoring",
+  "/OfficeofDecarbonization",
+  "/policofgromadu",
+  "/veteranskaliniya",
+  "/transportzt",
+  "/opendata",
+  "/?items=20",
+  "/?items=21",
+  "/?items=23",
+  "/?items=36",
+  "/?items=78",
+  "/?items=82",
+  "/?items=85",
 ];
 const searchSeedTerms = [
   "ВПО",
@@ -221,10 +243,42 @@ function shouldCrawlPage(url) {
   return true;
 }
 
-function inferSourceKind(url) {
-  const parsed = new URL(url);
+function normalizePathname(url) {
+  const pathname = new URL(url).pathname.replace(/\/+$/, "");
+  return pathname || "/";
+}
 
-  if (parsed.pathname === "/documents") {
+export function isNewsSectionUrl(url) {
+  return normalizePathname(url) === NEWS_SECTION_PATH;
+}
+
+export function isNewsArticleUrl(url, knownNewsUrls = new Set()) {
+  if (!url) {
+    return false;
+  }
+
+  const normalizedUrl = new URL(url).toString();
+  const pathname = normalizePathname(url);
+
+  return (
+    knownNewsUrls.has(normalizedUrl) ||
+    pathname.startsWith(`${NEWS_SECTION_PATH}/`)
+  );
+}
+
+function inferSourceKind(url, knownNewsUrls = new Set()) {
+  const parsed = new URL(url);
+  const pathname = normalizePathname(url);
+
+  if (isNewsSectionUrl(url)) {
+    return "news-index";
+  }
+
+  if (isNewsArticleUrl(url, knownNewsUrls)) {
+    return "news";
+  }
+
+  if (pathname === "/documents") {
     return "document-index";
   }
 
@@ -262,20 +316,12 @@ function looksLikeReferencePage(title, text) {
   );
 }
 
-function inferDocType(sourceKind, title, text) {
-  if (sourceKind === "calendar") {
+function inferDocType(sourceKind) {
+  if (sourceKind === "news") {
     return "news";
   }
 
-  if (
-    sourceKind === "post" &&
-    looksLikeAnnouncement(title, text) &&
-    !looksLikeReferencePage(title, text)
-  ) {
-    return "news";
-  }
-
-  return "instruction";
+  return "document";
 }
 
 function parseNumericDate(value) {
@@ -305,6 +351,32 @@ function parseSearchResultUrls($, currentUrl) {
     const url = toAbsoluteUrl(link.attr("href"), currentUrl);
 
     if (url && shouldCrawlPage(url)) {
+      urls.add(url);
+    }
+  });
+
+  return [...urls];
+}
+
+function parseNewsResultUrls($, currentUrl) {
+  const urls = new Set();
+  const selectors = [
+    ".news-list a[href]",
+    ".news-item a[href]",
+    ".news-listing a[href]",
+    ".press-center a[href]",
+    "article a[href]",
+    "main [class*=news] a[href]",
+    ".content [class*=news] a[href]",
+  ];
+  const candidates = $(selectors.join(",")).length
+    ? $(selectors.join(","))
+    : $("main a[href], .content a[href]");
+
+  candidates.each((_, element) => {
+    const url = toAbsoluteUrl($(element).attr("href"), currentUrl);
+
+    if (url && shouldCrawlPage(url) && !isNewsSectionUrl(url)) {
       urls.add(url);
     }
   });
@@ -549,8 +621,11 @@ export function extractWebContent(html, currentUrl = baseUrl) {
 function extractLinks($, currentUrl) {
   const pageLinks = new Set();
   const documentLinks = new Map();
+  const main = selectMainContent($).clone();
 
-  $("a[href]").each((_, element) => {
+  main.find(noisySelectors.join(",")).remove();
+
+  main.find("a[href]").each((_, element) => {
     const url = toAbsoluteUrl($(element).attr("href"), currentUrl);
 
     if (!url) {
@@ -655,7 +730,7 @@ function buildAttachmentItem(pageUrl, attachment, publishedAt) {
     body,
     publishedAt,
     category: "politics",
-    docType: "instruction",
+    docType: "document",
     sourceKind: "document",
     attachments: [
       {
@@ -674,10 +749,11 @@ async function parsePage(
   cutoff,
   attachmentLimit,
   documentAttachmentLimit,
+  knownNewsUrls,
 ) {
   const page = await fetchText(url);
   const $ = load(page.text);
-  const sourceKind = inferSourceKind(page.url);
+  const sourceKind = inferSourceKind(page.url, knownNewsUrls);
   const title = buildTitle($, url);
   const publishedAt = inferPublishedAt($, new Date());
   const content = extractWebContent(page.text, page.url);
@@ -694,6 +770,17 @@ async function parsePage(
       items: [],
       pageLinks: parseSearchResultUrls($, page.url),
       priorityPageLinks: true,
+    };
+  }
+
+  if (sourceKind === "news-index") {
+    const newsArticleUrls = parseNewsResultUrls($, page.url);
+
+    return {
+      items: [],
+      pageLinks: newsArticleUrls,
+      priorityPageLinks: true,
+      newsArticleUrls,
     };
   }
 
@@ -724,7 +811,7 @@ async function parsePage(
       sourceKind === "document" || sourceKind === "document-index"
         ? "politics"
         : undefined,
-    docType: inferDocType(sourceKind, title, pageText),
+    docType: inferDocType(sourceKind),
     sourceKind,
     attachments: attachments.map((attachment) => ({
       url: attachment.url,
@@ -767,7 +854,7 @@ async function fetchCalendarItems(cutoff) {
           body: normalizeWhitespace(event.event),
           publishedAt,
           category: "safety",
-          docType: "news",
+          docType: "document",
           sourceKind: "calendar",
         };
       })
@@ -799,12 +886,14 @@ export default {
     const concurrency = getNumberEnv("ZT_RADA_CONCURRENCY", CONFIG.concurrency);
     const limit = pLimit(concurrency);
     const queued = [
+      new URL(NEWS_SECTION_PATH, baseUrl).toString(),
       ...searchSeedTerms.flatMap((term) => buildSearchSeedUrls(term)),
-      ...staticSeeds.map((seed) => new URL(seed, baseUrl).toString()),
+      ...IMPORTANT_PAGE_SEEDS.map((seed) => new URL(seed, baseUrl).toString()),
       buildDocumentSearchUrl(cutoff),
     ];
     const seen = new Set();
     const queuedSet = new Set(queued);
+    const knownNewsUrls = new Set();
     const items = await fetchCalendarItems(cutoff);
 
     for (const item of items) {
@@ -824,7 +913,12 @@ export default {
           cutoff,
           attachmentLimit,
           documentAttachmentLimit,
+          knownNewsUrls,
         );
+
+        for (const newsUrl of result.newsArticleUrls || []) {
+          knownNewsUrls.add(newsUrl);
+        }
 
         for (const item of result.items) {
           if (items.length < maxItems) {

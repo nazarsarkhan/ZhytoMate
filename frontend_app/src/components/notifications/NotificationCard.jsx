@@ -1,8 +1,14 @@
 import Icon from "../ui/Icon.jsx";
+import { Link } from "react-router-dom";
 
 export default function NotificationCard({ item }) {
+  const Component = item.route ? Link : "article";
+  const componentProps = item.route
+    ? { to: item.route, onClick: item.onClick }
+    : {};
+
   return (
-    <article className={`motion-card interactive-card relative rounded-3xl bg-white p-4 shadow-sm ring-1 ring-outline-variant/30 sm:p-5 md:p-6 ${item.active ? "border-l-4 border-secondary-container" : ""}`}>
+    <Component {...componentProps} className={`motion-card interactive-card relative block rounded-3xl bg-white p-4 text-left shadow-sm ring-1 ring-outline-variant/30 sm:p-5 md:p-6 ${item.active ? "border-l-4 border-secondary-container" : ""}`}>
       <div className="flex gap-3 sm:gap-4 md:gap-6">
         <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full sm:h-14 sm:w-14 md:h-16 md:w-16 ${item.active ? "bg-primary-fixed text-primary-container" : "bg-surface-container text-on-surface-variant"}`}>
           <Icon name={item.icon} className="text-2xl sm:text-3xl md:text-4xl" />
@@ -16,6 +22,6 @@ export default function NotificationCard({ item }) {
           <p className="mt-3 text-sm leading-6 text-on-surface-variant sm:text-base md:text-lg md:leading-7">{item.text}</p>
         </div>
       </div>
-    </article>
+    </Component>
   );
 }

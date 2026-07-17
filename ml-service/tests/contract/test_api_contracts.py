@@ -93,7 +93,7 @@ async def test_ingest_golden_response_shape(client) -> None:
         json={
             "document_id": "doc-golden-1",
             "text": "Як подати заявку на субсидію через портал Дія.",
-            "doc_type": "instruction",
+            "doc_type": "document",
             "source": "http://city.zt.ua",
         },
     )
