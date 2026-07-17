@@ -1,6 +1,8 @@
 import fs from "node:fs/promises";
+import crypto from "node:crypto";
 import path from "node:path";
 import {
+  acquireAdminUserUpdateLock,
   countActiveAdmins,
   createUser,
   findAdminUsers,
@@ -11,6 +13,7 @@ import {
   findUserByIdAndUpdatePassword,
   findUserByIdAndUpdatePreferences,
   findUserById,
+  releaseAdminUserUpdateLock,
   updateAdminUserById,
 } from "./user.repository.js";
 import { ApiError } from "../../shared/ApiError.js";
@@ -27,6 +30,9 @@ const ADMIN_USER_UPDATE_FIELDS = [
   "role",
   "isActive",
 ];
+const ADMIN_USER_UPDATE_LOCK_RETRY_MS = 25;
+const ADMIN_USER_UPDATE_LOCK_TIMEOUT_MS = 5_000;
+const ADMIN_USER_UPDATE_LOCK_TTL_MS = 10_000;
 
 function pickAdminUserUpdates(updates) {
   return ADMIN_USER_UPDATE_FIELDS.reduce((result, field) => {
@@ -38,6 +44,28 @@ function pickAdminUserUpdates(updates) {
       field === "email" ? updates[field].toLowerCase() : updates[field];
     return result;
   }, {});
+}
+
+async function withAdminUserUpdateLock(run) {
+  const token = crypto.randomUUID();
+  const deadline = Date.now() + ADMIN_USER_UPDATE_LOCK_TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    const lockUntil = new Date(Date.now() + ADMIN_USER_UPDATE_LOCK_TTL_MS);
+    const acquiredToken = await acquireAdminUserUpdateLock(token, lockUntil);
+
+    if (acquiredToken) {
+      try {
+        return await run();
+      } finally {
+        await releaseAdminUserUpdateLock(token);
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, ADMIN_USER_UPDATE_LOCK_RETRY_MS));
+  }
+
+  throw ApiError.conflict("Another admin user update is already in progress");
 }
 
 // Runs the selected address through Nominatim and returns the normalized object to persist. The
@@ -190,36 +218,38 @@ export async function updateUserPassword({ id, password }) {
 }
 
 export async function updateAdminUser({ id, updates }) {
-  const existingUser = await findUserById(id);
-  if (!existingUser) {
-    throw ApiError.notFound("User not found");
-  }
-
-  const existingIsActive = existingUser.isActive !== false;
-  const nextRole = updates.role ?? existingUser.role;
-  const nextIsActive = updates.isActive ?? existingIsActive;
-
-  if (
-    existingUser.role === "admin"
-    && existingIsActive
-    && (nextRole !== "admin" || nextIsActive !== true)
-  ) {
-    const remainingActiveAdmins = await countActiveAdmins({
-      excludingUserId: id,
-    });
-
-    if (remainingActiveAdmins === 0) {
-      throw ApiError.conflict("Cannot remove the last active admin");
+  return withAdminUserUpdateLock(async () => {
+    const existingUser = await findUserById(id);
+    if (!existingUser) {
+      throw ApiError.notFound("User not found");
     }
-  }
 
-  const user = await updateAdminUserById(id, pickAdminUserUpdates(updates));
+    const existingIsActive = existingUser.isActive !== false;
+    const nextRole = updates.role ?? existingUser.role;
+    const nextIsActive = updates.isActive ?? existingIsActive;
 
-  if (!user) {
-    throw ApiError.notFound("User not found");
-  }
+    if (
+      existingUser.role === "admin"
+      && existingIsActive
+      && (nextRole !== "admin" || nextIsActive !== true)
+    ) {
+      const remainingActiveAdmins = await countActiveAdmins({
+        excludingUserId: id,
+      });
 
-  return toPublicUser(user);
+      if (remainingActiveAdmins === 0) {
+        throw ApiError.conflict("Cannot remove the last active admin");
+      }
+    }
+
+    const user = await updateAdminUserById(id, pickAdminUserUpdates(updates));
+
+    if (!user) {
+      throw ApiError.notFound("User not found");
+    }
+
+    return toPublicUser(user);
+  });
 }
 
 export default {

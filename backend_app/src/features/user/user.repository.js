@@ -1,6 +1,7 @@
-import User from "./user.model.js";
+import { AdminUserMutationState, User } from "./user.model.js";
 
 const ADMIN_USER_SAFE_PROJECTION = "-password -refreshTokenVersion -__v";
+const ADMIN_USER_MUTATION_LOCK_KEY = "admin-user-update";
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -105,6 +106,50 @@ export function updateAdminUserById(id, updates) {
   );
 }
 
+export async function acquireAdminUserUpdateLock(token, lockUntil) {
+  const now = new Date();
+
+  try {
+    const state = await AdminUserMutationState.findOneAndUpdate(
+      {
+        key: ADMIN_USER_MUTATION_LOCK_KEY,
+        $or: [{ lockUntil: null }, { lockUntil: { $lte: now } }],
+      },
+      {
+        $set: {
+          lockToken: token,
+          lockUntil,
+        },
+        $setOnInsert: { key: ADMIN_USER_MUTATION_LOCK_KEY },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
+
+    return state?.lockToken === token ? token : null;
+  } catch (error) {
+    if (error?.code === 11000) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+export function releaseAdminUserUpdateLock(token) {
+  return AdminUserMutationState.updateOne(
+    {
+      key: ADMIN_USER_MUTATION_LOCK_KEY,
+      lockToken: token,
+    },
+    {
+      $set: {
+        lockToken: "",
+        lockUntil: null,
+      },
+    },
+  );
+}
+
 export function countActiveAdmins({ excludingUserId } = {}) {
   return User.countDocuments({
     role: "admin",
@@ -142,6 +187,8 @@ export default {
   findUserByEmailOrUsername,
   findAdminUsers,
   updateAdminUserById,
+  acquireAdminUserUpdateLock,
+  releaseAdminUserUpdateLock,
   countActiveAdmins,
   createUser,
 };

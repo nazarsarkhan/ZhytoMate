@@ -3,7 +3,7 @@ import test from "node:test";
 import jwt from "jsonwebtoken";
 import { createApp } from "../src/app.js";
 import { config } from "../src/config/index.js";
-import User from "../src/features/user/user.model.js";
+import User, { AdminUserMutationState } from "../src/features/user/user.model.js";
 
 function signAccessToken({ id, role }) {
   return jwt.sign(
@@ -31,19 +31,61 @@ async function withServer(run) {
   }
 }
 
-function patchUserModel(overrides) {
+function patchModel(model, overrides) {
   const originals = new Map();
 
   for (const [key, value] of Object.entries(overrides)) {
-    originals.set(key, User[key]);
-    User[key] = value;
+    originals.set(key, model[key]);
+    model[key] = value;
   }
 
   return () => {
     for (const [key, value] of originals.entries()) {
-      User[key] = value;
+      model[key] = value;
     }
   };
+}
+
+function patchUserModel(overrides) {
+  return patchModel(User, overrides);
+}
+
+function patchAdminUserMutationStateModel(overrides) {
+  return patchModel(AdminUserMutationState, overrides);
+}
+
+function installAdminUserUpdateLockStub() {
+  let lockToken = "";
+  let lockUntil = null;
+
+  return patchAdminUserMutationStateModel({
+    findOneAndUpdate: async (filter, update) => {
+      const now = new Date();
+      const isUnlocked = lockUntil === null || lockUntil <= now;
+      const wantsKey = filter.key === "admin-user-update";
+
+      if (!wantsKey) {
+        return null;
+      }
+
+      if (!isUnlocked) {
+        return { key: filter.key, lockToken, lockUntil };
+      }
+
+      lockToken = update.$set.lockToken;
+      lockUntil = update.$set.lockUntil;
+      return { key: filter.key, lockToken, lockUntil };
+    },
+    updateOne: async (filter, update) => {
+      if (filter.key === "admin-user-update" && filter.lockToken === lockToken) {
+        lockToken = update.$set.lockToken;
+        lockUntil = update.$set.lockUntil;
+        return { acknowledged: true, modifiedCount: 1 };
+      }
+
+      return { acknowledged: true, modifiedCount: 0 };
+    },
+  });
 }
 
 function makeUser(overrides = {}) {
@@ -196,6 +238,10 @@ async function readJson(response) {
   };
 }
 
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 test("GET /users/admin requires an authenticated admin", async () => {
   const restoreUserModel = patchUserModel({
     findById: async () => null,
@@ -333,6 +379,7 @@ test("GET /users/admin rejects invalid filters", async () => {
 
 test("PATCH /users/admin/:id updates profile fields, role, and activity state", async () => {
   const targetUserId = "64b000000000000000000020";
+  const restoreLockModel = installAdminUserUpdateLockStub();
   const restoreUserModel = patchUserModel({
     findById: async (id) =>
       id === targetUserId
@@ -389,11 +436,43 @@ test("PATCH /users/admin/:id updates profile fields, role, and activity state", 
     });
   } finally {
     restoreUserModel();
+    restoreLockModel();
   }
+});
+
+test("PATCH /users/admin/:id requires an authenticated admin", async () => {
+  const targetUserId = "64b0000000000000000000b0";
+
+  await withServer(async (baseUrl) => {
+    const unauthorized = await fetch(`${baseUrl}/users/admin/${targetUserId}`, {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ firstName: "Blocked" }),
+    });
+
+    assert.equal(unauthorized.status, 401);
+
+    const forbidden = await fetch(`${baseUrl}/users/admin/${targetUserId}`, {
+      method: "PATCH",
+      headers: {
+        authorization: `Bearer ${signAccessToken({
+          id: "64b0000000000000000000b1",
+          role: "user",
+        })}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ firstName: "Blocked" }),
+    });
+
+    assert.equal(forbidden.status, 403);
+  });
 });
 
 test("PATCH /users/admin/:id refuses to remove the last active admin", async () => {
   const targetUserId = "64b000000000000000000021";
+  const restoreLockModel = installAdminUserUpdateLockStub();
   const restoreUserModel = patchUserModel({
     findById: async (id) =>
       id === targetUserId
@@ -431,6 +510,106 @@ test("PATCH /users/admin/:id refuses to remove the last active admin", async () 
     });
   } finally {
     restoreUserModel();
+    restoreLockModel();
+  }
+});
+
+test("PATCH /users/admin/:id preserves the last active admin under concurrent demotions", async () => {
+  const firstAdminId = "64b000000000000000000031";
+  const secondAdminId = "64b000000000000000000032";
+  const restoreLockModel = installAdminUserUpdateLockStub();
+  const usersById = new Map([
+    [
+      firstAdminId,
+      makeUser({
+        _id: firstAdminId,
+        username: "admin-one",
+        role: "admin",
+        isActive: true,
+      }),
+    ],
+    [
+      secondAdminId,
+      makeUser({
+        _id: secondAdminId,
+        username: "admin-two",
+        role: "admin",
+        isActive: true,
+      }),
+    ],
+  ]);
+  const restoreUserModel = patchUserModel({
+    findById: async (id) => {
+      const record = usersById.get(id);
+      return record ? makeUser(record) : null;
+    },
+    countDocuments: async (filter = {}) => {
+      const snapshot = [...usersById.values()].filter((user) => {
+        if (user.role !== "admin" || user.isActive === false) {
+          return false;
+        }
+
+        if (filter._id?.$ne && user._id === filter._id.$ne) {
+          return false;
+        }
+
+        return true;
+      }).length;
+
+      await delay(25);
+      return snapshot;
+    },
+    findByIdAndUpdate: async (id, update) => {
+      const current = usersById.get(id);
+      const next = {
+        ...current,
+        ...update.$set,
+      };
+      usersById.set(id, next);
+      return makeUser(next);
+    },
+  });
+
+  try {
+    await withServer(async (baseUrl) => {
+      const headers = {
+        authorization: `Bearer ${signAccessToken({
+          id: "64b0000000000000000000b2",
+          role: "admin",
+        })}`,
+        "content-type": "application/json",
+      };
+
+      const [firstResponse, secondResponse] = await Promise.all([
+        fetch(`${baseUrl}/users/admin/${firstAdminId}`, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ isActive: false }),
+        }),
+        fetch(`${baseUrl}/users/admin/${secondAdminId}`, {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ isActive: false }),
+        }),
+      ]);
+
+      const first = await readJson(firstResponse);
+      const second = await readJson(secondResponse);
+      const statuses = [first.status, second.status].sort((left, right) => left - right);
+      const activeAdmins = [...usersById.values()].filter(
+        (user) => user.role === "admin" && user.isActive !== false,
+      );
+
+      assert.deepEqual(statuses, [200, 409]);
+      assert.equal(activeAdmins.length, 1);
+      assert.ok(
+        [first.body.error, second.body.error].some((value) =>
+          /last active admin/i.test(String(value || ""))),
+      );
+    });
+  } finally {
+    restoreUserModel();
+    restoreLockModel();
   }
 });
 

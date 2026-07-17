@@ -44,7 +44,19 @@ const userSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-export const User = mongoose.model("User", userSchema);
+const adminUserMutationStateSchema = new mongoose.Schema(
+  {
+    key: { type: String, required: true, unique: true },
+    lockToken: { type: String, default: "" },
+    lockUntil: { type: Date, default: null, index: true },
+  },
+  { timestamps: true },
+);
+
+export const User = mongoose.models.User || mongoose.model("User", userSchema);
+export const AdminUserMutationState =
+  mongoose.models.AdminUserMutationState
+  || mongoose.model("AdminUserMutationState", adminUserMutationStateSchema);
 
 export function toPublicUser(user) {
   return {
