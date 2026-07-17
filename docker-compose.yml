@@ -64,48 +64,41 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
-    ports:
-      - "8000:8000"   # kept published - the demo runbook (root CLAUDE.md) curls this directly
+    # ML is an internal service. The public entry point is backend -> ml on the Compose network.
 
-  mongo:
-    image: mongo:7
-    restart: unless-stopped
-    volumes:
-      - mongodata:/data/db
-    ports:
-      - "27017:27017"
-    healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+  # Mongo is managed outside this Compose project. MONGO_URI must point at the existing instance.
 
   backend:
     build:
       context: .
       dockerfile: backend_app/Dockerfile
+      args:
+        # Leave empty for same-origin local deployments; set the public API subdomain in prod.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
     restart: unless-stopped
     environment:
       PORT: 3000
       NODE_ENV: production
-      MONGO_URI: mongodb://mongo:27017/zhytomate
+      MONGO_URI: ${MONGO_URI:?Set MONGO_URI to the existing MongoDB connection string}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
       ML_BASE_URL: http://ml:8000
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://zhytomate.2voby.fun,http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173}
     depends_on:
-      mongo:
-        condition: service_healthy
       ml:
         condition: service_healthy
     ports:
-      # Plain mapping - no machine-specific workaround baked into the committed file. If this
-      # collides locally, add your own untracked docker-compose.override.yml (same precedent
-      # ml-service/docker-compose.override.yml already sets for a different local collision).
-      - "3000:3000"
+      # Host Nginx is the only public entry point. Keep the port bound to loopback.
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/openapi.json').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     volumes:
       - backend_uploads:/app/backend_app/uploads
 
@@ -118,8 +111,8 @@ services:
     restart: unless-stopped
     environment:
       PORT: 3000
-      MONGO_URI: mongodb://mongo:27017/future_in_action_scraper
-      PLACES_MONGO_URI: mongodb://mongo:27017/zhytomate
+      MONGO_URI: ${MONGO_URI:?Set MONGO_URI to the existing MongoDB connection string}
+      PLACES_MONGO_URI: ${MONGO_URI:?Set MONGO_URI to the existing MongoDB connection string}
       TG_API_ID: ${TG_API_ID}
       TG_API_HASH: ${TG_API_HASH}
       TG_SESSION: ${TG_SESSION}
@@ -151,8 +144,6 @@ services:
       OVERPASS_URL: ${OVERPASS_URL:-https://overpass-api.de/api/interpreter}
       PLACES_BBOX: ${PLACES_BBOX:-50.20,28.60,50.30,28.75}
     depends_on:
-      mongo:
-        condition: service_healthy
       ml:
         condition: service_healthy
       # News now POSTs to the backend; wait for it to start (backend has no healthcheck, so
@@ -160,6 +151,15 @@ services:
       # regardless, so this is just start-order best-effort.
       backend:
         condition: service_started
+    ports:
+      # The parser subdomain is proxied here by the host Nginx. The service itself is not public.
+      - "127.0.0.1:3002:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
 
   places-sync:
     build:
@@ -168,15 +168,10 @@ services:
     restart: unless-stopped
     command: ["node", "scripts/places-worker.js"]
     environment:
-      PLACES_MONGO_URI: mongodb://mongo:27017/zhytomate
+      PLACES_MONGO_URI: ${MONGO_URI:?Set MONGO_URI to the existing MongoDB connection string}
       OVERPASS_URL: ${OVERPASS_URL:-https://overpass-api.de/api/interpreter}
       PLACES_BBOX: ${PLACES_BBOX:-50.20,28.60,50.30,28.75}
       PLACES_IMPORT_SCHEDULE: ${PLACES_IMPORT_SCHEDULE:-0 3 * * *}
-    depends_on:
-      mongo:
-        condition: service_healthy
-
 volumes:
   pgdata: {}
-  mongodata: {}
   backend_uploads: {}

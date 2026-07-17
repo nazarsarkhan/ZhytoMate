@@ -11,6 +11,8 @@
 # ---- Stage 1: build the frontend SPA ----
 FROM node:22-alpine AS frontend-build
 WORKDIR /build/frontend_app
+ARG VITE_API_BASE_URL=
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 COPY frontend_app/package.json frontend_app/package-lock.json ./
 RUN npm ci
 COPY frontend_app/ ./

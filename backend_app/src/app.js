@@ -75,6 +75,9 @@ export function createApp() {
   const app = express();
 
   app.disable("x-powered-by");
+  // The production deployment terminates TLS in Nginx. Trust the single local proxy so
+  // req.protocol/req.ip and generated upload URLs reflect the original HTTPS request.
+  app.set("trust proxy", 1);
   app.use((_req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");

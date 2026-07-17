@@ -5,8 +5,10 @@ npm-debug.log*
 docs/*
 !docs/CIVIC_GLOSSARY.md
 CLAUDE.md
+.claude/
 .worktrees/
 .playwright-mcp/
+temp/
 backend_app/uploads/
 zhytomate_backup.sql
 docker-compose.override.yml
