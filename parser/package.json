@@ -19,7 +19,7 @@
     "gramjs": "npm:telegram@^2.26.22",
     "mammoth": "^1.12.0",
     "mongodb": "^7.4.0",
-    "node-cron": "^3.0.3",
+    "node-cron": "^4.6.0",
     "p-limit": "^7.3.0",
     "pdf-parse": "^2.4.5",
     "qrcode-terminal": "^0.12.0",
