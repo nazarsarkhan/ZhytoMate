@@ -65,14 +65,14 @@ function buildingMatches(target, source) {
   return new RegExp(`(?:^|\\s)${base}\\s+${corpWord}\\.?\\s+${number}(?:$|\\s)`, "i").test(sourceText);
 }
 
-function addressMatches(target, row) {
+function addressMatches(target, row, { ignoreBuilding = false } = {}) {
   const targetCity = normalizeText(target.city).replace(/^місто\s+/, "");
   const sourceCity = normalizeText(row.city).replace(/^місто\s+/, "");
 
   return (
     (!targetCity || !sourceCity || targetCity === sourceCity) &&
     normalizeStreet(target.street) === normalizeStreet(row.street) &&
-    buildingMatches(target.building, row.buildings)
+    (ignoreBuilding || buildingMatches(target.building, row.buildings))
   );
 }
 
@@ -191,7 +191,20 @@ export function findAddressInParsedPage(parsedPage, address) {
   const matches = parsedPage.addresses.filter((row) => addressMatches(address, row));
   // The source can contain both household and legal-consumer rows for one building. Prefer the
   // household row because the app is intended for residents.
-  return matches.find((row) => /побутові/i.test(row.note) && !/непобутові/i.test(row.note)) || matches[0] || null;
+  const exact = matches.find((row) => /побутові/i.test(row.note) && !/непобутові/i.test(row.note)) || matches[0];
+  if (exact) return exact;
+
+  // ZTOE sometimes publishes only part of a street's buildings while assigning the whole
+  // street to one queue. If the requested building is omitted, use that queue only when the
+  // street has an unambiguous queue/subqueue; never guess when the street spans multiple queues.
+  const streetRows = parsedPage.addresses.filter((row) => addressMatches(address, row, { ignoreBuilding: true }));
+  const queueKeys = new Set(
+    streetRows
+      .filter((row) => Number.isInteger(row.queueNumber) && Number.isInteger(row.subqueue))
+      .map((row) => `${row.queueNumber}:${row.subqueue}`),
+  );
+  if (queueKeys.size !== 1) return null;
+  return streetRows.find((row) => /побутові/i.test(row.note) && !/непобутові/i.test(row.note)) || streetRows[0] || null;
 }
 
 export { addressMatches, normalizeBuilding, normalizeStreet, parseScheduleRows };

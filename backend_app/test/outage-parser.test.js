@@ -46,3 +46,24 @@ test("parses ZTOE address and schedule rows", () => {
     parsed.addresses[0],
   );
 });
+
+test("falls back to a unique street queue when ZTOE omits the requested building", () => {
+  const parsed = parseZtoePage(
+    page.replace(
+      "вул. Вільський Шлях</td><td>14, 15",
+      "вул. Кибальчича</td><td>18, 20, 22",
+    ).replace(
+      "вул. Вільський Шлях</td><td>14</td>",
+      "вул. Кибальчича</td><td>22</td>",
+    ),
+  );
+
+  assert.equal(
+    findAddressInParsedPage(parsed, {
+      city: "Житомир",
+      street: "вулиця Кибальчича",
+      building: "3",
+    }),
+    parsed.addresses[0],
+  );
+});
