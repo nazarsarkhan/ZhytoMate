@@ -1,11 +1,10 @@
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import Icon from "../ui/Icon.jsx";
 import { adminNavItem, navItems } from "../../consts/navItems.js";
 import { useAuth } from "../../hooks/useAuth.jsx";
 import { useCurrentUser } from "../../hooks/useCurrentUser.js";
 
 export default function SideNav() {
-  const navigate = useNavigate();
   const { logout } = useAuth();
   const currentUser = useCurrentUser();
   const visibleItems = currentUser.data?.role === "admin" ? [...navItems, adminNavItem] : navItems;
@@ -43,10 +42,7 @@ export default function SideNav() {
         <button
           className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-white/70 transition hover:bg-white/5 hover:text-white"
           type="button"
-          onClick={() => {
-            logout();
-            navigate("/login", { replace: true });
-          }}
+          onClick={() => logout()}
         >
           <Icon name="logout" className="text-[22px]" /> Вийти
         </button>

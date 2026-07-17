@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import Shell from "../../components/layout/Shell.jsx";
 import AppHeader from "../../components/layout/AppHeader.jsx";
 import BottomNav from "../../components/navigation/BottomNav.jsx";
@@ -46,7 +45,6 @@ function Row({ icon, label, value, onClick }) {
 }
 
 export default function ProfilePage() {
-  const navigate = useNavigate();
   const { logout } = useAuth();
   const currentUser = useCurrentUser();
   const updateName = useUpdateProfileName();
@@ -205,9 +203,8 @@ export default function ProfilePage() {
   };
 
   const handleLogout = () => {
-    logout();
     setLogoutConfirmOpen(false);
-    navigate("/login", { replace: true });
+    logout();
   };
 
   const preferenceRows = [

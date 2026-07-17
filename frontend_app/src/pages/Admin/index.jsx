@@ -331,14 +331,12 @@ function AdminDrawer({ open, onClose, onLogoutClick }) {
 }
 
 function AdminShell({ children }) {
-  const navigate = useNavigate();
   const { logout } = useAuth();
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
   const confirmLogout = () => {
-    logout();
     setLogoutConfirmOpen(false);
-    navigate("/login", { replace: true });
+    logout();
   };
 
   return (
@@ -374,15 +372,13 @@ function AdminShell({ children }) {
 }
 
 function AdminHeader({ section, onCreate }) {
-  const navigate = useNavigate();
   const { logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
   const confirmLogout = () => {
-    logout();
     setLogoutConfirmOpen(false);
-    navigate("/login", { replace: true });
+    logout();
   };
 
   return (
@@ -721,9 +717,8 @@ function AdminDetailPage({ entity }) {
   const item = (Array.isArray(data[entity]) ? data[entity] : []).find((entry) => entry.id === id);
 
   const confirmLogout = () => {
-    logout();
     setLogoutConfirmOpen(false);
-    navigate("/login", { replace: true });
+    logout();
   };
 
   if (!item) {
