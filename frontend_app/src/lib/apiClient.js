@@ -1,4 +1,4 @@
-import { performLogout } from "./authSession.js";
+import { getSessionGeneration, performLogout } from "./authSession.js";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
 const ACCESS_TOKEN_KEY = "zhytomate.accessToken";
@@ -52,6 +52,7 @@ let pendingRefresh = null;
 function refreshAccessToken() {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return Promise.resolve(false);
+  const refreshGeneration = getSessionGeneration();
 
   if (!pendingRefresh) {
     pendingRefresh = fetch(`${API_BASE}/auth/refresh`, {
@@ -60,8 +61,9 @@ function refreshAccessToken() {
       body: JSON.stringify({ refreshToken }),
     })
       .then(async (response) => {
-        if (!response.ok) return false;
+        if (!response.ok || refreshGeneration !== getSessionGeneration()) return false;
         const body = await response.json();
+        if (refreshGeneration !== getSessionGeneration()) return false;
         setTokens({ accessToken: body.accessToken });
         return true;
       })

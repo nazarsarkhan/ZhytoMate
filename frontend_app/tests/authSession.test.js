@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { performLogout, subscribeToSessionInvalidation } from '../src/lib/authSession.js';
+import { getSessionGeneration, performLogout, subscribeToSessionInvalidation } from '../src/lib/authSession.js';
 
 test('performLogout clears the session, notifies subscribers, and redirects once away from protected pages', () => {
   const calls = [];
@@ -29,4 +29,10 @@ test('performLogout skips redirect when already on the login page', () => {
   });
 
   assert.deepEqual(calls, ['clear']);
+});
+
+test('performLogout advances the session generation so pending refreshes cannot restore auth', () => {
+  const before = getSessionGeneration();
+  performLogout({ clearSession: () => {}, redirect: false });
+  assert.equal(getSessionGeneration(), before + 1);
 });

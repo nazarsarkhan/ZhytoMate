@@ -1,4 +1,9 @@
 const sessionInvalidationListeners = new Set();
+let sessionGeneration = 0;
+
+export function getSessionGeneration() {
+  return sessionGeneration;
+}
 
 export function subscribeToSessionInvalidation(listener) {
   sessionInvalidationListeners.add(listener);
@@ -14,6 +19,7 @@ export function performLogout({
   currentPath = () => window.location.pathname,
   replaceLocation = (path) => window.location.replace(path),
 } = {}) {
+  sessionGeneration += 1;
   clearSession?.();
 
   for (const listener of [...sessionInvalidationListeners]) {

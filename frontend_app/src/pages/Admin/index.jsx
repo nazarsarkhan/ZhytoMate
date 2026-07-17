@@ -162,9 +162,16 @@ function emptyItem(entity) {
 }
 
 function normalizeItemForForm(entity, item) {
-  let base = entity === "surveys" ? normalizeSurveyForForm(item) : item ? { ...item } : emptyItem(entity);
+  let base = entity === "surveys"
+    ? normalizeSurveyForForm(item || emptyItem(entity))
+    : item ? { ...item } : emptyItem(entity);
   if (entity === "news" || entity === "announcements") {
-    base = { ...base, tags: Array.isArray(base.tags) ? base.tags.join(", ") : base.tags || "" };
+    base = {
+      ...base,
+      tags: Array.isArray(base.tags) ? base.tags.join(", ") : base.tags || "",
+      _originalPublishedAt: base.publishedAt,
+      _originalExpiresAt: base.expiresAt,
+    };
   }
   return Object.fromEntries(
     Object.entries(base).map(([key, value]) => [key, dateFieldNames.has(key) ? toDateInputValue(value) : value]),
@@ -205,6 +212,8 @@ function normalizeFormForSave(entity, form, options = {}) {
       importance: Number(form.importance || 3),
       publishedAt: form.publishedAt || null,
       expiresAt: form.expiresAt || null,
+      _originalPublishedAt: form._originalPublishedAt,
+      _originalExpiresAt: form._originalExpiresAt,
       tags: String(form.tags || "")
         .split(",")
         .map((tag) => tag.trim())

@@ -90,6 +90,7 @@ function mapNewsFromApi(news) {
 }
 
 function mapSettingsFromApi(settings) {
+  if (!settings || typeof settings !== "object") return [];
   return [
     {
       id: "public-settings",
@@ -124,21 +125,20 @@ function contactToApi(form) {
 }
 
 function newsToApi(form, { isAnnouncement }) {
+  const preserveDate = (value, original) => {
+    if (!value) return null;
+    return original && String(original).slice(0, 10) === String(value).slice(0, 10) ? original : value;
+  };
   return {
     title: form.title,
     summary: form.summary || "",
     body: form.body || "",
-    sourceUrl: form.sourceUrl ? form.sourceUrl : null,
     category: form.category || "",
-    district: form.district ? form.district : null,
     importance: Number(form.importance || 3),
-    importanceLabel: form.importanceLabel || "",
     isAnnouncement,
-    eventDate: form.eventDate ? form.eventDate : null,
-    publishedAt: form.publishedAt ? form.publishedAt : null,
-    expiresAt: form.expiresAt ? form.expiresAt : null,
+    publishedAt: preserveDate(form.publishedAt, form._originalPublishedAt),
+    expiresAt: preserveDate(form.expiresAt, form._originalExpiresAt),
     tags: Array.isArray(form.tags) ? form.tags : [],
-    lang: form.lang || "uk",
   };
 }
 
