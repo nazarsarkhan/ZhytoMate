@@ -23,6 +23,46 @@ function HeaderAction({ icon, label, to, onClick }) {
   );
 }
 
+function getInitials(name) {
+  return (name || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase();
+}
+
+function ProfileAvatar({ profile }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const avatarUrl = profile.avatarUrl?.trim();
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [avatarUrl]);
+
+  if (avatarUrl && !imageFailed) {
+    return (
+      <img
+        className="h-20 w-20 rounded-full border-2 border-white/20 object-cover shadow-inner"
+        alt=""
+        src={avatarUrl}
+        onError={() => setImageFailed(true)}
+      />
+    );
+  }
+
+  return (
+    <div
+      aria-label="Аватар користувача"
+      className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-white/20 bg-gradient-to-br from-primary-fixed/80 via-secondary-container to-tertiary-fixed text-xl font-extrabold text-on-primary shadow-inner"
+    >
+      {getInitials(profile.name) || <Icon name="person" filled className="text-4xl" />}
+    </div>
+  );
+}
+
 export default function AppHeader({
   title,
   subtitle,
@@ -80,7 +120,6 @@ export default function AppHeader({
       <div className="w-full">
         <div className="mb-5 flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="h-10 w-10 shrink-0 rounded-full bg-white/15" />
             <div className="min-w-0">
               {eyebrow ? <p className="truncate text-xs font-bold uppercase tracking-wider text-primary-fixed-dim">{eyebrow}</p> : null}
               <h1 className="truncate text-xl font-bold md:text-2xl">Житомир</h1>
@@ -91,13 +130,7 @@ export default function AppHeader({
         {profile ? (
           <div className="mb-5 flex items-center gap-4">
             <div className="relative">
-              {profile.avatarUrl ? (
-                <img className="h-20 w-20 rounded-full border-2 border-white/20 object-cover shadow-inner" alt="" src={profile.avatarUrl} />
-              ) : (
-                <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-white/20 bg-white/10 shadow-inner">
-                  <Icon name="person" filled className="text-4xl text-on-primary" />
-                </div>
-              )}
+              <ProfileAvatar profile={profile} />
               {profile.onEditAvatar ? (
                 <button aria-label="Змінити фото" className="absolute bottom-0 left-0 flex h-8 w-8 items-center justify-center rounded-full border-2 border-primary-container bg-secondary-container text-on-secondary-container active:scale-95" type="button" onClick={profile.onEditAvatar}>
                   <Icon name="photo_camera" className="text-base" />
