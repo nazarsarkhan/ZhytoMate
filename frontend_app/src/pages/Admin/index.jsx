@@ -288,7 +288,7 @@ function AdminActions({ onLogoutClick, onNavigate }) {
   return (
     <div className="space-y-1.5 border-t border-white/10 pt-4">
       <Link className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white" to="/assistant" onClick={onNavigate}>
-        <Icon name="arrow_back" className="text-[22px]" /> Вийти з адмінки
+        <Icon name="arrow_back" className="text-[22px]" /> До застосунку
       </Link>
       <Link className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white" to="/profile" onClick={onNavigate}>
         <Icon name="person" className="text-[22px]" /> Профіль
