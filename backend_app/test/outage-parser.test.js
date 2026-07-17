@@ -67,3 +67,16 @@ test("falls back to a unique street queue when ZTOE omits the requested building
     parsed.addresses[0],
   );
 });
+
+test("matches geocoder street names with a trailing street type", () => {
+  const parsed = parseZtoePage(page, 10);
+
+  assert.equal(
+    findAddressInParsedPage(parsed, {
+      city: "Житомир",
+      street: "Вільський Шлях вулиця",
+      building: "14",
+    }),
+    parsed.addresses[0],
+  );
+});

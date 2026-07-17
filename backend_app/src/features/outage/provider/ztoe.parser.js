@@ -28,6 +28,7 @@ function normalizeStreet(value) {
     .replace(/^бул\s+/, "")
     .replace(/^площа\s+/, "")
     .replace(/^пл\s+/, "")
+    .replace(/\s+(?:вулиця|вул|провулок|пров|проспект|просп|бульвар|бул|площа|пл)$/, "")
     .trim();
 }
 
