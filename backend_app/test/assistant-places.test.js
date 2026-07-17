@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { detectPlaceQuery, formatPlaceAnswer } from '../src/features/places/places-assistant.js';
+import { detectPlaceQuery, formatPlaceAnswer, formatTransportFallbackAnswer } from '../src/features/places/places-assistant.js';
 
 test('detects commercial place queries in Russian and Ukrainian', () => {
   assert.deepEqual(detectPlaceQuery('Куда пойти поесть в Житомире?'), { category: 'food' });
@@ -22,4 +22,12 @@ test('formats only catalog hits and includes OSM attribution', () => {
   assert.match(answer, /Кава/);
   assert.match(answer, /OpenStreetMap/);
   assert.equal(formatPlaceAnswer([]), null);
+});
+
+test('gives an actionable transport fallback without inventing a route', () => {
+  const answer = formatTransportFallbackAnswer('Мені треба з Глобала доїхати на Богунію');
+
+  assert.match(answer, /Транспорт/);
+  assert.match(answer, /маршрут|зупин|рух/i);
+  assert.doesNotMatch(answer, /№\s*\d+/);
 });

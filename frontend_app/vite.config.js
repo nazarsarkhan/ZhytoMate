@@ -6,7 +6,9 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: "http://localhost:3000",
+        // Docker publishes backend on 3001 in the root compose stack. Keep this configurable for
+        // developers running backend directly on another port.
+        target: process.env.VITE_BACKEND_PROXY_TARGET || "http://localhost:3001",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
       },

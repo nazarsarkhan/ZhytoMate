@@ -7,3 +7,11 @@ def test_unique_sources_removes_duplicate_chunk_sources_in_order():
     sources = [SimpleNamespace(source="manual-curated"), SimpleNamespace(source="manual-curated"), SimpleNamespace(source="https://zt-rada.gov.ua")]
     result = _unique_sources(sources)
     assert [item.source for item in result] == ["manual-curated", "https://zt-rada.gov.ua"]
+
+
+def test_unique_sources_caps_user_facing_evidence():
+    sources = [SimpleNamespace(source=f"source-{index}") for index in range(8)]
+
+    result = _unique_sources(sources)
+
+    assert [item.source for item in result] == [f"source-{index}" for index in range(5)]

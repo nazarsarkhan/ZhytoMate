@@ -148,7 +148,20 @@ def normalize_civic_information_query(question: str) -> str:
 
 def normalize_civic_title_query(question: str) -> str:
     """Canonicalize colloquial/typo title forms before retrieval and translation."""
+    had_colloquial_variant = bool(_TITLE_VARIANT_RE.search(question))
     normalized = _TITLE_VARIANT_RE.sub("мер", question)
+    if had_colloquial_variant and not re.search(r"житомир", normalized, re.IGNORECASE):
+        return "Хто мер?" if re.search(r"\bхто\b", normalized, re.IGNORECASE) else "Кто мер?"
+    if _TITLE_QUERY_RE.search(normalized):
+        # Keep all direct mayor variants (including Russian "кто сейчас мэр") on one stable
+        # retrieval anchor. This prevents language/word-order variants from missing the curated
+        # official fact and falling through to an ungrounded answer.
+        if re.search(r"\b(?:кто|мэр|мэром|мэрчик)\b", normalized, re.IGNORECASE) and not re.search(
+            r"\b(?:глава\s+города|голова\s+міста|голова\s+міста|руководит|очолює|керує)\b",
+            normalized,
+            re.IGNORECASE,
+        ):
+            return "Хто мер Житомира?"
     if re.search(
         r"\b(?:глава\s+города|кто\s+руководит|керує\s+містом|очолює\s+місто|"
         r"голова\s+міста|голови\s+міста|глава\s+міста)\b",
@@ -195,3 +208,32 @@ def verify_civic_context(question: str, context_chunks: list[str]) -> CivicVerif
     if not supported_sentences:
         return CivicVerification(True, "title_not_supported")
     return CivicVerification(False)
+
+
+def extract_trusted_civic_title_answer(
+    question: str, context: list[tuple[str, str]]
+) -> str | None:
+    """Return a deterministic answer for a title fact when trusted evidence states it directly.
+
+    Office-holder facts are too sensitive to leave to free-form paraphrasing: a model can turn a
+    deputy mention into a mayor claim or drop a status qualifier. Only official/curated sources
+    and sentences already matching the conservative title patterns are eligible.
+    """
+    if not is_civic_title_query(question):
+        return None
+    candidates: list[str] = []
+    for text, source in context:
+        if not is_trusted_title_source(source):
+            continue
+        for sentence in re.split(r"[.!?\n]+", text):
+            sentence = " ".join(sentence.split()).strip()
+            if not sentence or _DEPUTY_RE.search(sentence):
+                continue
+            if _TITLE_STATUS_RE.search(sentence) or _DIRECT_TITLE_RE.search(sentence):
+                candidates.append(sentence)
+    if not candidates:
+        return None
+    # Prefer a status sentence: it preserves qualifiers such as “not elected” instead of
+    # selecting an older direct-name statement from a neighbouring chunk.
+    candidates.sort(key=lambda sentence: 0 if _TITLE_STATUS_RE.search(sentence) else 1)
+    return f"За підтвердженою інформацією: {candidates[0]}."

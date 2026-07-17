@@ -45,11 +45,21 @@ from app.schemas.query import QueryRequest, QueryResponse
 logger = structlog.get_logger(__name__)
 
 
-def _unique_sources(sources):
-    """Keep one evidence item per source URL/name while preserving retrieval order."""
+_MAX_EXPOSED_SOURCES = 5
+
+
+def _unique_sources(sources, limit: int = _MAX_EXPOSED_SOURCES):
+    """Keep a small, ordered evidence set for the user-facing contract.
+
+    Retrieval can use more chunks than a person should have to scan. Exposing every retrieved
+    chunk also makes weak matches look like corroboration, so only the first unique source
+    identities survive the groundedness gate.
+    """
     seen = set()
     unique = []
     for source in sources:
+        if len(unique) >= limit:
+            break
         if source.source in seen:
             continue
         seen.add(source.source)

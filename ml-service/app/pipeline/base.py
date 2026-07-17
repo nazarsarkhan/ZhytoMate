@@ -319,6 +319,7 @@ async def run_shared_tail(
     answer_lang: str = "uk",
     force_ungrounded: bool = False,
     strong_lexical_match: bool = False,
+    deterministic_answer: str | None = None,
 ) -> RagResult:
     """The ONE place the confidence-gate -> generate -> extractive-fallback tail lives (ADR-007).
     Both SimpleRAGPipeline and AgentRAGPipeline call this after producing their own
@@ -384,36 +385,37 @@ async def run_shared_tail(
     llm_ok = True
     retries = 0
     llm_start = time.perf_counter()
-    try:
-        answer, retries = await generator.generate(
-            prompt, temperature=_GENERATION_TEMPERATURE, max_tokens=_MAX_OUTPUT_TOKENS,
-            timeout_s=_GENERATE_TIMEOUT_S,
-        )
+    if deterministic_answer:
+        answer = deterministic_answer
         confidence = round(top1_sim, 2) if grounded else 0.0
-        llm_calls.labels(route=route_label, outcome="ok").inc()
-    except Exception as exc:  # noqa: BLE001 — LLM is the least reliable hop; demo must stay alive (ADR-007)
-        llm_ok = False
-        if top_results:
-            answer = _FALLBACK_PREFIX + top_results[0].text
-            confidence = min(round(top1_sim, 2), _FALLBACK_CONFIDENCE_CAP)
-        else:
-            # Double fallback: nothing grounded to extractively quote, and even the ungrounded
-            # conversational attempt failed. Honest about the failure, not phrased as "no info".
-            answer = _GENERATION_UNAVAILABLE_BY_LANG.get(
-                answer_lang, _GENERATION_UNAVAILABLE_BY_LANG["uk"]
+        llm_elapsed_s = 0.0
+    else:
+        try:
+            answer, retries = await generator.generate(
+                prompt, temperature=_GENERATION_TEMPERATURE, max_tokens=_MAX_OUTPUT_TOKENS,
+                timeout_s=_GENERATE_TIMEOUT_S,
             )
-            confidence = 0.0
-        reason = _fallback_reason(exc)
-        llm_calls.labels(route=route_label, outcome="fallback").inc()
-        degraded_responses.labels(reason=reason).inc()
-        logger.warning(
-            "pipeline_llm_fallback", route=route.value, err=type(exc).__name__, reason=reason
-        )
-    finally:
-        # Timed around the whole try/except — a failed/timed-out call's latency is just as
-        # operationally interesting as a successful one's.
-        llm_elapsed_s = time.perf_counter() - llm_start
-        llm_latency_seconds.observe(llm_elapsed_s)
+            confidence = round(top1_sim, 2) if grounded else 0.0
+            llm_calls.labels(route=route_label, outcome="ok").inc()
+        except Exception as exc:  # noqa: BLE001 — LLM is the least reliable hop; demo must stay alive (ADR-007)
+            llm_ok = False
+            if top_results:
+                answer = _FALLBACK_PREFIX + top_results[0].text
+                confidence = min(round(top1_sim, 2), _FALLBACK_CONFIDENCE_CAP)
+            else:
+                answer = _GENERATION_UNAVAILABLE_BY_LANG.get(
+                    answer_lang, _GENERATION_UNAVAILABLE_BY_LANG["uk"]
+                )
+                confidence = 0.0
+            reason = _fallback_reason(exc)
+            llm_calls.labels(route=route_label, outcome="fallback").inc()
+            degraded_responses.labels(reason=reason).inc()
+            logger.warning(
+                "pipeline_llm_fallback", route=route.value, err=type(exc).__name__, reason=reason
+            )
+        finally:
+            llm_elapsed_s = time.perf_counter() - llm_start
+    llm_latency_seconds.observe(llm_elapsed_s)
 
     # A retrieval hit is not evidence when the generated answer explicitly says that the
     # requested information is unavailable. This commonly happens for semantically similar but
