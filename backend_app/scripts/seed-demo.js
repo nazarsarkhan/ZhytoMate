@@ -1,24 +1,25 @@
 import bcrypt from "bcryptjs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { connectMongo, disconnectMongo } from "../src/shared/db.js";
 import User from "../src/features/user/user.model.js";
 import Appeal from "../src/features/appeal/appeal.model.js";
 import { Survey } from "../src/features/survey/survey.model.js";
 import { Contact } from "../src/features/contact/contact.model.js";
+import { Setting } from "../src/features/setting/setting.model.js";
 import { voteInSurvey } from "../src/features/survey/survey.service.js";
 
 const username = "nazar_dev";
+const __filename = fileURLToPath(import.meta.url);
 
 // Dedicated admin login for the admin panel. Provide the password via ADMIN_SEED_PASSWORD.
 const ADMIN_USERNAME = "admin";
 const ADMIN_EMAIL = "admin@zhytomate.local";
-const ADMIN_PASSWORD = process.env.ADMIN_SEED_PASSWORD;
-if (!ADMIN_PASSWORD) {
-  throw new Error("ADMIN_SEED_PASSWORD must be set to seed the admin account");
-}
+
 // Mirrors the previously-static contacts from frontend_app/src/consts/serviceData.js so the
 // Contacts tab has data once it reads from the API. `kind:"emergency"` renders in the top grid;
 // `kind:"utility"` rows are grouped under their `group` heading.
-const demoContacts = [
+export const demoContacts = [
   { name: "Пожежна", phone: "101", icon: "local_fire_department", kind: "emergency", group: "" },
   { name: "Поліція", phone: "102", icon: "local_police", kind: "emergency", group: "" },
   { name: "Швидка", phone: "103", icon: "medical_services", kind: "emergency", group: "" },
@@ -30,6 +31,10 @@ const demoContacts = [
   { name: "ЦНАП", phone: "0412 47-06-15", icon: "account_balance", kind: "utility", group: "Соціальні та адмін послуги" },
   { name: "Соцзахист", phone: "0412 47-09-17", icon: "family_restroom", kind: "utility", group: "Соціальні та адмін послуги" },
 ];
+
+export const demoPublicSettings = Object.freeze({
+  cityHotline: "15-80",
+});
 
 const demoAppeals = [
   {
@@ -166,7 +171,12 @@ async function seedAdmin(demoUser) {
   });
 
   if (!admin) {
-    const password = await bcrypt.hash(ADMIN_PASSWORD, 12);
+    const adminPassword = process.env.ADMIN_SEED_PASSWORD;
+    if (!adminPassword) {
+      throw new Error("ADMIN_SEED_PASSWORD must be set to seed the admin account");
+    }
+
+    const password = await bcrypt.hash(adminPassword, 12);
     admin = await User.create({
       username: ADMIN_USERNAME,
       firstName: "City",
@@ -184,22 +194,44 @@ async function seedAdmin(demoUser) {
   return { adminCreated };
 }
 
-async function seedContacts() {
+export async function seedContacts() {
   let created = 0;
 
   for (const [index, contact] of demoContacts.entries()) {
     const existing = await Contact.findOne({ name: contact.name });
     if (existing) {
+      Object.assign(existing, { ...contact, order: index, isActive: true });
+      if (typeof existing.save === "function") {
+        await existing.save();
+      }
       continue;
     }
-    await Contact.create({ ...contact, order: index });
+
+    await Contact.create({ ...contact, order: index, isActive: true });
     created += 1;
   }
 
   return created;
 }
 
-async function main() {
+export async function seedPublicSettings() {
+  for (const [key, value] of Object.entries(demoPublicSettings)) {
+    await Setting.findOneAndUpdate(
+      { key },
+      { $set: { key, value } },
+      {
+        new: true,
+        upsert: true,
+        runValidators: true,
+        setDefaultsOnInsert: true,
+      },
+    );
+  }
+
+  return Object.keys(demoPublicSettings).length;
+}
+
+export async function main() {
   await connectMongo();
 
   const user = await findNazarDev();
@@ -211,6 +243,7 @@ async function main() {
   const createdAppeals = await seedAppeals(user);
   const { createdSurveys, savedVotes } = await seedSurveysAndVotes(user);
   const createdContacts = await seedContacts();
+  const ensuredPublicSettings = await seedPublicSettings();
 
   console.log(`Seeded demo data for ${username}:`);
   console.log(`- ${username} promoted to admin; dedicated admin account ${adminCreated ? "created" : "already present"} (login: ${ADMIN_USERNAME})`);
@@ -218,13 +251,19 @@ async function main() {
   console.log(`- surveys created: ${createdSurveys}`);
   console.log(`- votes saved: ${savedVotes}`);
   console.log(`- contacts created: ${createdContacts}`);
+  console.log(`- public settings ensured: ${ensuredPublicSettings}`);
 }
 
-main()
-  .catch((err) => {
-    console.error("[seed-demo] failed:", err.message);
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await disconnectMongo();
-  });
+const isDirectRun =
+  process.argv[1] && path.resolve(process.argv[1]) === __filename;
+
+if (isDirectRun) {
+  main()
+    .catch((err) => {
+      console.error("[seed-demo] failed:", err.message);
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      await disconnectMongo();
+    });
+}
