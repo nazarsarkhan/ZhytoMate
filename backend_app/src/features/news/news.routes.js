@@ -14,7 +14,6 @@ import {
   adminNewsListQuerySchema,
   ingestNewsSchema,
   newsIdParamsSchema,
-  newsListQuerySchema,
   updateNewsSchema,
 } from "./news.schema.js";
 
@@ -48,7 +47,7 @@ router.delete(
 );
 
 // Read endpoints for the app, JWT-protected like every other user-facing endpoint.
-router.get("/", authenticate, validateQuery(newsListQuerySchema), getNews);
+router.get("/", authenticate, getNews);
 router.get(
   "/:id",
   authenticate,

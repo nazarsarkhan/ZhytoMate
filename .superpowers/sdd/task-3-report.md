@@ -147,3 +147,22 @@ Result:
 ## Commit
 
 Task-specific commit created after staging only the Task 3 backend/report files. Unrelated frontend edits were left untouched.
+
+## Review follow-up â€” 2026-07-17
+
+Addressed the review findings without touching frontend, users, or settings code:
+
+- restored backward-compatible public `GET /news` query handling by returning to tolerant page/limit parsing with defaulting/clamping on the public route
+- kept strict query validation on `GET /news/admin`
+- added explicit unauthenticated/non-admin coverage for `PATCH /news/admin/:id`
+- added explicit unauthenticated/non-admin coverage for `DELETE /news/admin/:id`
+- added a focused regression that `POST /news/ingest` still requires `x-internal-token`, accepts the existing ingest payload shape, and strips unknown fields through validation
+
+### Review verification
+
+- Focused: `node --test test/admin-news.test.js`
+  - Output: `9 passed, 0 failed`
+- Full backend: `npm test`
+  - Output: `46 passed, 0 failed`
+
+The final review-fix commit hash is reported in the task handoff response for this run.

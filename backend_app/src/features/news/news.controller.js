@@ -7,6 +7,40 @@ import {
   updateNewsEntry,
 } from "./news.service.js";
 
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 20;
+
+function positiveInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function optionalTrimmedString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function optionalBoolean(value) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true") {
+    return true;
+  }
+
+  if (normalized === "false") {
+    return false;
+  }
+
+  return undefined;
+}
+
 export async function ingestNews(req, res, next) {
   try {
     const news = await ingestNewsItem(req.body);
@@ -18,7 +52,11 @@ export async function ingestNews(req, res, next) {
 
 export async function getNews(req, res, next) {
   try {
-    const { category, isAnnouncement, limit, page, source } = req.validatedQuery;
+    const page = positiveInteger(req.query.page, DEFAULT_PAGE);
+    const limit = Math.min(positiveInteger(req.query.limit, DEFAULT_LIMIT), MAX_LIMIT);
+    const category = optionalTrimmedString(req.query.category);
+    const source = optionalTrimmedString(req.query.source);
+    const isAnnouncement = optionalBoolean(req.query.isAnnouncement);
     const result = await listNewsPage({
       category,
       source,
