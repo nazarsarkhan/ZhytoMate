@@ -12,7 +12,6 @@ import MessageFeedback from "../../components/assistant/MessageFeedback.jsx";
 import SinoptikWeatherWidget from "../../components/widgets/SinoptikWeatherWidget.jsx";
 import OutageStatusCard from "../../components/widgets/OutageStatusCard.jsx";
 import AirAlertStatusCard from "../../components/widgets/AirAlertStatusCard.jsx";
-import { useAutoScrollToBottom } from "../../hooks/useAutoScrollToBottom.js";
 import { useAssistantChat, useCancelAction, useConfirmAction } from "../../hooks/useAssistantChat.js";
 import { useAssistantFeedback } from "../../hooks/useAssistantFeedback.js";
 import { useCurrentUser } from "../../hooks/useCurrentUser.js";
@@ -37,7 +36,6 @@ export default function AssistantPage() {
   // persisted, so subsequent sends within the same visit continue that same thread. Resuming an
   // older thread is what /chat-history is for, not this screen.
   const [conversationId, setConversationId] = useState(null);
-  const messagesEndRef = useAutoScrollToBottom(messages);
 
   // A fresh confirming card always supersedes whatever was shown before - there is exactly one
   // pendingAction per conversation server-side, so a NEW actionCard means any earlier one is now
@@ -207,7 +205,6 @@ export default function AssistantPage() {
                 </div>
               </div>
             ) : null}
-            <div ref={messagesEndRef} />
           </div>
           <div className="mb-6 flex flex-wrap gap-2">
             {chatSuggestions.map((label) => (

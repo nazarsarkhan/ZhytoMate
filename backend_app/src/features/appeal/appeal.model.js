@@ -32,8 +32,8 @@ const appealSchema = new mongoose.Schema(
       index: true,
     },
     // Optional: chat-created appeals (assistant actions framework) publish without a photo.
-    // Form-created appeals (POST /appeals) still require one via createAppealSchema's Joi
-    // validation at the HTTP layer - this relaxation is DB-level only.
+    // A photo is optional for form-created appeals; citizens can still report a problem with
+    // a category, address and description when they do not have an image.
     imageUrl: { type: String, trim: true, default: "" },
     category: { type: String, enum: APPEAL_CATEGORIES, required: true },
     description: { type: String, required: true, trim: true },

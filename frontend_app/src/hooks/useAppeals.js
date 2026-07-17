@@ -35,7 +35,7 @@ export function useUploadAppealPhoto() {
 export function useCreateAppeal() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (appeal) => apiFetch("/appeals", { method: "POST", body: appeal }),
+    mutationFn: (appeal) => apiFetch("/appeals", { method: "POST", body: { ...appeal, imageUrl: appeal.imageUrl || "" } }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["appeals"] }),
   });
 }

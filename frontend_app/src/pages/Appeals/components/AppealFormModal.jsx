@@ -29,10 +29,10 @@ export default function AppealFormModal({ open, onClose }) {
   };
 
   const canSubmit =
-    Boolean(uploadedImageUrl) &&
     Boolean(category) &&
     address.trim().length > 3 &&
     description.trim().length > 8 &&
+    !uploadPhoto.isPending &&
     !createAppeal.isPending;
 
   const handleFileSelect = async (event) => {
@@ -111,7 +111,7 @@ export default function AppealFormModal({ open, onClose }) {
         ) : null}
 
         <div>
-          <label className="mb-3 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">Фото</label>
+          <label className="mb-3 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">Фото (необов'язково)</label>
           <input ref={fileInputRef} className="sr-only" accept="image/jpeg,image/png,image/webp" type="file" onChange={handleFileSelect} />
           {photoPreviewUrl ? (
             <div className="relative overflow-hidden rounded-xl border border-outline-variant/40 bg-surface-container-low">

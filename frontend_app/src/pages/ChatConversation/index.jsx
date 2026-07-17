@@ -5,7 +5,6 @@ import Shell from "../../components/layout/Shell.jsx";
 import AppHeader from "../../components/layout/AppHeader.jsx";
 import BottomNav from "../../components/navigation/BottomNav.jsx";
 import Icon from "../../components/ui/Icon.jsx";
-import { useAutoScrollToBottom } from "../../hooks/useAutoScrollToBottom.js";
 import { useAssistantChat, useCancelAction, useConfirmAction } from "../../hooks/useAssistantChat.js";
 import { useConversation } from "../../hooks/useConversation.js";
 import { formatDate } from "../../lib/formatDate.js";
@@ -75,7 +74,6 @@ export default function ChatConversationPage() {
   // Tracks which conversation the local `messages` state was last seeded from - see the effect
   // below for why this must gate re-seeding, not just run once at mount.
   const [seededConversationId, setSeededConversationId] = useState(null);
-  const messagesEndRef = useAutoScrollToBottom(messages);
 
   // Seeds local state from the fetched conversation once per conversation id, then the transcript
   // is owned locally from that point on - the same ownership model the Assistant page uses. This
@@ -158,7 +156,6 @@ export default function ChatConversationPage() {
             onActionResult={applyActionResult}
           />
         ))}
-        <div ref={messagesEndRef} className="scroll-mb-40" />
       </main>
       <div className="fixed inset-x-0 bottom-[calc(72px+var(--safe-bottom))] z-40 mx-auto w-full max-w-[1180px] border-t border-outline-variant/20 bg-surface/95 px-container-padding py-3 backdrop-blur-md sm:px-6 md:px-8">
         {listening ? <p className="mx-auto mb-2 max-w-3xl text-xs font-bold text-on-tertiary-fixed-variant">Слухаю запит...</p> : null}

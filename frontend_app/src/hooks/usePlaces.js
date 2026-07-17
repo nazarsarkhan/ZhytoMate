@@ -4,7 +4,12 @@ import { apiFetch } from "../lib/apiClient.js";
 export function usePlaces({ query = "", category = "" } = {}) {
   return useQuery({
     queryKey: ["places", query, category],
-    queryFn: () => apiFetch(`/places?q=${encodeURIComponent(query)}&category=${encodeURIComponent(category)}&limit=50`),
+    queryFn: () => {
+      const params = new URLSearchParams({ limit: "50" });
+      if (query.trim()) params.set("q", query.trim());
+      if (category) params.set("category", category);
+      return apiFetch(`/places?${params.toString()}`);
+    },
     staleTime: 60_000,
   });
 }
