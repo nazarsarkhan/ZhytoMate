@@ -227,6 +227,9 @@ export async function updateAdminUser({ id, updates }) {
     const existingIsActive = existingUser.isActive !== false;
     const nextRole = updates.role ?? existingUser.role;
     const nextIsActive = updates.isActive ?? existingIsActive;
+    const revokeRefreshSessions =
+      (updates.role !== undefined && nextRole !== existingUser.role)
+      || (updates.isActive !== undefined && nextIsActive !== existingIsActive);
 
     if (
       existingUser.role === "admin"
@@ -242,7 +245,11 @@ export async function updateAdminUser({ id, updates }) {
       }
     }
 
-    const user = await updateAdminUserById(id, pickAdminUserUpdates(updates));
+    const user = await updateAdminUserById(
+      id,
+      pickAdminUserUpdates(updates),
+      { revokeRefreshSessions },
+    );
 
     if (!user) {
       throw ApiError.notFound("User not found");

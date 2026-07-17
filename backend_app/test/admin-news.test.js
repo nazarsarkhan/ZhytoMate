@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { createApp } from "../src/app.js";
 import { config } from "../src/config/index.js";
 import News from "../src/features/news/news.model.js";
+import User from "../src/features/user/user.model.js";
 
 function signAccessToken({ id, role }) {
   return jwt.sign(
@@ -43,6 +44,31 @@ function patchModel(model, overrides) {
     for (const [key, value] of originals.entries()) {
       model[key] = value;
     }
+  };
+}
+
+function patchUserModel(overrides) {
+  return patchModel(User, overrides);
+}
+
+function makeCurrentAdmin(overrides = {}) {
+  return {
+    _id: overrides._id || "64b0000000000000000000a0",
+    username: "admin-user",
+    firstName: "Admin",
+    lastName: "User",
+    email: "admin@example.com",
+    password: "hashed-password",
+    phone: "",
+    address: {},
+    preferences: {},
+    avatarUrl: "",
+    role: "admin",
+    isActive: true,
+    refreshTokenVersion: 0,
+    createdAt: new Date("2026-07-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-07-01T00:00:00.000Z"),
+    ...overrides,
   };
 }
 
@@ -235,6 +261,7 @@ test("news admin routes require an authenticated admin", async () => {
 });
 
 test("GET /news/admin filters announcements and GET /news preserves public pagination with announcement filtering", async () => {
+  const requesterAdminId = "64b0000000000000000000a1";
   const { restore } = installNewsModelStub([
     makeNews({
       _id: "64b000000000000000000201",
@@ -261,13 +288,17 @@ test("GET /news/admin filters announcements and GET /news preserves public pagin
       createdAt: new Date("2026-07-08T09:00:00.000Z"),
     }),
   ]);
+  const restoreUserModel = patchUserModel({
+    findById: async (id) =>
+      id === requesterAdminId ? makeCurrentAdmin({ _id: requesterAdminId }) : null,
+  });
 
   try {
     await withServer(async (baseUrl) => {
       const adminResponse = await fetch(`${baseUrl}/news/admin?isAnnouncement=true`, {
         headers: {
           authorization: `Bearer ${signAccessToken({
-            id: "64b0000000000000000000a1",
+            id: requesterAdminId,
             role: "admin",
           })}`,
         },
@@ -299,6 +330,7 @@ test("GET /news/admin filters announcements and GET /news preserves public pagin
       assert.equal(publicPayload.body.pagination.total, 2);
     });
   } finally {
+    restoreUserModel();
     restore();
   }
 });
@@ -354,6 +386,7 @@ test("GET /news keeps public clamping/defaults backward-compatible while ignorin
 
 test("PATCH /news/admin/:id updates editable fields and keeps the public mapping stable", async () => {
   const targetNewsId = "64b000000000000000000204";
+  const requesterAdminId = "64b0000000000000000000a3";
   const { restore } = installNewsModelStub([
     makeNews({
       _id: targetNewsId,
@@ -362,6 +395,10 @@ test("PATCH /news/admin/:id updates editable fields and keeps the public mapping
       isAnnouncement: false,
     }),
   ]);
+  const restoreUserModel = patchUserModel({
+    findById: async (id) =>
+      id === requesterAdminId ? makeCurrentAdmin({ _id: requesterAdminId }) : null,
+  });
 
   try {
     await withServer(async (baseUrl) => {
@@ -369,7 +406,7 @@ test("PATCH /news/admin/:id updates editable fields and keeps the public mapping
         method: "PATCH",
         headers: {
           authorization: `Bearer ${signAccessToken({
-            id: "64b0000000000000000000a3",
+            id: requesterAdminId,
             role: "admin",
           })}`,
           "content-type": "application/json",
@@ -394,6 +431,7 @@ test("PATCH /news/admin/:id updates editable fields and keeps the public mapping
       assert.deepEqual(body.news.tags, ["important", "city"]);
     });
   } finally {
+    restoreUserModel();
     restore();
   }
 });
@@ -428,12 +466,17 @@ test("PATCH /news/admin/:id requires an authenticated admin", async () => {
 
 test("PATCH /news/admin/:id rejects parser-managed fields outside the editable allowlist", async () => {
   const targetNewsId = "64b000000000000000000205";
+  const requesterAdminId = "64b0000000000000000000a4";
   const { restore } = installNewsModelStub([
     makeNews({
       _id: targetNewsId,
       externalId: "parser_205",
     }),
   ]);
+  const restoreUserModel = patchUserModel({
+    findById: async (id) =>
+      id === requesterAdminId ? makeCurrentAdmin({ _id: requesterAdminId }) : null,
+  });
 
   try {
     await withServer(async (baseUrl) => {
@@ -441,7 +484,7 @@ test("PATCH /news/admin/:id rejects parser-managed fields outside the editable a
         method: "PATCH",
         headers: {
           authorization: `Bearer ${signAccessToken({
-            id: "64b0000000000000000000a4",
+            id: requesterAdminId,
             role: "admin",
           })}`,
           "content-type": "application/json",
@@ -456,12 +499,14 @@ test("PATCH /news/admin/:id rejects parser-managed fields outside the editable a
       assert.match(body.error, /externalId/i);
     });
   } finally {
+    restoreUserModel();
     restore();
   }
 });
 
 test("DELETE /news/admin/:id deletes the item", async () => {
   const targetNewsId = "64b000000000000000000206";
+  const requesterAdminId = "64b0000000000000000000a5";
   const { records, restore } = installNewsModelStub([
     makeNews({
       _id: targetNewsId,
@@ -469,6 +514,10 @@ test("DELETE /news/admin/:id deletes the item", async () => {
       title: "Delete me",
     }),
   ]);
+  const restoreUserModel = patchUserModel({
+    findById: async (id) =>
+      id === requesterAdminId ? makeCurrentAdmin({ _id: requesterAdminId }) : null,
+  });
 
   try {
     await withServer(async (baseUrl) => {
@@ -476,7 +525,7 @@ test("DELETE /news/admin/:id deletes the item", async () => {
         method: "DELETE",
         headers: {
           authorization: `Bearer ${signAccessToken({
-            id: "64b0000000000000000000a5",
+            id: requesterAdminId,
             role: "admin",
           })}`,
         },
@@ -488,6 +537,7 @@ test("DELETE /news/admin/:id deletes the item", async () => {
       assert.equal(records.some((item) => item._id === targetNewsId), false);
     });
   } finally {
+    restoreUserModel();
     restore();
   }
 });

@@ -98,10 +98,17 @@ export function findAdminUsers(filters = {}) {
     .sort({ createdAt: -1, _id: 1 });
 }
 
-export function updateAdminUserById(id, updates) {
+export function updateAdminUserById(
+  id,
+  updates,
+  { revokeRefreshSessions = false } = {},
+) {
   return User.findByIdAndUpdate(
     id,
-    { $set: updates },
+    {
+      $set: updates,
+      ...(revokeRefreshSessions ? { $inc: { refreshTokenVersion: 1 } } : {}),
+    },
     { new: true, runValidators: true },
   );
 }

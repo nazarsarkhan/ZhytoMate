@@ -73,7 +73,7 @@ export async function login({ emailOrUsername, password }) {
   }
 
   const isPasswordValid = await bcrypt.compare(password, user.password);
-  if (!isPasswordValid) {
+  if (!isPasswordValid || user.isActive === false) {
     throw ApiError.unauthorized("Invalid login or password");
   }
 
@@ -102,6 +102,7 @@ export async function refreshAccessToken(refreshToken) {
   const user = await getUserById(decodedRefreshToken.sub);
   if (
     !user ||
+    user.isActive === false ||
     (user.refreshTokenVersion ?? 0) !== decodedRefreshToken.tokenVersion
   ) {
     throw ApiError.unauthorized("Invalid refresh token");

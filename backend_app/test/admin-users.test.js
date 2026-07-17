@@ -122,6 +122,14 @@ function makeUser(overrides = {}) {
   };
 }
 
+function makeCurrentAdmin(overrides = {}) {
+  return makeUser({
+    role: "admin",
+    isActive: true,
+    ...overrides,
+  });
+}
+
 function applyFilter(records, filter = {}) {
   return records.filter((record) => {
     if (filter.role && record.role !== filter.role) {
@@ -270,6 +278,7 @@ test("GET /users/admin requires an authenticated admin", async () => {
 
 test("GET /users/admin filters users, sorts newest first, and never returns credentials", async () => {
   const capture = {};
+  const requesterAdminId = "64b0000000000000000000ab";
   const restoreUserModel = patchUserModel({
     find: (filter = {}, projection) =>
       createFindChain({
@@ -321,7 +330,8 @@ test("GET /users/admin filters users, sorts newest first, and never returns cred
           filter,
         ),
       }),
-    findById: async () => null,
+    findById: async (id) =>
+      id === requesterAdminId ? makeCurrentAdmin({ _id: requesterAdminId }) : null,
   });
 
   try {
@@ -331,7 +341,7 @@ test("GET /users/admin filters users, sorts newest first, and never returns cred
         {
           headers: {
             authorization: `Bearer ${signAccessToken({
-              id: "64b0000000000000000000ab",
+              id: requesterAdminId,
               role: "admin",
             })}`,
           },
@@ -361,24 +371,35 @@ test("GET /users/admin filters users, sorts newest first, and never returns cred
 });
 
 test("GET /users/admin rejects invalid filters", async () => {
-  await withServer(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/users/admin?role=superadmin`, {
-      headers: {
-        authorization: `Bearer ${signAccessToken({
-          id: "64b0000000000000000000ac",
-          role: "admin",
-        })}`,
-      },
-    });
-
-    const { status, body } = await readJson(response);
-    assert.equal(status, 400);
-    assert.match(body.error, /validation error/i);
+  const requesterAdminId = "64b0000000000000000000ac";
+  const restoreUserModel = patchUserModel({
+    findById: async (id) =>
+      id === requesterAdminId ? makeCurrentAdmin({ _id: requesterAdminId }) : null,
   });
+
+  try {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/users/admin?role=superadmin`, {
+        headers: {
+          authorization: `Bearer ${signAccessToken({
+            id: requesterAdminId,
+            role: "admin",
+          })}`,
+        },
+      });
+
+      const { status, body } = await readJson(response);
+      assert.equal(status, 400);
+      assert.match(body.error, /validation error/i);
+    });
+  } finally {
+    restoreUserModel();
+  }
 });
 
 test("PATCH /users/admin/:id updates profile fields, role, and activity state", async () => {
   const targetUserId = "64b000000000000000000020";
+  const requesterAdminId = "64b0000000000000000000ad";
   const restoreLockModel = installAdminUserUpdateLockStub();
   const restoreUserModel = patchUserModel({
     findById: async (id) =>
@@ -392,6 +413,8 @@ test("PATCH /users/admin/:id updates profile fields, role, and activity state", 
             role: "user",
             isActive: true,
           })
+        : id === requesterAdminId
+          ? makeCurrentAdmin({ _id: requesterAdminId })
         : null,
     findByIdAndUpdate: async (id, update) =>
       makeUser({
@@ -407,7 +430,7 @@ test("PATCH /users/admin/:id updates profile fields, role, and activity state", 
         method: "PATCH",
         headers: {
           authorization: `Bearer ${signAccessToken({
-            id: "64b0000000000000000000ad",
+            id: requesterAdminId,
             role: "admin",
           })}`,
           "content-type": "application/json",
@@ -433,6 +456,84 @@ test("PATCH /users/admin/:id updates profile fields, role, and activity state", 
       assert.equal(body.user.role, "admin");
       assert.equal(body.user.isActive, false);
       assert.equal(body.user.password, undefined);
+    });
+  } finally {
+    restoreUserModel();
+    restoreLockModel();
+  }
+});
+
+test("PATCH /users/admin/:id revokes refresh sessions when role or activity changes", async () => {
+  const targetUserId = "64b000000000000000000020";
+  const requesterAdminId = "64b0000000000000000000ad";
+  const updatesSeen = [];
+  const restoreLockModel = installAdminUserUpdateLockStub();
+  const restoreUserModel = patchUserModel({
+    findById: async (id) =>
+      id === targetUserId
+        ? makeUser({
+            _id: targetUserId,
+            username: "moderated.user",
+            firstName: "Moderated",
+            lastName: "User",
+            email: "moderated@example.com",
+            role: "admin",
+            isActive: true,
+            refreshTokenVersion: 12,
+          })
+        : id === requesterAdminId
+          ? makeCurrentAdmin({ _id: requesterAdminId })
+        : null,
+    findByIdAndUpdate: async (id, update) => {
+      updatesSeen.push(update);
+      return makeUser({
+        _id: id,
+        role: update.$set?.role ?? "admin",
+        isActive: update.$set?.isActive ?? true,
+        refreshTokenVersion:
+          12 + (typeof update.$inc?.refreshTokenVersion === "number"
+            ? update.$inc.refreshTokenVersion
+            : 0),
+      });
+    },
+    countDocuments: async () => 1,
+  });
+
+  try {
+    await withServer(async (baseUrl) => {
+      const demotionResponse = await fetch(`${baseUrl}/users/admin/${targetUserId}`, {
+        method: "PATCH",
+        headers: {
+          authorization: `Bearer ${signAccessToken({
+            id: requesterAdminId,
+            role: "admin",
+          })}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          role: "user",
+        }),
+      });
+      assert.equal(demotionResponse.status, 200);
+
+      const deactivateResponse = await fetch(`${baseUrl}/users/admin/${targetUserId}`, {
+        method: "PATCH",
+        headers: {
+          authorization: `Bearer ${signAccessToken({
+            id: requesterAdminId,
+            role: "admin",
+          })}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          isActive: false,
+        }),
+      });
+      assert.equal(deactivateResponse.status, 200);
+
+      assert.equal(updatesSeen.length, 2);
+      assert.equal(updatesSeen[0].$inc?.refreshTokenVersion, 1);
+      assert.equal(updatesSeen[1].$inc?.refreshTokenVersion, 1);
     });
   } finally {
     restoreUserModel();
@@ -472,6 +573,7 @@ test("PATCH /users/admin/:id requires an authenticated admin", async () => {
 
 test("PATCH /users/admin/:id refuses to remove the last active admin", async () => {
   const targetUserId = "64b000000000000000000021";
+  const requesterAdminId = "64b0000000000000000000ae";
   const restoreLockModel = installAdminUserUpdateLockStub();
   const restoreUserModel = patchUserModel({
     findById: async (id) =>
@@ -482,6 +584,8 @@ test("PATCH /users/admin/:id refuses to remove the last active admin", async () 
             role: "admin",
             isActive: true,
           })
+        : id === requesterAdminId
+          ? makeCurrentAdmin({ _id: requesterAdminId })
         : null,
     countDocuments: async () => 0,
     findByIdAndUpdate: async () => {
@@ -495,7 +599,7 @@ test("PATCH /users/admin/:id refuses to remove the last active admin", async () 
         method: "PATCH",
         headers: {
           authorization: `Bearer ${signAccessToken({
-            id: "64b0000000000000000000ae",
+            id: requesterAdminId,
             role: "admin",
           })}`,
           "content-type": "application/json",
@@ -517,6 +621,7 @@ test("PATCH /users/admin/:id refuses to remove the last active admin", async () 
 test("PATCH /users/admin/:id preserves the last active admin under concurrent demotions", async () => {
   const firstAdminId = "64b000000000000000000031";
   const secondAdminId = "64b000000000000000000032";
+  const requesterAdminId = "64b0000000000000000000b2";
   const restoreLockModel = installAdminUserUpdateLockStub();
   const usersById = new Map([
     [
@@ -540,6 +645,13 @@ test("PATCH /users/admin/:id preserves the last active admin under concurrent de
   ]);
   const restoreUserModel = patchUserModel({
     findById: async (id) => {
+      if (id === requesterAdminId) {
+        return makeCurrentAdmin({
+          _id: requesterAdminId,
+          username: "request-admin",
+        });
+      }
+
       const record = usersById.get(id);
       return record ? makeUser(record) : null;
     },
@@ -574,7 +686,7 @@ test("PATCH /users/admin/:id preserves the last active admin under concurrent de
     await withServer(async (baseUrl) => {
       const headers = {
         authorization: `Bearer ${signAccessToken({
-          id: "64b0000000000000000000b2",
+          id: requesterAdminId,
           role: "admin",
         })}`,
         "content-type": "application/json",
@@ -614,22 +726,32 @@ test("PATCH /users/admin/:id preserves the last active admin under concurrent de
 });
 
 test("PATCH /users/admin/:id validates the id parameter and update payload", async () => {
-  await withServer(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/users/admin/not-an-object-id`, {
-      method: "PATCH",
-      headers: {
-        authorization: `Bearer ${signAccessToken({
-          id: "64b0000000000000000000af",
-          role: "admin",
-        })}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ role: "superadmin" }),
-    });
-
-    const { status, body } = await readJson(response);
-
-    assert.equal(status, 400);
-    assert.match(body.error, /validation error/i);
+  const requesterAdminId = "64b0000000000000000000af";
+  const restoreUserModel = patchUserModel({
+    findById: async (id) =>
+      id === requesterAdminId ? makeCurrentAdmin({ _id: requesterAdminId }) : null,
   });
+
+  try {
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/users/admin/not-an-object-id`, {
+        method: "PATCH",
+        headers: {
+          authorization: `Bearer ${signAccessToken({
+            id: requesterAdminId,
+            role: "admin",
+          })}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ role: "superadmin" }),
+      });
+
+      const { status, body } = await readJson(response);
+
+      assert.equal(status, 400);
+      assert.match(body.error, /validation error/i);
+    });
+  } finally {
+    restoreUserModel();
+  }
 });

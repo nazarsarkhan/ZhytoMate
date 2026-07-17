@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import { createApp } from "../src/app.js";
 import { config } from "../src/config/index.js";
 import Contact from "../src/features/contact/contact.model.js";
+import User from "../src/features/user/user.model.js";
 
 let contactSequence = 1;
 
@@ -45,6 +46,31 @@ function patchModel(model, overrides) {
     for (const [key, value] of originals.entries()) {
       model[key] = value;
     }
+  };
+}
+
+function patchUserModel(overrides) {
+  return patchModel(User, overrides);
+}
+
+function makeCurrentAdmin(overrides = {}) {
+  return {
+    _id: overrides._id || "64b0000000000000000000c1",
+    username: "admin-user",
+    firstName: "Admin",
+    lastName: "User",
+    email: "admin@example.com",
+    password: "hashed-password",
+    phone: "",
+    address: {},
+    preferences: {},
+    avatarUrl: "",
+    role: "admin",
+    isActive: true,
+    refreshTokenVersion: 0,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    ...overrides,
   };
 }
 
@@ -156,6 +182,7 @@ function installContactModelStub(seedContacts = []) {
 }
 
 test("admin contact CRUD persists order and activity while public contacts stay active-only and ordered", async () => {
+  const requesterAdminId = "64b0000000000000000000c1";
   const { restore } = installContactModelStub([
     {
       _id: "64b000000000000000000101",
@@ -180,13 +207,17 @@ test("admin contact CRUD persists order and activity while public contacts stay 
       createdAt: new Date("2026-01-02T00:00:00.000Z"),
     },
   ]);
+  const restoreUserModel = patchUserModel({
+    findById: async (id) =>
+      id === requesterAdminId ? makeCurrentAdmin({ _id: requesterAdminId }) : null,
+  });
 
   try {
     await withServer(async (baseUrl) => {
       const adminHeaders = {
         "content-type": "application/json",
         authorization: `Bearer ${signAccessToken({
-          id: "admin-user",
+          id: requesterAdminId,
           role: "admin",
         })}`,
       };
@@ -258,11 +289,13 @@ test("admin contact CRUD persists order and activity while public contacts stay 
       );
     });
   } finally {
+    restoreUserModel();
     restore();
   }
 });
 
 test("settings routes expose public cityHotline data and keep admin access restricted and allowlisted", async () => {
+  const requesterAdminId = "64b0000000000000000000c2";
   const { default: Setting } = await import("../src/features/setting/setting.model.js");
   const settingsStore = new Map([["cityHotline", { key: "cityHotline", value: "15-80" }]]);
   const restore = patchModel(Setting, {
@@ -289,6 +322,10 @@ test("settings routes expose public cityHotline data and keep admin access restr
       settingsStore.set(filter.key, next);
       return next;
     },
+  });
+  const restoreUserModel = patchUserModel({
+    findById: async (id) =>
+      id === requesterAdminId ? makeCurrentAdmin({ _id: requesterAdminId }) : null,
   });
 
   try {
@@ -317,7 +354,7 @@ test("settings routes expose public cityHotline data and keep admin access restr
       const adminHeaders = {
         "content-type": "application/json",
         authorization: `Bearer ${signAccessToken({
-          id: "admin-user",
+          id: requesterAdminId,
           role: "admin",
         })}`,
       };
@@ -373,6 +410,7 @@ test("settings routes expose public cityHotline data and keep admin access restr
       assert.match(invalidPatchBody.error, /not allowed/i);
     });
   } finally {
+    restoreUserModel();
     restore();
   }
 });
