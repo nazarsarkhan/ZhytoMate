@@ -104,6 +104,15 @@ mypy app/
 python -m eval.run_eval # offline quality gate: retrieval hit-rate + routing accuracy
 ```
 
+For a live retrieval smoke test covering common resident questions:
+
+```bash
+python scripts/audit_civic_http.py --url http://localhost:8000 --token "$INTERNAL_TOKEN"
+```
+
+The audit sends 20 questions and reports grounded/verified answers. It is read-only: it does not
+ingest or delete knowledge-base records.
+
 ## API
 
 `X-Internal-Token` header required on everything except `/health/*` and `/metrics`.

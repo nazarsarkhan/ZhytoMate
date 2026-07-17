@@ -23,6 +23,19 @@ test('zt-rada keeps the curated document and reference seed pages', () => {
       '/?items=73',
     ],
   );
+  assert.equal(IMPORTANT_PAGE_SEEDS.includes('/contacts'), true);
+  assert.equal(IMPORTANT_PAGE_SEEDS.includes('/?pages=379'), true);
+  assert.equal(IMPORTANT_PAGE_SEEDS.includes('/?departments=159'), true);
+  assert.equal(IMPORTANT_PAGE_SEEDS.includes('/?departments=2'), true);
+  assert.equal(IMPORTANT_PAGE_SEEDS.includes('/servisy'), true);
+  assert.equal(IMPORTANT_PAGE_SEEDS.includes('/zvernennya'), true);
+  assert.equal(IMPORTANT_PAGE_SEEDS.includes('/depytatu'), true);
+  assert.equal(IMPORTANT_PAGE_SEEDS.includes('/graficcomisiy'), true);
+  assert.equal(IMPORTANT_PAGE_SEEDS.includes('/dpsp'), true);
+  assert.equal(IMPORTANT_PAGE_SEEDS.includes('/usvv'), true);
+  assert.equal(IMPORTANT_PAGE_SEEDS.includes('/deptreestr'), true);
+  assert.equal(IMPORTANT_PAGE_SEEDS.includes('/?items=19'), true);
+  assert.equal(IMPORTANT_PAGE_SEEDS.includes('/?pages=10934'), true);
   assert.equal(IMPORTANT_PAGE_SEEDS.includes('/miscevybudjet'), true);
   assert.equal(IMPORTANT_PAGE_SEEDS.includes('/transportzt'), true);
 });

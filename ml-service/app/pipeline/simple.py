@@ -103,9 +103,18 @@ class SimpleRAGPipeline(RAGPipeline):
         # The combined classifier already translated non-Ukrainian input. Apply the deterministic
         # civic canonicalizers after that translation so short title/service queries retrieve the
         # canonical KB wording without spending another LLM round-trip.
-        retrieval_query = normalize_civic_information_query(
-            normalize_civic_title_query(retrieval_query)
-        )
+        # Prefer the user's original civic wording for deterministic canonicalization. The safety
+        # classifier may paraphrase even Ukrainian input (especially short questions such as
+        # "Які телефони ЦНАП?"), which can erase the service anchor before lexical retrieval sees
+        # it. Non-civic foreign-language input still uses the classifier's translated query.
+        if is_civic_information_query(ctx.user_query):
+            retrieval_query = normalize_civic_information_query(
+                normalize_civic_title_query(ctx.user_query)
+            )
+        else:
+            retrieval_query = normalize_civic_information_query(
+                normalize_civic_title_query(retrieval_query)
+            )
         query_vec = await self._embedder.encode_query(retrieval_query)
         outcome = await self._retriever.retrieve(
             retrieval_query, query_vec, ctx.district_slug, k=RETRIEVE_LIMIT, category=ctx.category

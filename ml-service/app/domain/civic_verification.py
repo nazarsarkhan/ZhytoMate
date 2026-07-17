@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from app.domain.civic_glossary import glossary_retrieval_query, is_glossary_civic_question
+
 
 @dataclass(frozen=True)
 class CivicVerification:
@@ -38,7 +40,9 @@ _CIVIC_INFORMATION_RE = re.compile(
     r"ресторан\w*|їст\w*|по[їі]ст\w*|поест\w*|есть|аптек\w*|лікар\w*|лікарн\w*|"
     r"полікл\w*|транспорт\w*|автобус\w*|тролейбус\w*|вулиц\w*|"
     r"адрес\w*|документ\w*|смітт\w*|субсид\w*|опал\w*|міськ\w*\s+рад\w*|"
-    r"горсовет\w*|мэр\w*ию|мери\w*)\b",
+    r"горсовет\w*|мэр\w*ию|мери\w*|звернен\w*|заяв\w*|укрит\w*|сховищ\w*|"
+    r"ветеран\w*|департамент\w*|посадов\w*|комунальн\w*\s+майн\w*|"
+    r"земельн\w*\s+ресурс\w*|тариф\w*)\b",
     re.IGNORECASE,
 )
 _MAYOR_CONTEXT_RE = re.compile(
@@ -111,11 +115,15 @@ def is_civic_information_query(question: str) -> bool:
     """Recognize factual city-service questions before an LLM small-talk classifier can suppress
     retrieval. This is deliberately a narrow topic allowlist, not a general language classifier.
     """
-    return is_civic_title_query(question) or bool(_CIVIC_INFORMATION_RE.search(question))
+    return (
+        is_civic_title_query(question)
+        or bool(_CIVIC_INFORMATION_RE.search(question))
+        or is_glossary_civic_question(question)
+    )
 
 
 def normalize_civic_information_query(question: str) -> str:
-    """Canonicalize very short service-location questions for stable lexical retrieval."""
+    """Canonicalize short city-service questions for stable hybrid retrieval."""
     lowered = question.lower()
     route_match = re.search(
         r"\b(?:маршрут\w*|маршрутка\w*|тролейбус\w*|автобус\w*)[^0-9]{0,40}(\d+[а-яa-z]?)\b",
@@ -130,19 +138,64 @@ def normalize_civic_information_query(question: str) -> str:
         r"\b(?:де|где|куда)\b", lowered
     ):
         return "Де суд у Житомирі?"
+    if re.search(r"\b(?:звернен\w*|заяв\w*|інформаційн\w*\s+запит\w*)\b", lowered):
+        if re.search(r"\b(?:зраз\w*|інформаційн\w*\s+запит\w*)\b", lowered):
+            return "Зразки заяв та інформаційних запитів"
+        return "Звернення громадян"
     if re.search(r"\bцнап\b", lowered) and re.search(
         r"\b(?:де|где|куда|адрес|розташован\w*|расположен\w*|знаходит\w*)\b", lowered
     ):
         # Keep this retrieval key intentionally short.  Official CNAP facts are split across
         # chunks and use inflected city/address words, so an AND query with the whole question
         # misses the exact fact even though the subject itself is present.
-        return "ЦНАП"
+        return "Центр надання адміністративних послуг Житомирської міської ради"
+    if re.search(r"\bцнап\b", lowered):
+        if re.search(r"\b(?:телефон\w*|номер\w*|контакт\w*)\b", lowered):
+            return "Центр надання адміністративних послуг Житомирської міської ради Телефон"
+        return "Центр надання адміністративних послуг Житомирської міської ради"
+    glossary_query = glossary_retrieval_query(question)
+    if glossary_query:
+        return glossary_query
+    if re.search(r"\b(?:укрит\w*|сховищ\w*)\b", lowered) and re.search(
+        r"\b(?:карт\w*|де|знайт\w*|подив\w*|розташован\w*)\b", lowered
+    ):
+        return "Інтерактивна карта укриттів"
+    if re.search(r"\b(?:садоч\w*|садк\w*|дошкільн\w*|школ\w*)\b", lowered) and re.search(
+        r"\b(?:реєстр\w*|зареєстр\w*|запис\w*|електрон\w*|оформ\w*)\b", lowered
+    ):
+        return "Електронна реєстрація в заклади дошкільної та загальної середньої освіти"
+    if re.search(r"\bветеран\w*\b", lowered) and re.search(
+        r"\b(?:куди|де|телефон\w*|допомог\w*|зверт\w*|управлін\w*)\b", lowered
+    ):
+        return "Телефонна ветеранська лінія"
+    if re.search(r"\b(?:водопостач\w*|водоканал\w*|вода)\b", lowered) and re.search(
+        r"\b(?:куди|де|контакт\w*|телефон\w*|проблем\w*|авар\w*)\b", lowered
+    ):
+        return "Житомирводоканал водопостачання контакти"
+    if re.search(r"\b(?:житлово[- ]комунал\w*|жкг)\b", lowered):
+        return "Житлово-комунальні питання"
+    if re.search(r"\bквартирн\w*\b", lowered) and re.search(
+        r"\b(?:облік\w*|черг\w*|житл\w*)\b", lowered
+    ):
+        return "Квартирний облік Житомир"
+    if re.search(r"\b(?:майн\w*|земельн\w*|земл\w*)\b", lowered) and re.search(
+        r"\b(?:комунальн\w*|ресурс\w*|ділян\w*|оренд\w*|інформац\w*)\b", lowered
+    ):
+        return "Комунальне майно та земельні ресурси"
+    if re.search(r"\b(?:транспорт\w*|маршрут\w*|тролейбус\w*|автобус\w*)\b", lowered) and re.search(
+        r"\b(?:де|подив\w*|схем\w*|графік\w*|маршрут\w*)\b", lowered
+    ):
+        return "Транспорт"
+    if re.search(r"\bтариф\w*\b", lowered):
+        return "Тарифна політика Житомира"
     if re.search(r"\bпаспорт\w*\b", lowered) and re.search(
         r"\b(?:де|где|куда)\b", lowered
     ):
         return "Де зробити паспорт у Житомирі?"
     if re.search(r"\b(?:міська\s+рада|горсовет\w*|мэр\w*ия|мэр\w*ию|мери\w*)\b", lowered):
-        return "Міська рада Житомира адреса контакти"
+        return "Контакти"
+    if re.search(r"\b(?:департамент\w*|посадов\w*|працівник\w*|чиновник\w*)\b", lowered):
+        return "Список виконавчих органів Житомирської міської ради"
     return question
 
 

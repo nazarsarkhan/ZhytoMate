@@ -7,7 +7,10 @@ const NEWS_URL = `${BASE_URL}news.html`;
 const CONFIG = {
   enabled: true,
   schedule: '*/30 * * * *',
-  maxItems: 30,
+  backfillDays: 14,
+  maxItems: 500,
+  maxPages: 50,
+  pageSize: 15,
   concurrency: 4,
 };
 
@@ -66,6 +69,34 @@ async function fetchArticle(url, titleFromList) {
   };
 }
 
+function buildNewsPageUrl(page) {
+  const url = new URL(NEWS_URL);
+  url.searchParams.set('page', String(page));
+  url.searchParams.set('per-page', String(CONFIG.pageSize));
+  return url.toString();
+}
+
+function getBackfillCutoff() {
+  const configuredDays = Number(process.env.ZHYTOMYR_INFO_BACKFILL_DAYS);
+  const backfillDays = Number.isFinite(configuredDays) && configuredDays > 0
+    ? configuredDays
+    : CONFIG.backfillDays;
+  const cutoff = new Date();
+  cutoff.setUTCDate(cutoff.getUTCDate() - backfillDays);
+  return cutoff;
+}
+
+function collectArticleLinks($, linkMap) {
+  $('a[href^="/news_"]').each((_index, element) => {
+    const href = $(element).attr('href');
+    const title = $(element).text().replace(/\s+/g, ' ').trim();
+
+    if (href && title) {
+      linkMap.set(href, { url: new URL(href, BASE_URL).toString(), title });
+    }
+  });
+}
+
 export default {
   id: 'zhytomir-info',
   schedule: CONFIG.schedule,
@@ -73,18 +104,35 @@ export default {
   settings: CONFIG,
 
   async fetch() {
-    const { text } = await fetchText(NEWS_URL);
-    const $ = load(text);
+    const cutoff = getBackfillCutoff();
     const linkMap = new Map();
-    $('a[href^="/news_"]').each((_index, element) => {
-      const href = $(element).attr('href');
-      const title = $(element).text().replace(/\s+/g, ' ').trim();
-      if (href && title) {
-        linkMap.set(href, { url: new URL(href, BASE_URL).toString(), title });
-      }
-    });
-    const links = [...linkMap.values()].slice(0, CONFIG.maxItems);
+    const items = [];
     const limit = pLimit(CONFIG.concurrency);
-    return (await Promise.all([...links].map((item) => limit(() => fetchArticle(item.url, item.title))))).filter(Boolean);
+
+    for (let page = 1; page <= CONFIG.maxPages && linkMap.size < CONFIG.maxItems; page += 1) {
+      const pageUrl = page === 1 ? NEWS_URL : buildNewsPageUrl(page);
+      const { text } = await fetchText(pageUrl);
+      const $ = load(text);
+      const previousSize = linkMap.size;
+
+      collectArticleLinks($, linkMap);
+
+      if (linkMap.size === previousSize) {
+        break;
+      }
+
+      const pageLinks = [...linkMap.values()].slice(previousSize, CONFIG.maxItems);
+      const pageItems = (
+        await Promise.all(pageLinks.map((item) => limit(() => fetchArticle(item.url, item.title))))
+      ).filter(Boolean);
+      items.push(...pageItems.filter((item) => new Date(item.publishedAt) >= cutoff));
+
+      const datedPageItems = pageItems.filter((item) => !Number.isNaN(new Date(item.publishedAt).getTime()));
+      if (datedPageItems.length > 0 && datedPageItems.every((item) => new Date(item.publishedAt) < cutoff)) {
+        break;
+      }
+    }
+
+    return items.slice(0, CONFIG.maxItems);
   },
 };

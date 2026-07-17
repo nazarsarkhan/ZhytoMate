@@ -7,6 +7,12 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js",
+    "parse:zhytomir-info": "node scripts/parse-zhytomir-info.js",
+    "parse:zt-rada": "node scripts/parse-zt-rada.js",
+    "parse:zt-rada:knowledge": "node scripts/parse-zt-rada-knowledge.js",
+    "parse:zt-rada:fast": "node scripts/parse-zt-rada-fast.js",
+    "parse:zt-rada:archive": "node scripts/parse-zt-rada-archive.js",
+    "parse:city-council": "node scripts/parse-zt-rada.js",
     "session": "node scripts/generate-session.js",
     "backfill:news": "node scripts/backfill-news-to-backend.js",
     "import:places": "node scripts/import-osm-places.js",

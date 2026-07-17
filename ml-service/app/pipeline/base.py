@@ -421,11 +421,23 @@ async def run_shared_tail(
     # requested information is unavailable. This commonly happens for semantically similar but
     # non-answer pages (e.g. a passport query retrieving generic city-service pages). Do not leak
     # those candidates as sources or mark the response as verified.
+    #
+    # There is one safe exception: when the lexical rank-1 signal is the reason this short civic
+    # query was grounded, the model may still emit a generic "no information" phrase because the
+    # answer is a compressed abbreviation (for example, "ВПО"). In that case the retrieved
+    # official text is stronger evidence than the model's refusal. Return it extractively instead
+    # of throwing away the verified source. This does not invent an answer or affect semantically
+    # similar hits, which still follow the safeguard below.
     answer_no_info = grounded and is_no_information_answer(answer)
     if answer_no_info:
-        grounded = False
-        top_results = []
-        confidence = 0.0
+        if strong_lexical_match and top_results:
+            answer = _FALLBACK_PREFIX + top_results[0].text
+            answer_no_info = False
+            confidence = min(round(top1_sim, 2), _FALLBACK_CONFIDENCE_CAP)
+        else:
+            grounded = False
+            top_results = []
+            confidence = 0.0
 
     sources = [
         SourceUsed(

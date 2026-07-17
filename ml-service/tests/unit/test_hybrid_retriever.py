@@ -99,8 +99,15 @@ def test_strong_match_is_false_when_fused_is_empty() -> None:
     assert outcome.has_strong_lexical_match is False
 
 
-def test_strong_match_is_false_when_fused_top1_disagrees_with_lexical_top1() -> None:
-    outcome = RetrievalOutcome(dense=[], fused=[_hit(1)], lexical=[_hit(2)])
+def test_strong_match_survives_when_lexical_top1_is_in_fused_top_three() -> None:
+    outcome = RetrievalOutcome(dense=[], fused=[_hit(1), _hit(2)], lexical=[_hit(2)])
+    assert outcome.has_strong_lexical_match is True
+
+
+def test_strong_match_is_false_when_lexical_top1_falls_outside_fused_top_three() -> None:
+    outcome = RetrievalOutcome(
+        dense=[], fused=[_hit(1), _hit(3), _hit(4), _hit(2)], lexical=[_hit(2)]
+    )
     assert outcome.has_strong_lexical_match is False
 
 

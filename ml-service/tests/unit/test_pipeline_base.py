@@ -130,6 +130,26 @@ async def test_no_information_answer_discards_retrieved_sources() -> None:
     assert result.confidence == 0.0
 
 
+async def test_no_information_answer_uses_strong_lexical_evidence() -> None:
+    """A short civic abbreviation may make the model say no-info despite a verified lexical hit.
+    Preserve that official hit with an extractive answer; the generic no-info safeguard above still
+    protects semantically similar retrievals without a strong lexical match."""
+    hit = _hit(1, similarity=0.35, text="Прозорий офіс надає послуги внутрішньо переміщеним особам.")
+    generator = FakeGenerator(result=("Інформації про ВПО немає.", 0))
+
+    result = await run_shared_tail(
+        generator=generator, sim_gate=_SIM_GATE, sim_high=_SIM_HIGH,
+        count_tokens_fn=_COUNT_TOKENS, retrieved=[hit], top1_sim=0.35,
+        question="Де зробити ВПО?", route=QueryRoute.SIMPLE,
+        strong_lexical_match=True,
+    )
+
+    assert result.debug["grounded"] is True
+    assert result.debug["answer_no_info"] is False
+    assert result.sources_used[0].source == "src"
+    assert "Прозорий офіс" in result.answer
+
+
 # ---------------------------------------------------------------------------
 # grounded_via_lexical_total — increments ONLY when the lexical signal was the actual deciding
 # factor (dense similarity was in the NO_INFO band and strong_lexical_match flipped the outcome to

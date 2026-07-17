@@ -223,3 +223,15 @@ export function enqueueItems(items) {
 export function getQueueSize() {
   return queue.length;
 }
+
+/**
+ * Wait until the current delivery queue and any scheduled retry are finished.
+ * One-shot source runners use this before closing MongoDB and exiting.
+ */
+export async function waitForQueueIdle(pollMs = 50) {
+  while (queue.length > 0 || isDraining || retryTimer) {
+    await new Promise((resolve) => {
+      setTimeout(resolve, pollMs);
+    });
+  }
+}

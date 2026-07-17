@@ -250,7 +250,10 @@ function inferDocType(item) {
     return 'news';
   }
 
-  if (item.source?.includes('zhitomir-info')) {
+  if (
+    item.source?.includes('zhytomir-info')
+    || item.source?.includes('zhitomir-info')
+  ) {
     return 'news';
   }
 

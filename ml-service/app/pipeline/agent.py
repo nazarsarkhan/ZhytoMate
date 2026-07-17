@@ -39,6 +39,7 @@ from app.domain.civic_verification import (
     normalize_civic_title_query,
     verify_civic_context,
 )
+from app.domain.civic_glossary import glossary_retrieval_query
 from app.domain.prompts import build_decompose_prompt, build_rewrite_prompt
 from app.domain.sufficiency import is_sufficient
 from app.metrics import agent_subqueries
@@ -107,9 +108,12 @@ class AgentRAGPipeline(RAGPipeline):
         # Office-holder questions are high-risk and usually short. Decomposition adds an LLM
         # round-trip without improving retrieval, and can mutate the title relation before the
         # deterministic evidence guard sees it. Retrieve the original wording directly instead.
+        glossary_query = glossary_retrieval_query(ctx.user_query)
         subqueries = (
             [normalize_civic_information_query(normalize_civic_title_query(ctx.user_query))]
             if is_civic_title_query(ctx.user_query)
+            else [glossary_query]
+            if glossary_query
             else await self._decompose(ctx.user_query)
         )
         agent_subqueries.observe(len(subqueries))

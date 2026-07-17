@@ -77,8 +77,10 @@ class RetrievalOutcome:
 
     @property
     def has_strong_lexical_match(self) -> bool:
-        """True when the fused list's own top-1 chunk agrees with the lexical leg's own rank-1
-        pick AND that lexical hit isn't a degenerate partial OR-fallback coincidence. An AND-tier
+        """True when the lexical leg's rank-1 hit survives in the fused top three AND that
+        lexical hit isn't a degenerate partial OR-fallback coincidence. Requiring strict fused
+        rank-1 agreement let a dense candidate suppress an exact official fact even though the
+        lexical result was still present in the context window. An AND-tier
         hit (lexical_coverage=None) is always trusted — it's an all-or-nothing match by
         construction. An OR-fallback hit is trusted only when it covers ALL of the query's
         significant terms (lexical_coverage == lexical_terms_total, a FULL match) — a short,
@@ -86,7 +88,9 @@ class RetrievalOutcome:
         verbose query where only one word out of several coincidentally matches is a partial one
         and is not trusted, however many terms happen to match (see module docstring for why an
         absolute minimum count can't tell these two coverage=1 cases apart)."""
-        if not self.fused or self.fused[0].id != self.lexical_top1_id:
+        if not self.fused or self.lexical_top1_id is None:
+            return False
+        if self.lexical_top1_id not in {result.id for result in self.fused[:3]}:
             return False
         top = self.lexical[0]
         return top.lexical_coverage is None or top.lexical_coverage == top.lexical_terms_total

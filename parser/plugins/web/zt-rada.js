@@ -12,7 +12,8 @@ const CONFIG = {
   maxItems: 2000,
   attachmentLimitPerPage: 5,
   documentAttachmentLimitPerPage: 20,
-  concurrency: 3,
+  concurrency: 8,
+  attachmentConcurrency: 4,
   searchSeedPages: 3,
 };
 const baseUrl = "https://zt-rada.gov.ua/";
@@ -78,6 +79,37 @@ export const IMPORTANT_PAGE_SEEDS = [
   "/?items=42",
   "/?items=67",
   "/?items=73",
+  "/",
+  "/contacts",
+  "/?pages=18902",
+  "/?departments=1",
+  "/?departments=2",
+  "/?departments=159",
+  "/?departments=20",
+  "/?pages=379",
+  "/?pages=198",
+  "/?pages=1298",
+  "/?pages=808",
+  "/servisy",
+  "/zvernennya",
+  "/depytatu",
+  "/graficcomisiy",
+  "/deptreestr",
+  "/dpsp",
+  "/usvv",
+  "/dmzvzt",
+  "/der",
+  "/dbfzt",
+  "/deposvit",
+  "/?departments=9",
+  "/?departments=10",
+  "/?departments=12",
+  "/?departments=13",
+  "/?departments=14",
+  "/?departments=15",
+  "/?departments=24",
+  "/?pages=7814",
+  "/reglament",
   "/dostypdopubl",
   "/admintasocposlygu",
   "/waterzt",
@@ -91,6 +123,18 @@ export const IMPORTANT_PAGE_SEEDS = [
   "/?items=20",
   "/?items=21",
   "/?items=23",
+  "/?items=17",
+  "/?items=19",
+  "/?items=24",
+  "/?items=25",
+  "/?items=27",
+  "/?items=28",
+  "/?items=29",
+  "/?items=32",
+  "/?items=33",
+  "/?items=359",
+  "/?items=361",
+  "/?pages=10934",
   "/?items=36",
   "/?items=78",
   "/?items=82",
@@ -116,6 +160,16 @@ function getNumberEnv(name, fallback) {
 }
 
 function getBackfillCutoff() {
+  const fromDate = process.env.ZT_RADA_BACKFILL_FROM;
+
+  if (fromDate && /^\d{4}-\d{2}-\d{2}$/.test(fromDate)) {
+    const parsedFromDate = new Date(`${fromDate}T00:00:00.000Z`);
+
+    if (!Number.isNaN(parsedFromDate.getTime())) {
+      return parsedFromDate;
+    }
+  }
+
   const backfillDays = getNumberEnv("ZT_RADA_BACKFILL_DAYS", CONFIG.backfillDays);
   const cutoff = new Date();
   cutoff.setUTCDate(cutoff.getUTCDate() - backfillDays);
@@ -264,6 +318,10 @@ export function isNewsArticleUrl(url, knownNewsUrls = new Set()) {
     knownNewsUrls.has(normalizedUrl) ||
     pathname.startsWith(`${NEWS_SECTION_PATH}/`)
   );
+}
+
+function isDocumentsIndexUrl(url) {
+  return Boolean(url) && normalizePathname(url) === "/documents";
 }
 
 function inferSourceKind(url, knownNewsUrls = new Set()) {
@@ -692,10 +750,14 @@ function combineBody(pageText, attachments) {
   return normalizeWhitespace(parts.filter(Boolean).join("\n\n"));
 }
 
-function logParsedItem(item) {
+function logParsedItem(item, count = null) {
+  if (count !== null && count !== 1 && count % 50 !== 0) {
+    return;
+  }
+
   console.log(
     [
-      "zt-rada parsed item:",
+      `zt-rada parsed item${count === null ? "" : ` #${count}`}:`,
       item.docType || "unknown",
       item.sourceKind || "unknown",
       item.title || item.url,
@@ -749,7 +811,9 @@ async function parsePage(
   cutoff,
   attachmentLimit,
   documentAttachmentLimit,
+  attachmentLimiter,
   knownNewsUrls,
+  documentsOnly,
 ) {
   const page = await fetchText(url);
   const $ = load(page.text);
@@ -784,9 +848,13 @@ async function parsePage(
     };
   }
 
-  for (const attachment of links.documentLinks.slice(0, maxAttachments)) {
-    attachments.push(await extractAttachment(attachment));
-  }
+  attachments.push(
+    ...(await Promise.all(
+      links.documentLinks
+        .slice(0, maxAttachments)
+        .map((attachment) => attachmentLimiter(() => extractAttachment(attachment))),
+    )),
+  );
 
   if (sourceKind === "document-index" && attachments.length > 0) {
     return {
@@ -795,7 +863,9 @@ async function parsePage(
           buildAttachmentItem(page.url, attachment, publishedAt),
         )
         .filter((item) => shouldKeepItem(item, cutoff)),
-      pageLinks: links.pageLinks,
+      pageLinks: documentsOnly
+        ? links.pageLinks.filter(isDocumentsIndexUrl)
+        : links.pageLinks,
     };
   }
 
@@ -824,7 +894,9 @@ async function parsePage(
 
   return {
     items: shouldKeepItem(item, cutoff) ? [item] : [],
-    pageLinks: links.pageLinks,
+    pageLinks: documentsOnly
+      ? links.pageLinks.filter(isDocumentsIndexUrl)
+      : links.pageLinks,
   };
 }
 
@@ -871,7 +943,7 @@ export default {
   enabled: CONFIG.enabled,
   settings: CONFIG,
 
-  async fetch() {
+  async fetch({ onItems } = {}) {
     const cutoff = getBackfillCutoff();
     const maxPages = getNumberEnv("ZT_RADA_MAX_PAGES", CONFIG.maxPages);
     const maxItems = getNumberEnv("ZT_RADA_MAX_ITEMS", CONFIG.maxItems);
@@ -884,21 +956,45 @@ export default {
       CONFIG.documentAttachmentLimitPerPage,
     );
     const concurrency = getNumberEnv("ZT_RADA_CONCURRENCY", CONFIG.concurrency);
+    const attachmentConcurrency = getNumberEnv(
+      "ZT_RADA_ATTACHMENT_CONCURRENCY",
+      CONFIG.attachmentConcurrency,
+    );
+    const documentsOnly = process.env.ZT_RADA_DOCUMENTS_ONLY === "true";
+    const knowledgeOnly = process.env.ZT_RADA_KNOWLEDGE_ONLY === "true";
     const limit = pLimit(concurrency);
-    const queued = [
-      new URL(NEWS_SECTION_PATH, baseUrl).toString(),
-      ...searchSeedTerms.flatMap((term) => buildSearchSeedUrls(term)),
-      ...IMPORTANT_PAGE_SEEDS.map((seed) => new URL(seed, baseUrl).toString()),
-      buildDocumentSearchUrl(cutoff),
-    ];
+    const attachmentLimiter = pLimit(attachmentConcurrency);
+    const queued = documentsOnly
+      ? [buildDocumentSearchUrl(cutoff)]
+      : knowledgeOnly
+        ? IMPORTANT_PAGE_SEEDS.map((seed) => new URL(seed, baseUrl).toString())
+        : [
+            new URL(NEWS_SECTION_PATH, baseUrl).toString(),
+            ...searchSeedTerms.flatMap((term) => buildSearchSeedUrls(term)),
+            ...IMPORTANT_PAGE_SEEDS.map((seed) => new URL(seed, baseUrl).toString()),
+            buildDocumentSearchUrl(cutoff),
+          ];
     const seen = new Set();
     const queuedSet = new Set(queued);
     const knownNewsUrls = new Set();
     const items = await fetchCalendarItems(cutoff);
+    let emittedItemCount = 0;
+
+    async function emitNewItems() {
+      if (typeof onItems !== "function" || items.length <= emittedItemCount) {
+        return;
+      }
+
+      const newItems = items.slice(emittedItemCount);
+      emittedItemCount = items.length;
+      await onItems(newItems);
+    }
 
     for (const item of items) {
       logParsedItem(item);
     }
+
+    await emitNewItems();
 
     async function visit(url) {
       if (seen.has(url) || seen.size >= maxPages || items.length >= maxItems) {
@@ -913,7 +1009,9 @@ export default {
           cutoff,
           attachmentLimit,
           documentAttachmentLimit,
+          attachmentLimiter,
           knownNewsUrls,
+          documentsOnly,
         );
 
         for (const newsUrl of result.newsArticleUrls || []) {
@@ -923,7 +1021,7 @@ export default {
         for (const item of result.items) {
           if (items.length < maxItems) {
             items.push(item);
-            logParsedItem(item);
+            logParsedItem(item, items.length);
           }
         }
 
@@ -952,8 +1050,16 @@ export default {
     ) {
       const batch = queued.splice(0, concurrency);
       await Promise.all(batch.map((url) => limit(() => visit(url))));
+      await emitNewItems();
+
+      if (seen.size % 50 < concurrency || queued.length === 0) {
+        console.log(
+          `zt-rada crawl progress: ${seen.size} page(s), ${items.length} item(s), ${queued.length} queued`,
+        );
+      }
     }
 
+    await emitNewItems();
     return items.slice(0, maxItems);
   },
 };

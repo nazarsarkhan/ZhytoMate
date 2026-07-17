@@ -2,14 +2,36 @@ import cron from 'node-cron';
 import { normalizeItems } from '../pipeline/normalizer.js';
 import { enqueueItems } from '../delivery/sender.js';
 
-async function runWebPlugin(plugin) {
+export async function runWebPlugin(plugin, { throwOnError = false } = {}) {
   try {
     console.log(`Running web plugin: ${plugin.id}`);
-    const rawItems = await plugin.fetch();
+    let streamedRawItemCount = 0;
+    const onItems = (rawItems) => {
+      const normalizedItems = normalizeItems(rawItems, plugin, 'web');
+      streamedRawItemCount += rawItems.length;
+      enqueueItems(normalizedItems);
+    };
+    const rawItems = await plugin.fetch({ onItems });
     const normalizedItems = normalizeItems(rawItems, plugin, 'web');
-    enqueueItems(normalizedItems);
+
+    // Plugins that do not stream keep the original one-shot behavior. For streaming plugins,
+    // only enqueue a possible remainder to avoid sending any item twice.
+    if (streamedRawItemCount === 0) {
+      enqueueItems(normalizedItems);
+    } else if (streamedRawItemCount < rawItems.length) {
+      enqueueItems(normalizeItems(rawItems.slice(streamedRawItemCount), plugin, 'web'));
+    }
+
+    console.log(`Web plugin ${plugin.id} produced ${normalizedItems.length} item(s)`);
+    return normalizedItems;
   } catch (error) {
     console.error(`Web plugin ${plugin.id} failed:`, error);
+
+    if (throwOnError) {
+      throw error;
+    }
+
+    return [];
   }
 }
 

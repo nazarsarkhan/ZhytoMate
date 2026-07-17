@@ -100,6 +100,32 @@ npm start          # node index.js
 npm run dev         # node --watch index.js, for local iteration
 ```
 
+To run only one web source once, use its dedicated parser script:
+
+```bash
+npm run parse:zhytomir-info  # zhitomir.info
+npm run parse:zt-rada        # Zhytomyr city council
+npm run parse:zt-rada:knowledge # curated resident-help pages and linked references
+npm run parse:zt-rada:fast   # city council, last 30 days with faster settings
+npm run parse:zt-rada:archive # city council documents from 2019-01-01
+```
+
+Both commands use the same normalization, deduplication, and delivery pipeline as the main
+service, then exit after the selected source's queue is complete. The `zhytomir-info` source
+backfills the last 14 days by default; change it with `ZHYTOMYR_INFO_BACKFILL_DAYS`.
+
+For a faster city-council backfill, increase crawl concurrency and limit the historical window
+explicitly, for example in PowerShell:
+
+```powershell
+$env:ZT_RADA_BACKFILL_DAYS = '30'
+$env:ZT_RADA_CONCURRENCY = '10'
+npm run parse:zt-rada
+```
+
+Attachment extraction uses a separate, smaller concurrency limit so PDF/DOC files do not overwhelm
+the site or local CPU.
+
 To copy already collected news into the main backend without sending `zt-rada` knowledge-base
 pages, run a dry-run first and then remove `--dry-run`:
 

@@ -38,7 +38,15 @@ def test_normalizes_short_civic_location_questions() -> None:
     assert normalize_civic_information_query("А где суд?") == "Де суд у Житомирі?"
     assert normalize_civic_information_query(
         "где сделать паспорт?"
-    ) == "Де зробити паспорт у Житомирі?"
+    ) == "Прозорий офіс отримати паспорт"
+
+
+def test_recognizes_vpo_aliases_and_uses_official_service_vocabulary() -> None:
+    assert is_civic_information_query("Мені треба ВПО") is True
+    assert is_civic_information_query("де зробити впо?") is True
+    assert normalize_civic_information_query("Мені треба документи для ВПО") == (
+        "Прозорий офіс отримати паспорт внутрішньо переміщеним особам"
+    )
 
 
 def test_rejects_promoting_deputy_mayor_to_mayor() -> None:
@@ -150,11 +158,15 @@ def test_title_sources_are_limited_to_official_or_curated_facts() -> None:
 
 
 def test_normalizes_russian_cnap_location_query() -> None:
-    assert normalize_civic_information_query("где находится ЦНАП?") == "ЦНАП"
+    assert normalize_civic_information_query("где находится ЦНАП?") == (
+        "Центр надання адміністративних послуг Житомирської міської ради"
+    )
 
 
 def test_normalizes_ukrainian_cnap_location_query_to_subject_anchor() -> None:
-    assert normalize_civic_information_query("Де ЦНАП у Житомирі?") == "ЦНАП"
+    assert normalize_civic_information_query("Де ЦНАП у Житомирі?") == (
+        "Центр надання адміністративних послуг Житомирської міської ради"
+    )
 
 
 def test_normalizes_numbered_transport_query_to_route_anchor() -> None:
@@ -163,7 +175,27 @@ def test_normalizes_numbered_transport_query_to_route_anchor() -> None:
 
 def test_recognizes_and_normalizes_city_council_queries() -> None:
     assert is_civic_information_query("Де міська рада Житомира?") is True
-    assert normalize_civic_information_query("где находится горсовет Житомира") == "Міська рада Житомира адреса контакти"
+    assert normalize_civic_information_query("где находится горсовет Житомира") == (
+        "Контакти"
+    )
+
+
+def test_normalizes_common_resident_service_queries_to_official_page_vocabulary() -> None:
+    assert normalize_civic_information_query("Як подати звернення і де взяти зразок заяви?") == (
+        "Зразки заяв та інформаційних запитів"
+    )
+    assert normalize_civic_information_query("Де карта укриттів?") == (
+        "Інтерактивна карта укриттів"
+    )
+    assert normalize_civic_information_query("Як записати дитину в садок?") == (
+        "Електронна реєстрація в заклади дошкільної та загальної середньої освіти"
+    )
+    assert normalize_civic_information_query("Куди звертатися ветерану?") == (
+        "Телефонна ветеранська лінія"
+    )
+    assert normalize_civic_information_query("Де подивитися тарифи?") == (
+        "Тарифна політика Житомира"
+    )
 
 
 def test_civic_service_sources_reject_social_and_place_catalogs() -> None:

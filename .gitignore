@@ -2,7 +2,8 @@ node_modules/
 .env
 .env.local
 npm-debug.log*
-docs/
+docs/*
+!docs/CIVIC_GLOSSARY.md
 CLAUDE.md
 .worktrees/
 .playwright-mcp/
