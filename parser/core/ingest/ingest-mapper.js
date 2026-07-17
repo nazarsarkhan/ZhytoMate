@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { clampTtlDays } from './ttl.js';
 
 const allowedLangs = new Set(['uk', 'ru']);
@@ -241,6 +242,15 @@ function capIngestText(text, item) {
   return text.slice(0, MAX_INGEST_TEXT_CHARS);
 }
 
+function buildStableDocumentId(item) {
+  const identity = item.url
+    ? `${item.source}:${item.type}:${item.url}`
+    : `${item.source}:${item.type}:${item.publishedAt}:${item.body}`;
+  const digest = crypto.createHash('sha256').update(identity).digest('hex').slice(0, 40);
+
+  return `${item.source}_${digest}`;
+}
+
 function inferDocType(item) {
   if (item.docType === 'news' || item.docType === 'document' || item.docType === 'instruction') {
     return item.docType;
@@ -401,7 +411,13 @@ function daysUntil(date, publishedAt) {
   return Math.max(1, Math.ceil(diffMs / (24 * 60 * 60 * 1000)) + 1);
 }
 
-function inferTtlDays(text, category, publishedAt) {
+function inferTtlDays(text, category, publishedAt, item) {
+  const explicitTtlDays = Number(item.ttlDays);
+
+  if (Number.isFinite(explicitTtlDays) && explicitTtlDays > 0) {
+    return explicitTtlDays;
+  }
+
   const futureDate = findFutureDate(text, publishedAt);
 
   if (futureDate) {
@@ -486,13 +502,13 @@ export function toIngestRequest(item) {
     skipped: false,
     reason: null,
     request: {
-      document_id: `${item.source}_${item.id}`,
+      document_id: buildStableDocumentId(item),
       text: capIngestText(text, item),
       doc_type: inferDocType(item),
       source: item.url || item.source,
       category,
       district: inferDistrict(text),
-      ttl_days: clampTtlDays(inferTtlDays(text, category, item.publishedAt)),
+      ttl_days: clampTtlDays(inferTtlDays(text, category, item.publishedAt, item)),
       published_at: item.publishedAt,
     },
   };

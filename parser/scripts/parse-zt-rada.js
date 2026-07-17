@@ -1,9 +1,11 @@
 import { runWebSource } from './run-web-source.js';
 
 process.env.ZT_RADA_DOCUMENTS_ONLY = 'false';
-process.env.ZT_RADA_BACKFILL_DAYS = '365';
-process.env.ZT_RADA_MAX_PAGES = '1500';
-process.env.ZT_RADA_MAX_ITEMS = '2000';
+process.env.ZT_RADA_BACKFILL_DAYS = '1095';
+process.env.ZT_RADA_MAX_PAGES = '0';
+process.env.ZT_RADA_MAX_ITEMS = '0';
+process.env.ZT_RADA_ATTACHMENT_LIMIT_PER_PAGE = '0';
+process.env.ZT_RADA_DOCUMENT_ATTACHMENT_LIMIT_PER_PAGE = '0';
 process.env.ZT_RADA_CONCURRENCY = '10';
 process.env.ZT_RADA_ATTACHMENT_CONCURRENCY = '4';
 

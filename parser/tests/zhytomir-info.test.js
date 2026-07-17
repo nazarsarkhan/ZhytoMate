@@ -28,3 +28,32 @@ test('routes zhytomir-info web items to the news output', () => {
   assert.equal(output.request.doc_type, 'news');
   assert.equal(shouldSendToNews(item, output.request), true);
 });
+
+test('uses a stable document id for the same source URL across runs', () => {
+  const rawItem = {
+    url: 'https://www.zhitomir.info/news_123.html',
+    title: 'Ð–Ð¸Ñ‚Ð¾Ð¼Ð¸Ñ€ÑÑŒÐºÐ° Ð½Ð¾Ð²Ð¸Ð½Ð°',
+    body: 'Ð¢ÐµÐºÑÑ‚ Ð½Ð¾Ð²Ð¸Ð½Ð¸ Ð´Ð¾ÑÑ‚Ð°Ñ‚Ð½ÑŒÐ¾Ñ— Ð´Ð¾Ð²Ð¶Ð¸Ð½Ð¸ Ð´Ð»Ñ Ñ–Ð½Ð´ÐµÐºÑÐ°Ñ†Ñ–Ñ—.',
+    publishedAt: '2026-07-17T08:00:00.000Z',
+  };
+  const first = toIngestRequest(normalizeItem(rawItem, { id: 'zhytomir-info' }, 'web'));
+  const second = toIngestRequest(normalizeItem(rawItem, { id: 'zhytomir-info' }, 'web'));
+
+  assert.equal(first.request.document_id, second.request.document_id);
+});
+
+test('keeps the configured backfill TTL for older news in RAG', () => {
+  const item = normalizeItem(
+    {
+      url: 'https://www.zhitomir.info/news_older.html',
+      title: 'Ð–Ð¸Ñ‚Ð¾Ð¼Ð¸Ñ€ÑÑŒÐºÐ° Ð½Ð¾Ð²Ð¸Ð½Ð°',
+      body: 'Ð¢ÐµÐºÑÑ‚ Ð½Ð¾Ð²Ð¸Ð½Ð¸ Ð´Ð¾ÑÑ‚Ð°Ñ‚Ð½ÑŒÐ¾Ñ— Ð´Ð¾Ð²Ð¶Ð¸Ð½Ð¸ Ð´Ð»Ñ Ñ–Ð½Ð´ÐµÐºÑÐ°Ñ†Ñ–Ñ—.',
+      publishedAt: '2026-05-01T08:00:00.000Z',
+      ttlDays: 120,
+    },
+    { id: 'zhytomir-info' },
+    'web',
+  );
+
+  assert.equal(toIngestRequest(item).request.ttl_days, 120);
+});

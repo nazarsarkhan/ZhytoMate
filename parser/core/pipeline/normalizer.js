@@ -47,6 +47,7 @@ export function normalizeItem(rawItem, plugin, type) {
     docType: rawItem.docType,
     attachments: rawItem.attachments,
     sourceKind: rawItem.sourceKind,
+    ttlDays: rawItem.ttlDays,
     useAi: rawItem.useAi ?? plugin.settings?.useAi ?? plugin.useAi,
   };
 }

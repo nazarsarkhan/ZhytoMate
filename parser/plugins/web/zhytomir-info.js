@@ -69,11 +69,16 @@ async function fetchArticle(url, titleFromList) {
   };
 }
 
-function buildNewsPageUrl(page) {
+function buildNewsPageUrl(page, pageSize = CONFIG.pageSize) {
   const url = new URL(NEWS_URL);
   url.searchParams.set('page', String(page));
-  url.searchParams.set('per-page', String(CONFIG.pageSize));
+  url.searchParams.set('per-page', String(pageSize));
   return url.toString();
+}
+
+function getPositiveNumber(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 function getBackfillCutoff() {
@@ -105,12 +110,16 @@ export default {
 
   async fetch() {
     const cutoff = getBackfillCutoff();
+    const maxItems = getPositiveNumber('ZHYTOMYR_INFO_MAX_ITEMS', CONFIG.maxItems);
+    const maxPages = getPositiveNumber('ZHYTOMYR_INFO_MAX_PAGES', CONFIG.maxPages);
+    const pageSize = getPositiveNumber('ZHYTOMYR_INFO_PAGE_SIZE', CONFIG.pageSize);
+    const concurrency = getPositiveNumber('ZHYTOMYR_INFO_CONCURRENCY', CONFIG.concurrency);
     const linkMap = new Map();
     const items = [];
-    const limit = pLimit(CONFIG.concurrency);
+    const limit = pLimit(concurrency);
 
-    for (let page = 1; page <= CONFIG.maxPages && linkMap.size < CONFIG.maxItems; page += 1) {
-      const pageUrl = page === 1 ? NEWS_URL : buildNewsPageUrl(page);
+    for (let page = 1; page <= maxPages && linkMap.size < maxItems; page += 1) {
+      const pageUrl = page === 1 ? NEWS_URL : buildNewsPageUrl(page, pageSize);
       const { text } = await fetchText(pageUrl);
       const $ = load(text);
       const previousSize = linkMap.size;
@@ -121,10 +130,15 @@ export default {
         break;
       }
 
-      const pageLinks = [...linkMap.values()].slice(previousSize, CONFIG.maxItems);
+      const pageLinks = [...linkMap.values()].slice(previousSize, maxItems);
       const pageItems = (
         await Promise.all(pageLinks.map((item) => limit(() => fetchArticle(item.url, item.title))))
-      ).filter(Boolean);
+      )
+        .filter(Boolean)
+        .map((item) => ({
+          ...item,
+          ttlDays: getPositiveNumber('RAG_BACKFILL_NEWS_TTL_DAYS', 120),
+        }));
       items.push(...pageItems.filter((item) => new Date(item.publishedAt) >= cutoff));
 
       const datedPageItems = pageItems.filter((item) => !Number.isNaN(new Date(item.publishedAt).getTime()));
@@ -133,6 +147,6 @@ export default {
       }
     }
 
-    return items.slice(0, CONFIG.maxItems);
+    return items.slice(0, maxItems);
   },
 };
