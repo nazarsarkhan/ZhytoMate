@@ -25,7 +25,9 @@ export function useAdminContacts() {
     queryKey: ["contacts", "admin"],
     queryFn: async () => {
       const payload = await apiFetch("/contacts/admin");
-      return Array.isArray(payload?.contacts) ? payload.contacts : [];
+      return Array.isArray(payload?.contacts)
+        ? payload.contacts.map((contact) => ({ ...contact, id: contact.id || contact._id }))
+        : [];
     },
   });
 }

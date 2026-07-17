@@ -1,5 +1,4 @@
-import { createContext, useContext, useMemo, useState } from "react";
-import { adminSeedData } from "../../consts/adminData.js";
+import { createContext, useContext, useMemo } from "react";
 import {
   useAdminSurveys,
   useCreateSurvey,
@@ -14,37 +13,23 @@ import {
   useUpdateContact,
 } from "../../hooks/useContacts.js";
 import { useAdminPlaces, useDeletePlace, useUpdatePlace } from "../../hooks/useAdminPlaces.js";
-import { apiFetch } from "../../lib/apiClient.js";
+import { useAdminUsers, useUpdateAdminUser } from "../../hooks/useAdminUsers.js";
+import { useAdminNews, useDeleteAdminNews, useUpdateAdminNews } from "../../hooks/useAdminNews.js";
+import { useAdminSettings, useUpdateAdminSettings } from "../../hooks/useAdminSettings.js";
 
 const AdminDataContext = createContext(null);
 
-// Entities backed by real endpoints (create/update/remove route through mutations, list comes from
-// react-query). The rest (users, announcements, news) stay on the in-memory seed prototype until
-// they get their own backend.
-const LIVE_ENTITIES = new Set(["surveys", "appeals", "contacts", "places"]);
+const LIVE_ENTITIES = new Set([
+  "users",
+  "surveys",
+  "announcements",
+  "news",
+  "appeals",
+  "contacts",
+  "places",
+  "settings",
+]);
 
-function cloneSeedData() {
-  return structuredClone(adminSeedData);
-}
-
-function makeId(entity) {
-  return `${entity.slice(0, 3)}-${Date.now().toString(36)}`;
-}
-
-function publishAnnouncementIfNeeded(item) {
-  if (item.status !== "published") return;
-
-  apiFetch("/notifications/announcements", {
-    method: "POST",
-    body: { id: item.id, title: item.title, body: item.body },
-  }).catch((error) => {
-    console.warn("[notifications] announcement notification skipped:", error.message);
-  });
-}
-
-// --- API <-> admin-form mappers -------------------------------------------------------------
-
-// Backend surveys carry `isActive`; the admin UI models it as a status enum.
 function mapSurveyFromApi(survey) {
   return {
     ...survey,
@@ -76,138 +61,244 @@ function surveyToApi(form, { allowOptions }) {
 function mapAppealFromApi(appeal) {
   return {
     ...appeal,
-    // Flatten the populated reporter to a display string for the generic list/detail views.
     user: appeal.user?.name || appeal.userId || "—",
   };
 }
 
-// --- Provider --------------------------------------------------------------------------------
+function mapUserFromApi(user) {
+  return {
+    ...user,
+    status: user.isActive === false ? "blocked" : "active",
+  };
+}
+
+function mapContactFromApi(contact) {
+  return {
+    ...contact,
+    order: contact.order ?? 0,
+    status: contact.isActive === false ? "inactive" : "active",
+  };
+}
+
+function mapNewsFromApi(news) {
+  return {
+    ...news,
+    importance: Number(news.importance ?? 3),
+    importanceLabel: news.importanceLabel || "",
+    tags: Array.isArray(news.tags) ? news.tags : [],
+  };
+}
+
+function mapSettingsFromApi(settings) {
+  return [
+    {
+      id: "public-settings",
+      title: "Публічні налаштування",
+      cityHotline: settings?.cityHotline || "",
+    },
+  ];
+}
+
+function userToApi(form) {
+  return {
+    username: form.username,
+    firstName: form.firstName,
+    lastName: form.lastName,
+    email: form.email,
+    phone: form.phone || "",
+    role: form.role,
+    isActive: form.isActive ?? form.status !== "blocked",
+  };
+}
+
+function contactToApi(form) {
+  return {
+    name: form.name,
+    phone: form.phone,
+    icon: form.icon || "call",
+    group: form.group || "",
+    kind: form.kind || "utility",
+    order: Number(form.order || 0),
+    isActive: form.isActive ?? form.status !== "inactive",
+  };
+}
+
+function newsToApi(form, { isAnnouncement }) {
+  return {
+    title: form.title,
+    summary: form.summary || "",
+    body: form.body || "",
+    sourceUrl: form.sourceUrl ? form.sourceUrl : null,
+    category: form.category || "",
+    district: form.district ? form.district : null,
+    importance: Number(form.importance || 3),
+    importanceLabel: form.importanceLabel || "",
+    isAnnouncement,
+    eventDate: form.eventDate ? form.eventDate : null,
+    publishedAt: form.publishedAt ? form.publishedAt : null,
+    expiresAt: form.expiresAt ? form.expiresAt : null,
+    tags: Array.isArray(form.tags) ? form.tags : [],
+    lang: form.lang || "uk",
+  };
+}
 
 export function AdminDataProvider({ children }) {
-  const [seedData, setSeedData] = useState(cloneSeedData);
-
+  const usersQuery = useAdminUsers();
   const surveysQuery = useAdminSurveys();
+  const announcementsQuery = useAdminNews({ isAnnouncement: true });
+  const newsQuery = useAdminNews({ isAnnouncement: false });
   const appealsQuery = useAdminAppeals();
   const contactsQuery = useAdminContacts();
   const placesQuery = useAdminPlaces();
+  const settingsQuery = useAdminSettings();
 
+  const updateAdminUser = useUpdateAdminUser();
   const createSurvey = useCreateSurvey();
   const updateSurvey = useUpdateSurvey();
   const deleteSurvey = useDeleteSurvey();
+  const updateAdminNews = useUpdateAdminNews();
+  const deleteAdminNews = useDeleteAdminNews();
   const respondAppeal = useRespondAppeal();
   const createContact = useCreateContact();
   const updateContact = useUpdateContact();
   const deleteContact = useDeleteContact();
   const updatePlace = useUpdatePlace();
   const deletePlace = useDeletePlace();
+  const updateAdminSettings = useUpdateAdminSettings();
 
   const data = useMemo(
     () => ({
-      ...seedData,
+      users: (Array.isArray(usersQuery.data) ? usersQuery.data : []).filter(Boolean).map(mapUserFromApi),
       surveys: (Array.isArray(surveysQuery.data) ? surveysQuery.data : []).filter(Boolean).map(mapSurveyFromApi),
+      announcements: (Array.isArray(announcementsQuery.data) ? announcementsQuery.data : []).filter(Boolean).map(mapNewsFromApi),
+      news: (Array.isArray(newsQuery.data) ? newsQuery.data : []).filter(Boolean).map(mapNewsFromApi),
       appeals: (Array.isArray(appealsQuery.data) ? appealsQuery.data : []).filter(Boolean).map(mapAppealFromApi),
-      contacts: Array.isArray(contactsQuery.data) ? contactsQuery.data : [],
+      contacts: (Array.isArray(contactsQuery.data) ? contactsQuery.data : []).filter(Boolean).map(mapContactFromApi),
       places: Array.isArray(placesQuery.data) ? placesQuery.data : [],
+      settings: mapSettingsFromApi(settingsQuery.data),
     }),
-    [seedData, surveysQuery.data, appealsQuery.data, contactsQuery.data, placesQuery.data],
+    [
+      announcementsQuery.data,
+      appealsQuery.data,
+      contactsQuery.data,
+      newsQuery.data,
+      placesQuery.data,
+      settingsQuery.data,
+      surveysQuery.data,
+      usersQuery.data,
+    ],
   );
 
-  const createItem = (entity, item) => {
+  const meta = useMemo(
+    () => ({
+      users: { isLoading: usersQuery.isLoading, error: usersQuery.error ?? null },
+      surveys: { isLoading: surveysQuery.isLoading, error: surveysQuery.error ?? null },
+      announcements: {
+        isLoading: announcementsQuery.isLoading,
+        error: announcementsQuery.error ?? null,
+      },
+      news: { isLoading: newsQuery.isLoading, error: newsQuery.error ?? null },
+      appeals: { isLoading: appealsQuery.isLoading, error: appealsQuery.error ?? null },
+      contacts: { isLoading: contactsQuery.isLoading, error: contactsQuery.error ?? null },
+      places: { isLoading: placesQuery.isLoading, error: placesQuery.error ?? null },
+      settings: { isLoading: settingsQuery.isLoading, error: settingsQuery.error ?? null },
+    }),
+    [
+      announcementsQuery.error,
+      announcementsQuery.isLoading,
+      appealsQuery.error,
+      appealsQuery.isLoading,
+      contactsQuery.error,
+      contactsQuery.isLoading,
+      newsQuery.error,
+      newsQuery.isLoading,
+      placesQuery.error,
+      placesQuery.isLoading,
+      settingsQuery.error,
+      settingsQuery.isLoading,
+      surveysQuery.error,
+      surveysQuery.isLoading,
+      usersQuery.error,
+      usersQuery.isLoading,
+    ],
+  );
+
+  async function createItem(entity, item) {
     if (entity === "surveys") {
-      createSurvey.mutate(surveyToApi(item, { allowOptions: true }));
-      return item;
+      return createSurvey.mutateAsync(surveyToApi(item, { allowOptions: true }));
     }
     if (entity === "contacts") {
-      createContact.mutate({
-        name: item.name,
-        phone: item.phone,
-        icon: item.icon || "call",
-        group: item.group || "",
-        kind: item.kind || "utility",
-      });
-      return item;
+      return createContact.mutateAsync(contactToApi(item));
     }
-    if (entity === "places") return item;
-    // Appeals cannot be created from the admin panel; only citizens file them.
-    if (entity === "appeals") return item;
+    throw new Error("Створення для цього розділу недоступне.");
+  }
 
-    const nextItem = { ...item, id: makeId(entity) };
-    if (entity === "announcements") publishAnnouncementIfNeeded(nextItem);
-    setSeedData((current) => ({ ...current, [entity]: [nextItem, ...current[entity]] }));
-    return nextItem;
-  };
-
-  const updateItem = (entity, id, updates) => {
+  async function updateItem(entity, id, updates) {
+    if (entity === "users") {
+      return updateAdminUser.mutateAsync({ id, updates: userToApi(updates) });
+    }
     if (entity === "surveys") {
-      // Omit options once votes exist - the backend rejects option changes on voted surveys.
       const allowOptions = Number(updates.totalVotes || 0) === 0;
-      updateSurvey.mutate({ id, updates: surveyToApi(updates, { allowOptions }) });
-      return;
+      return updateSurvey.mutateAsync({ id, updates: surveyToApi(updates, { allowOptions }) });
+    }
+    if (entity === "announcements") {
+      return updateAdminNews.mutateAsync({
+        id,
+        updates: newsToApi(updates, { isAnnouncement: true }),
+      });
+    }
+    if (entity === "news") {
+      return updateAdminNews.mutateAsync({
+        id,
+        updates: newsToApi(updates, { isAnnouncement: false }),
+      });
     }
     if (entity === "appeals") {
-      respondAppeal.mutate({
+      return respondAppeal.mutateAsync({
         id,
         updates: { status: updates.status, response: updates.response ?? "" },
       });
-      return;
     }
     if (entity === "contacts") {
-      updateContact.mutate({
+      return updateContact.mutateAsync({ id, updates: contactToApi(updates) });
+    }
+    if (entity === "places") {
+      return updatePlace.mutateAsync({
         id,
         updates: {
           name: updates.name,
+          address: updates.address,
           phone: updates.phone,
-          icon: updates.icon || "call",
-          group: updates.group || "",
-          kind: updates.kind || "utility",
+          openingHours: updates.openingHours,
+          category: updates.category,
         },
       });
-      return;
     }
-    if (entity === "places") {
-      updatePlace.mutate({ id, updates: { name: updates.name, address: updates.address, phone: updates.phone, openingHours: updates.openingHours, category: updates.category } });
-      return;
+    if (entity === "settings") {
+      return updateAdminSettings.mutateAsync({ cityHotline: updates.cityHotline || "" });
     }
+    throw new Error("Редагування для цього розділу недоступне.");
+  }
 
-    if (entity === "announcements") {
-      const currentItem = data.announcements.find((entry) => entry.id === id);
-      publishAnnouncementIfNeeded({ ...currentItem, ...updates, id });
-    }
-
-    setSeedData((current) => ({
-      ...current,
-      [entity]: current[entity].map((entry) =>
-        entry.id === id ? { ...entry, ...updates, id } : entry,
-      ),
-    }));
-  };
-
-  const removeItem = (entity, id) => {
+  async function removeItem(entity, id) {
     if (entity === "surveys") {
-      deleteSurvey.mutate(id);
-      return;
+      return deleteSurvey.mutateAsync(id);
+    }
+    if (entity === "announcements" || entity === "news") {
+      return deleteAdminNews.mutateAsync(id);
     }
     if (entity === "contacts") {
-      deleteContact.mutate(id);
-      return;
+      return deleteContact.mutateAsync(id);
     }
     if (entity === "places") {
-      deletePlace.mutate(id);
-      return;
+      return deletePlace.mutateAsync(id);
     }
-    // Appeals aren't deletable from the admin panel.
-    if (entity === "appeals") return;
-
-    setSeedData((current) => ({
-      ...current,
-      [entity]: current[entity].filter((entry) => entry.id !== id),
-    }));
-  };
+    throw new Error("Видалення для цього розділу недоступне.");
+  }
 
   const value = useMemo(
-    () => ({ data, createItem, updateItem, removeItem, liveEntities: LIVE_ENTITIES }),
-    // createItem/updateItem/removeItem close over stable mutation handles; data drives re-renders.
-    [data],
+    () => ({ data, meta, createItem, updateItem, removeItem, liveEntities: LIVE_ENTITIES }),
+    [data, meta],
   );
 
   return <AdminDataContext.Provider value={value}>{children}</AdminDataContext.Provider>;
