@@ -307,7 +307,12 @@ export async function runAssistantQuery({ userId, userQuery, district, conversat
     ? await handlePendingAction({ conversation, userQuery, userId, district })
     : await handleNoPendingAction({ conversation, userQuery, userId, district });
 
-  return { ...result, conversationId: conversation._id.toString() };
+  const assistantMessage = [...conversation.messages].reverse().find((message) => message.role === "assistant");
+  return {
+    ...result,
+    conversationId: conversation._id.toString(),
+    messageId: assistantMessage?._id?.toString?.() || null,
+  };
 }
 
 export default {

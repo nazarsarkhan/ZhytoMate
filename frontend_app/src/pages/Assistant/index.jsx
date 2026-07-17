@@ -8,17 +8,20 @@ import AppHeader from "../../components/layout/AppHeader.jsx";
 import BottomNav from "../../components/navigation/BottomNav.jsx";
 import Icon from "../../components/ui/Icon.jsx";
 import LinkifiedText from "../../components/assistant/LinkifiedText.jsx";
+import MessageFeedback from "../../components/assistant/MessageFeedback.jsx";
 import SinoptikWeatherWidget from "../../components/widgets/SinoptikWeatherWidget.jsx";
 import OutageStatusCard from "../../components/widgets/OutageStatusCard.jsx";
 import AirAlertStatusCard from "../../components/widgets/AirAlertStatusCard.jsx";
 import { useAutoScrollToBottom } from "../../hooks/useAutoScrollToBottom.js";
 import { useAssistantChat, useCancelAction, useConfirmAction } from "../../hooks/useAssistantChat.js";
+import { useAssistantFeedback } from "../../hooks/useAssistantFeedback.js";
 import { useCurrentUser } from "../../hooks/useCurrentUser.js";
 import { chatSuggestions } from "../../consts/homeData.js";
 
 export default function AssistantPage() {
   const currentUser = useCurrentUser();
   const assistantChat = useAssistantChat();
+  const assistantFeedback = useAssistantFeedback();
   const confirmAction = useConfirmAction();
   const cancelAction = useCancelAction();
   // A pending confirm/cancel and a pending chat turn both mutate the same conversation's
@@ -63,11 +66,31 @@ export default function AssistantPage() {
           verified: result.verified === true,
           sourcesUsed: Array.isArray(result.sourcesUsed) ? result.sourcesUsed : [],
           appLinks: Array.isArray(result.appLinks) ? result.appLinks : [],
+          messageId: result.messageId || null,
+          userQuery: text,
+          feedback: null,
         },
       ]);
     } catch {
       setMessages((current) => [...current, { role: "assistant", text: "Щось пішло не так. Спробуйте ще раз.", isError: true }]);
     }
+  };
+
+  const submitFeedback = async (index, feedback) => {
+    const message = messages[index];
+    const result = await assistantFeedback.mutateAsync({
+      messageId: message.messageId,
+      conversationId,
+      vote: feedback.vote,
+      reason: feedback.reason,
+      userQuery: message.userQuery,
+      answer: message.text,
+      answerStatus: message.answerStatus,
+      verified: message.verified,
+      sourcesUsed: message.sourcesUsed,
+      appLinks: message.appLinks,
+    });
+    setMessages((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, feedback: result.feedback } : item));
   };
 
   // Once an action card is resolved, it must stop being interactive - otherwise a later re-click
@@ -163,6 +186,9 @@ export default function AssistantPage() {
                         <p className="mt-2 border-t border-outline-variant/30 pt-2 text-xs font-semibold text-on-surface-variant">
                           Інформацію не вдалося підтвердити офіційними джерелами.
                         </p>
+                      ) : null}
+                      {!isUser && !message.isError && message.messageId ? (
+                        <MessageFeedback message={message} onSubmit={(feedback) => submitFeedback(index, feedback)} />
                       ) : null}
                     </div>
                   )}

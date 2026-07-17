@@ -19,7 +19,7 @@ const messageSchema = new mongoose.Schema(
     // plain reply - see docs/superpowers/specs/2026-07-06-assistant-actions-framework-design.md.
     actionCard: { type: actionCardSchema, default: null },
   },
-  { timestamps: { createdAt: true, updatedAt: false }, _id: false },
+  { timestamps: { createdAt: true, updatedAt: false } },
 );
 
 const pendingActionSchema = new mongoose.Schema(
@@ -78,6 +78,7 @@ export function toPublicConversation(conversation) {
     id: conversation._id.toString(),
     title: conversation.title,
     messages: conversation.messages.map((message) => ({
+      id: message._id?.toString?.() || null,
       role: message.role,
       text: message.text,
       actionCard: message.actionCard || null,
