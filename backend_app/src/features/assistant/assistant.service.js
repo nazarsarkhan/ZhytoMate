@@ -10,12 +10,36 @@ import {
 } from "../conversation/conversation.repository.js";
 import { deriveConversationTitle } from "../conversation/conversation.model.js";
 import { searchPlaces } from "../places/places.repository.js";
-import { detectPlaceQuery, detectTransportRouteQuery, formatPlaceAnswer } from "../places/places-assistant.js";
+import { detectPlaceQuery, detectTransportRouteQuery, formatPlaceAnswer, formatTransportFallbackAnswer, hasTransportRouteNumber, isExplicitlyNonLocalPlaceQuery } from "../places/places-assistant.js";
 import { listNews } from "../news/news.service.js";
 import { detectLatestNewsQuery, formatLatestNewsAnswer } from "../news/news-assistant.js";
 
 const UNABLE_TO_PROCESS_MESSAGE =
   "Вибачте, не вдалося обробити повідомлення. Спробуйте ще раз.";
+
+const TRANSPORT_APP_LINK = {
+  capability: "transport",
+  label: "Транспорт",
+  route: "/services/transport",
+  reason: "Переглянути маршрути та транспорт Житомира",
+};
+
+const STANDALONE_APP_QUERY_RE = /(?:відключ|опитув|контакт|сповіщ|профіл|історі\w*\s+чат|міськ\w*\s+сервіс|сервіс\w*)/iu;
+
+function isStandaloneAssistantQuery(userQuery) {
+  return detectLatestNewsQuery(userQuery)
+    || detectTransportRouteQuery(userQuery)
+    || detectPlaceQuery(userQuery)
+    || isExplicitlyNonLocalPlaceQuery(userQuery)
+    || STANDALONE_APP_QUERY_RE.test(userQuery);
+}
+
+function withTransportAppLink(result) {
+  const appLinks = Array.isArray(result.appLinks) && result.appLinks.length
+    ? result.appLinks
+    : [TRANSPORT_APP_LINK];
+  return { ...result, appLinks };
+}
 
 // Loads the conversation this exchange belongs to, creating a fresh (empty) one if conversationId
 // is missing, stale, or foreign - same resilience posture as the pre-existing (now-deleted)
@@ -99,7 +123,23 @@ async function handleNoPendingAction({ conversation, userQuery, userId, district
     }
   }
   if (detectTransportRouteQuery(userQuery)) {
-    const result = await callAssistant({ userQuery, userId, district });
+    if (!hasTransportRouteNumber(userQuery)) {
+      const answer = formatTransportFallbackAnswer(userQuery);
+      await appendAssistantMessage(conversation, { text: answer });
+      return {
+        answer,
+        sourcesUsed: [],
+        confidence: 0,
+        grounded: false,
+        verified: false,
+        answerStatus: "ungrounded",
+        appLinks: [TRANSPORT_APP_LINK],
+      };
+    }
+    const result = withTransportAppLink(await callAssistant({ userQuery, userId, district }));
+    if (!result.grounded && !result.sourcesUsed?.length) {
+      result.answer = formatTransportFallbackAnswer(userQuery);
+    }
     await appendAssistantMessage(conversation, { text: result.answer });
     return {
       answer: result.answer,
@@ -119,7 +159,7 @@ async function handleNoPendingAction({ conversation, userQuery, userId, district
       await appendAssistantMessage(conversation, { text: answer });
       return {
         answer,
-        sourcesUsed: catalog.items.slice(0, 10).map((item) => item.sourceUrl),
+        sourcesUsed: catalog.items.slice(0, 5).map((item) => item.sourceUrl),
         confidence: 0.9,
         grounded: true,
         verified: true,
@@ -129,6 +169,7 @@ async function handleNoPendingAction({ conversation, userQuery, userId, district
     }
   }
   const result = await callAssistant({ userQuery, userId, district });
+  if (isExplicitlyNonLocalPlaceQuery(userQuery)) result.appLinks = [];
 
   if (!result.actionIntent) {
     await appendAssistantMessage(conversation, { text: result.answer });
@@ -197,6 +238,13 @@ async function handleNoPendingAction({ conversation, userQuery, userId, district
 // as a fresh query. An unrelated message still gets a normal RAG answer, but the draft is left
 // untouched so the user can return to it later (see the spec's "Interruption case").
 async function handlePendingAction({ conversation, userQuery, userId, district }) {
+  // A user can ask an unrelated city/app question while an appeal draft is open. Preserve the
+  // draft, but route obvious standalone queries through the same fast paths as a fresh turn;
+  // otherwise slot extraction can misclassify them as missing appeal fields and hide app links.
+  if (isStandaloneAssistantQuery(userQuery)) {
+    return handleNoPendingAction({ conversation, userQuery, userId, district });
+  }
+
   const { pendingAction } = conversation;
   const action = getAction(pendingAction.type);
   if (!action) {

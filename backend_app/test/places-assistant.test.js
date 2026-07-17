@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { detectPlaceQuery, detectTransportRouteQuery } from '../src/features/places/places-assistant.js';
+import { detectPlaceQuery, detectTransportRouteQuery, hasTransportRouteNumber } from '../src/features/places/places-assistant.js';
 
 test('does not route official civic-service questions to a generic OSM category', () => {
   assert.equal(detectPlaceQuery('Де ЦНАП?'), null);
@@ -31,6 +31,15 @@ test('detects origin-destination transport questions without a route number', ()
   for (const query of queries) {
     assert.equal(detectTransportRouteQuery(query), true, query);
   }
+});
+
+test('does not route explicitly non-local places to the Zhytomyr catalog', () => {
+  assert.equal(detectPlaceQuery('Який найкращий ресторан на Марсі?'), null);
+});
+
+test('distinguishes route-specific transport questions for the fast path', () => {
+  assert.equal(hasTransportRouteNumber('Який маршрут тролейбуса №15А?'), true);
+  assert.equal(hasTransportRouteNumber('Мені треба з Глобала доїхати на Богунію'), false);
 });
 
 test('does not classify unrelated place questions as transport routes', () => {

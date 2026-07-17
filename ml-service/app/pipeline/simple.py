@@ -24,6 +24,7 @@ import time
 
 from app.domain.civic_verification import (
     TITLE_NOT_SUPPORTED_ANSWER,
+    extract_trusted_civic_title_answer,
     is_civic_information_query,
     normalize_civic_information_query,
     normalize_civic_title_query,
@@ -138,5 +139,8 @@ class SimpleRAGPipeline(RAGPipeline):
             answer_lang=answer_lang,
             force_ungrounded=conversational and not is_civic_information_query(ctx.user_query),
             strong_lexical_match=strong_lexical_match,
+            deterministic_answer=extract_trusted_civic_title_answer(
+                ctx.user_query, [(item.text, item.source) for item in outcome.fused]
+            ),
         )
         return result.model_copy(update={"action_intent": action_intent})

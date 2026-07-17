@@ -33,6 +33,7 @@ import structlog
 
 from app.domain.civic_verification import (
     TITLE_NOT_SUPPORTED_ANSWER,
+    extract_trusted_civic_title_answer,
     is_civic_title_query,
     normalize_civic_information_query,
     normalize_civic_title_query,
@@ -157,6 +158,9 @@ class AgentRAGPipeline(RAGPipeline):
             question=ctx.user_query,
             route=ctx.route,
             strong_lexical_match=strong_lexical_match,
+            deterministic_answer=extract_trusted_civic_title_answer(
+                ctx.user_query, [(item.text, item.source) for item in flattened]
+            ),
         )
 
     async def _retrieve_all(
