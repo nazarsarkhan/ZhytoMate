@@ -9,12 +9,37 @@ import { Contact } from "../src/features/contact/contact.model.js";
 import { Setting } from "../src/features/setting/setting.model.js";
 import { voteInSurvey } from "../src/features/survey/survey.service.js";
 
-const username = "nazar_dev";
 const __filename = fileURLToPath(import.meta.url);
 
-// Dedicated admin login for the admin panel. Provide the password via ADMIN_SEED_PASSWORD.
-const ADMIN_USERNAME = "admin";
-const ADMIN_EMAIL = "admin@zhytomate.local";
+// These credentials are intentionally predictable because this script is for local/staging demo
+// data. Never use them for a public production deployment; override them through the environment
+// or change them immediately after seeding.
+const demoAccounts = Object.freeze([
+  {
+    username: "admin",
+    firstName: "Міський",
+    lastName: "Адміністратор",
+    email: "admin@zhytomate.local",
+    password: process.env.ADMIN_SEED_PASSWORD || "ZhytomyrAdmin2026!",
+    role: "admin",
+  },
+  {
+    username: "demo_user",
+    firstName: "Олена",
+    lastName: "Коваль",
+    email: "demo.user@zhytomate.local",
+    password: process.env.DEMO_USER_SEED_PASSWORD || "ZhytomyrUser2026!",
+    role: "user",
+  },
+  {
+    username: "demo_user2",
+    firstName: "Андрій",
+    lastName: "Мельник",
+    email: "demo.user2@zhytomate.local",
+    password: process.env.DEMO_USER2_SEED_PASSWORD || "ZhytomyrUser22026!",
+    role: "user",
+  },
+]);
 
 // Mirrors the previously-static contacts from frontend_app/src/consts/serviceData.js so the
 // Contacts tab has data once it reads from the API. `kind:"emergency"` renders in the top grid;
@@ -67,29 +92,58 @@ const demoAppeals = [
 
 const demoSurveys = [
   {
-    title: "City priority for July",
-    description: "Choose what should be improved first this month.",
-    options: ["Road repairs", "Parks", "Street lighting", "Shelters"],
+    title: "Що найперше покращити в Житомирі?",
+    description: "Оберіть напрям, який, на вашу думку, має бути міським пріоритетом.",
+    options: ["Ремонт доріг", "Освітлення вулиць", "Парки та сквери", "Громадський транспорт"],
     selectedOptionIndex: 0,
   },
   {
-    title: "Best format for public updates",
-    description: "Pick the most convenient format for city service updates.",
-    options: ["Push notifications", "Email digest", "Telegram channel"],
-    selectedOptionIndex: 2,
-  },
-  {
-    title: "Community event topic",
-    description: "Choose the topic for the next local community event.",
-    options: ["Safety workshop", "Digital services", "Urban cleanup"],
+    title: "Які міські сервіси потрібні в застосунку?",
+    description: "Допоможіть визначити, які функції будуть найкориснішими для мешканців Житомира.",
+    options: ["Повідомлення про проблеми", "Міські новини", "Графіки відключень", "Події та заходи"],
     selectedOptionIndex: 1,
   },
 ];
 
-async function findNazarDev() {
-  return User.findOne({
-    $or: [{ username }, { email: username.toLowerCase() }],
+async function upsertDemoAccount(account) {
+  let user = await User.findOne({
+    $or: [{ username: account.username }, { email: account.email }],
   });
+
+  if (!user) {
+    user = await User.create({
+      ...account,
+      password: await bcrypt.hash(account.password, 12),
+    });
+    return { user, created: true };
+  }
+
+  user.firstName = account.firstName;
+  user.lastName = account.lastName;
+  user.email = account.email;
+  user.role = account.role;
+  user.isActive = true;
+
+  if (!(await bcrypt.compare(account.password, user.password))) {
+    user.password = await bcrypt.hash(account.password, 12);
+    user.refreshTokenVersion += 1;
+  }
+
+  await user.save();
+  return { user, created: false };
+}
+
+async function seedUsers() {
+  const users = [];
+  let created = 0;
+
+  for (const account of demoAccounts) {
+    const result = await upsertDemoAccount(account);
+    users.push(result.user);
+    created += result.created ? 1 : 0;
+  }
+
+  return { users, created };
 }
 
 async function seedAppeals(user) {
@@ -123,7 +177,7 @@ async function seedAppeals(user) {
   return created;
 }
 
-async function seedSurveysAndVotes(user) {
+async function seedSurveysAndVotes(users) {
   let createdSurveys = 0;
   let savedVotes = 0;
 
@@ -140,58 +194,24 @@ async function seedSurveysAndVotes(user) {
       createdSurveys += 1;
     }
 
-    const option = survey.options[surveyData.selectedOptionIndex];
-    if (!option) {
-      throw new Error(`Demo option is missing for survey "${survey.title}"`);
-    }
+    for (const [userIndex, user] of users.entries()) {
+      const optionIndex =
+        (surveyData.selectedOptionIndex + userIndex) % survey.options.length;
+      const option = survey.options[optionIndex];
+      if (!option) {
+        throw new Error(`Demo option is missing for survey "${survey.title}"`);
+      }
 
-    await voteInSurvey({
-      surveyId: survey._id.toString(),
-      userId: user._id.toString(),
-      optionId: option._id.toString(),
-    });
-    savedVotes += 1;
+      await voteInSurvey({
+        surveyId: survey._id.toString(),
+        userId: user._id.toString(),
+        optionId: option._id.toString(),
+      });
+      savedVotes += 1;
+    }
   }
 
   return { createdSurveys, savedVotes };
-}
-
-// Ensures an admin login exists AND promotes nazar_dev to admin so the existing demo login can
-// reach the admin panel (frontend RequireAdmin checks role === "admin"). Idempotent.
-async function seedAdmin(demoUser) {
-  let adminCreated = false;
-
-  if (demoUser.role !== "admin") {
-    demoUser.role = "admin";
-    await demoUser.save();
-  }
-
-  let admin = await User.findOne({
-    $or: [{ username: ADMIN_USERNAME }, { email: ADMIN_EMAIL }],
-  });
-
-  if (!admin) {
-    const adminPassword = process.env.ADMIN_SEED_PASSWORD;
-    if (!adminPassword) {
-      throw new Error("ADMIN_SEED_PASSWORD must be set to seed the admin account");
-    }
-
-    const password = await bcrypt.hash(adminPassword, 12);
-    admin = await User.create({
-      username: ADMIN_USERNAME,
-      firstName: "City",
-      lastName: "Admin",
-      email: ADMIN_EMAIL,
-      password,
-      role: "admin",
-    });
-    adminCreated = true;
-  } else if (admin.role !== "admin") {
-    admin.role = "admin";
-    await admin.save();
-  }
-
-  return { adminCreated };
 }
 
 export async function seedContacts() {
@@ -229,19 +249,15 @@ export async function seedPublicSettings() {
 export async function main() {
   await connectMongo();
 
-  const user = await findNazarDev();
-  if (!user) {
-    throw new Error('User "nazar_dev" was not found. Register it first.');
-  }
-
-  const { adminCreated } = await seedAdmin(user);
-  const createdAppeals = await seedAppeals(user);
-  const { createdSurveys, savedVotes } = await seedSurveysAndVotes(user);
+  const { users, created: createdUsers } = await seedUsers();
+  const primaryUser = users.find((user) => user.username === "demo_user");
+  const { createdSurveys, savedVotes } = await seedSurveysAndVotes(users);
+  const createdAppeals = await seedAppeals(primaryUser);
   const createdContacts = await seedContacts();
   const ensuredPublicSettings = await seedPublicSettings();
 
-  console.log(`Seeded demo data for ${username}:`);
-  console.log(`- ${username} promoted to admin; dedicated admin account ${adminCreated ? "created" : "already present"} (login: ${ADMIN_USERNAME})`);
+  console.log("Seeded demo data for Zhytomyr:");
+  console.log(`- users created: ${createdUsers}`);
   console.log(`- appeals created: ${createdAppeals}`);
   console.log(`- surveys created: ${createdSurveys}`);
   console.log(`- votes saved: ${savedVotes}`);

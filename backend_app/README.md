@@ -72,8 +72,29 @@ cp .env.example .env
 ```bash
 npm install
 node src/server.js              # :3000 by default
-npm run seed:demo               # demo appeals/surveys for a pre-registered user
+npm run seed:demo               # idempotent Zhytomyr demo users, surveys, appeals, contacts
 ```
+
+### Demo data and test accounts
+
+Run the seed against the MongoDB configured in `MONGO_URI`:
+
+```bash
+docker compose run --rm --no-deps backend npm run seed:demo
+```
+
+The seed is idempotent: it creates or refreshes the demo accounts, two Zhytomyr surveys, sample
+votes, appeals, contacts, and public settings. Demo credentials:
+
+| Role | Login | Password |
+|---|---|---|
+| Admin | `admin` | `ZhytomyrAdmin2026!` |
+| Resident | `demo_user` | `ZhytomyrUser2026!` |
+| Resident | `demo_user2` | `ZhytomyrUser22026!` |
+
+These credentials are for local/staging demo data only. Override `ADMIN_SEED_PASSWORD`,
+`DEMO_USER_SEED_PASSWORD`, and `DEMO_USER2_SEED_PASSWORD` when running the seed against a shared
+environment, or change the passwords immediately afterward.
 
 `ml-service` must already be up and reachable at `ML_BASE_URL` for the Assistant/Appeals features
 to work — everything else (auth, surveys, profile) works standalone against MongoDB alone.
