@@ -1,5 +1,36 @@
 import User from "./user.model.js";
 
+const ADMIN_USER_SAFE_PROJECTION = "-password -refreshTokenVersion -__v";
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function buildAdminUserFilter({ q, role, isActive } = {}) {
+  const filter = {};
+
+  if (role) {
+    filter.role = role;
+  }
+
+  if (typeof isActive === "boolean") {
+    filter.isActive = isActive ? { $ne: false } : false;
+  }
+
+  if (q) {
+    const pattern = new RegExp(escapeRegExp(q), "i");
+    filter.$or = [
+      { firstName: pattern },
+      { lastName: pattern },
+      { username: pattern },
+      { email: pattern },
+      { phone: pattern },
+    ];
+  }
+
+  return filter;
+}
+
 export function findUserById(id) {
   return User.findById(id);
 }
@@ -60,6 +91,28 @@ export function findUserByEmailOrUsername(emailOrUsername) {
   });
 }
 
+export function findAdminUsers(filters = {}) {
+  return User.find(buildAdminUserFilter(filters))
+    .select(ADMIN_USER_SAFE_PROJECTION)
+    .sort({ createdAt: -1, _id: 1 });
+}
+
+export function updateAdminUserById(id, updates) {
+  return User.findByIdAndUpdate(
+    id,
+    { $set: updates },
+    { new: true, runValidators: true },
+  );
+}
+
+export function countActiveAdmins({ excludingUserId } = {}) {
+  return User.countDocuments({
+    role: "admin",
+    isActive: { $ne: false },
+    ...(excludingUserId ? { _id: { $ne: excludingUserId } } : {}),
+  });
+}
+
 export function createUser({
   username,
   firstName,
@@ -87,5 +140,8 @@ export default {
   findUserByIdAndUpdateAvatar,
   findUserByIdAndUpdatePassword,
   findUserByEmailOrUsername,
+  findAdminUsers,
+  updateAdminUserById,
+  countActiveAdmins,
   createUser,
 };

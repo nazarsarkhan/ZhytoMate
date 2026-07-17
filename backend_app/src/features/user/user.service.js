@@ -1,7 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+  countActiveAdmins,
   createUser,
+  findAdminUsers,
   findUserByEmailOrUsername,
   findUserByIdAndUpdateAddress,
   findUserByIdAndUpdateAvatar,
@@ -9,11 +11,34 @@ import {
   findUserByIdAndUpdatePassword,
   findUserByIdAndUpdatePreferences,
   findUserById,
+  updateAdminUserById,
 } from "./user.repository.js";
 import { ApiError } from "../../shared/ApiError.js";
 import { resolveAddressSelection, reverseAddress, searchAddresses } from "../../shared/geocodeClient.js";
 import { toPublicUser } from "./user.model.js";
 import { UPLOAD_DIR } from "./user.upload.js";
+
+const ADMIN_USER_UPDATE_FIELDS = [
+  "username",
+  "firstName",
+  "lastName",
+  "email",
+  "phone",
+  "role",
+  "isActive",
+];
+
+function pickAdminUserUpdates(updates) {
+  return ADMIN_USER_UPDATE_FIELDS.reduce((result, field) => {
+    if (updates[field] === undefined) {
+      return result;
+    }
+
+    result[field] =
+      field === "email" ? updates[field].toLowerCase() : updates[field];
+    return result;
+  }, {});
+}
 
 // Runs the selected address through Nominatim and returns the normalized object to persist. The
 // caller rejects it when Nominatim cannot confirm a real location.
@@ -52,6 +77,11 @@ export async function getPublicUserById(id) {
 
 export function getUserByEmailOrUsername(emailOrUsername) {
   return findUserByEmailOrUsername(emailOrUsername);
+}
+
+export async function listAdminUsers(filters = {}) {
+  const users = await findAdminUsers(filters);
+  return users.map(toPublicUser);
 }
 
 export function createUserProfile({
@@ -159,10 +189,44 @@ export async function updateUserPassword({ id, password }) {
   return user;
 }
 
+export async function updateAdminUser({ id, updates }) {
+  const existingUser = await findUserById(id);
+  if (!existingUser) {
+    throw ApiError.notFound("User not found");
+  }
+
+  const existingIsActive = existingUser.isActive !== false;
+  const nextRole = updates.role ?? existingUser.role;
+  const nextIsActive = updates.isActive ?? existingIsActive;
+
+  if (
+    existingUser.role === "admin"
+    && existingIsActive
+    && (nextRole !== "admin" || nextIsActive !== true)
+  ) {
+    const remainingActiveAdmins = await countActiveAdmins({
+      excludingUserId: id,
+    });
+
+    if (remainingActiveAdmins === 0) {
+      throw ApiError.conflict("Cannot remove the last active admin");
+    }
+  }
+
+  const user = await updateAdminUserById(id, pickAdminUserUpdates(updates));
+
+  if (!user) {
+    throw ApiError.notFound("User not found");
+  }
+
+  return toPublicUser(user);
+}
+
 export default {
   getUserById,
   getPublicUserById,
   getUserByEmailOrUsername,
+  listAdminUsers,
   createUserProfile,
   updateUserName,
   updateUserAddress,
@@ -171,4 +235,5 @@ export default {
   previewUserAddress,
   updateUserAvatarFromUpload,
   updateUserPassword,
+  updateAdminUser,
 };

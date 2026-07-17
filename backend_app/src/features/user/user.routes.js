@@ -1,18 +1,23 @@
 import { Router } from "express";
 import { validate, validateQuery } from "../../shared/validate.js";
-import { authenticate } from "../auth/auth.middleware.js";
+import { authenticate, authorize } from "../auth/auth.middleware.js";
 import {
+  getAdminUsers,
   getCurrentUser,
   getUserById,
   previewCurrentUserAddress,
   reverseCurrentUserAddress,
   searchCurrentUserAddresses,
+  updateAdminUserById,
   updateCurrentUserAddress,
   updateCurrentUserName,
   updateCurrentUserPreferences,
   uploadCurrentUserAvatar,
 } from "./user.controller.js";
 import {
+  adminUserIdParamsSchema,
+  adminUserUpdateSchema,
+  adminUsersQuerySchema,
   addressSuggestionsQuerySchema,
   addressReverseQuerySchema,
   updateAddressSchema,
@@ -23,6 +28,21 @@ import { uploadAvatarPhoto } from "./user.upload.js";
 
 const router = Router();
 
+router.get(
+  "/admin",
+  authenticate,
+  authorize("admin"),
+  validateQuery(adminUsersQuerySchema),
+  getAdminUsers,
+);
+router.patch(
+  "/admin/:id",
+  authenticate,
+  authorize("admin"),
+  validate(adminUserIdParamsSchema, "params"),
+  validate(adminUserUpdateSchema),
+  updateAdminUserById,
+);
 router.get(
   "/me/address/suggestions",
   authenticate,

@@ -1,14 +1,25 @@
 import { ApiError } from "../../shared/ApiError.js";
 import {
   getPublicUserById,
+  listAdminUsers,
   previewUserAddress,
   reverseUserAddress,
   searchUserAddresses,
+  updateAdminUser,
   updateUserAddress,
   updateUserAvatarFromUpload,
   updateUserName,
   updateUserPreferences,
 } from "./user.service.js";
+
+export async function getAdminUsers(req, res, next) {
+  try {
+    const users = await listAdminUsers(req.validatedQuery);
+    return res.json({ users });
+  } catch (err) {
+    return next(err);
+  }
+}
 
 export async function getCurrentUser(req, res, next) {
   try {
@@ -117,7 +128,21 @@ export async function uploadCurrentUserAvatar(req, res, next) {
   }
 }
 
+export async function updateAdminUserById(req, res, next) {
+  try {
+    const user = await updateAdminUser({
+      id: req.params.id,
+      updates: req.body,
+    });
+
+    return res.json({ user });
+  } catch (err) {
+    return next(err);
+  }
+}
+
 export default {
+  getAdminUsers,
   getCurrentUser,
   getUserById,
   updateCurrentUserName,
@@ -127,4 +152,5 @@ export default {
   updateCurrentUserPreferences,
   previewCurrentUserAddress,
   uploadCurrentUserAvatar,
+  updateAdminUserById,
 };

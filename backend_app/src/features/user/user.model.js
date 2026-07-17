@@ -38,6 +38,7 @@ const userSchema = new mongoose.Schema(
     preferences: { type: preferencesSchema, default: () => ({}) },
     avatarUrl: { type: String, trim: true, default: "" },
     role: { type: String, enum: ["user", "admin"], default: "user" },
+    isActive: { type: Boolean, default: true },
     refreshTokenVersion: { type: Number, default: 0 },
   },
   { timestamps: true },
@@ -70,6 +71,7 @@ export function toPublicUser(user) {
     },
     avatarUrl: user.avatarUrl || "",
     role: user.role,
+    isActive: user.isActive !== false,
   };
 }
 
