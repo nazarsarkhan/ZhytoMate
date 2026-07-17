@@ -62,8 +62,8 @@ test('uses center coordinates for ways and deduplicates unnamed/duplicate elemen
 
 test('builds a bounded JSON Overpass query with a safe timeout', () => {
   const query = buildPlacesQuery('50.20,28.60,50.30,28.75');
-  assert.match(query, /^\[out:json\]\[timeout:90\];\(/);
-  assert.match(query, /nwr\["name"\]\["amenity"\]/);
+  assert.match(query, /^\[out:json\]\[timeout:90\];area\(3602692156\)->\.zhytomyr;\(/);
+  assert.match(query, /nwr\["name"\]\["amenity"~/);
   assert.match(query, /nwr\["name"\]\["highway"="bus_stop"\]/);
   assert.match(query, /out center tags;$/);
 });

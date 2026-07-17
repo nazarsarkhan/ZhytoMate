@@ -789,6 +789,42 @@ export const openApiSpec = {
         },
       },
     },
+    "/assistant/feedback": {
+      post: {
+        tags: ["Assistant"],
+        summary: "Rate an assistant answer",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["messageId", "vote"],
+                properties: {
+                  messageId: { type: "string", example: "6682b15b8c39b424f9adf765" },
+                  conversationId: { type: "string" },
+                  vote: { type: "string", enum: ["up", "down"] },
+                  reason: { type: "string", enum: ["incorrect_answer", "missing_information", "outdated_information", "poor_sources", "unclear_answer"] },
+                  userQuery: { type: "string" },
+                  answer: { type: "string" },
+                  answerStatus: { type: "string" },
+                  verified: { type: "boolean" },
+                  sourcesUsed: { type: "array", items: { type: "string" } },
+                  appLinks: { type: "array", items: { type: "object" } },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: "Feedback saved" },
+          400: { description: "Validation error" },
+          404: { description: "Assistant message not found" },
+          401: { description: "Unauthorized" },
+        },
+      },
+    },
   },
 };
 

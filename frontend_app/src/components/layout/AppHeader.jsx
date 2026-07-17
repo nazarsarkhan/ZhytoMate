@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import Icon from "../ui/Icon.jsx";
 
@@ -35,24 +36,48 @@ export default function AppHeader({
   profile,
   compact = false,
 }) {
+  const headerRef = useRef(null);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const scrollContainer = headerRef.current?.parentElement;
+    if (!scrollContainer) return undefined;
+
+    const updateScrolledState = () => setIsScrolled(scrollContainer.scrollTop > 24);
+    updateScrolledState();
+    scrollContainer.addEventListener("scroll", updateScrolledState, { passive: true });
+
+    return () => scrollContainer.removeEventListener("scroll", updateScrolledState);
+  }, []);
+
   if (backTo) {
     return (
-      <header className="sticky top-0 z-40 bg-primary-container px-container-padding pb-4 pt-[calc(16px+var(--safe-top))] text-on-primary shadow-sm sm:px-6 md:px-8">
-        <div className="mx-auto flex h-12 w-full max-w-6xl items-center justify-between gap-3">
+      <header
+        ref={headerRef}
+        className={`sticky top-0 z-40 bg-primary-container px-container-padding text-on-primary transition-[padding,box-shadow] duration-300 sm:px-6 md:px-8 ${
+          isScrolled ? "py-2 shadow-md md:py-3" : "pb-4 pt-[calc(16px+var(--safe-top))] shadow-sm"
+        }`}
+      >
+        <div className="flex h-12 w-full items-center justify-between gap-3">
           <Link aria-label="Назад" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 transition hover:bg-white/20 active:scale-95" to={backTo}>
             <Icon name="arrow_back" />
           </Link>
           <h1 className="min-w-0 flex-1 truncate text-center text-lg font-bold md:text-2xl">{title}</h1>
           <HeaderAction icon={rightIcon} label={rightLabel} to={rightTo} onClick={onRightClick} />
         </div>
-        {children ? <div className="mx-auto mt-4 w-full max-w-6xl">{children}</div> : null}
+        {children ? <div className="mt-4 w-full">{children}</div> : null}
       </header>
     );
   }
 
   return (
-    <header className={`rounded-b-[32px] bg-primary-container px-container-padding pb-7 pt-[calc(24px+var(--safe-top))] text-on-primary shadow-sm sm:px-6 md:rounded-b-[42px] md:px-8 ${compact ? "" : "md:pb-8"}`}>
-      <div className="mx-auto max-w-6xl">
+    <header
+      ref={headerRef}
+      className={`bg-primary-container px-container-padding text-on-primary transition-[padding,box-shadow] duration-300 sm:px-6 md:px-8 ${
+        isScrolled ? "py-3 shadow-md md:py-4" : `pb-7 pt-[calc(24px+var(--safe-top))] shadow-sm ${compact ? "" : "md:pb-8"}`
+      }`}
+    >
+      <div className="w-full">
         <div className="mb-5 flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <div className="h-10 w-10 shrink-0 rounded-full bg-white/15" />

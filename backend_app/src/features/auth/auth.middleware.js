@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import { config } from "../../config/index.js";
 import { ApiError } from "../../shared/ApiError.js";
+import { getUserById } from "../user/user.service.js";
 
 export function authenticate(req, _res, next) {
   const header = req.get("authorization");
@@ -31,14 +32,29 @@ export function authenticate(req, _res, next) {
 // router.get("/", authenticate, authorize("admin"), handler). Relies on `authenticate`
 // having already populated req.user.role from the access token.
 export function authorize(...roles) {
-  return (req, _res, next) => {
+  return async (req, _res, next) => {
     if (!req.user) {
       return next(ApiError.unauthorized("Authentication required"));
     }
     if (!roles.includes(req.user.role)) {
       return next(ApiError.forbidden("Admin access is required"));
     }
-    return next();
+
+    try {
+      const currentUser = await getUserById(req.user.id);
+      if (
+        !currentUser ||
+        currentUser.isActive === false ||
+        !roles.includes(currentUser.role)
+      ) {
+        return next(ApiError.forbidden("Admin access is required"));
+      }
+
+      req.user.role = currentUser.role;
+      return next();
+    } catch (error) {
+      return next(error);
+    }
   };
 }
 

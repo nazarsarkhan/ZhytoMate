@@ -8,17 +8,19 @@ import AppHeader from "../../components/layout/AppHeader.jsx";
 import BottomNav from "../../components/navigation/BottomNav.jsx";
 import Icon from "../../components/ui/Icon.jsx";
 import LinkifiedText from "../../components/assistant/LinkifiedText.jsx";
+import MessageFeedback from "../../components/assistant/MessageFeedback.jsx";
 import SinoptikWeatherWidget from "../../components/widgets/SinoptikWeatherWidget.jsx";
 import OutageStatusCard from "../../components/widgets/OutageStatusCard.jsx";
 import AirAlertStatusCard from "../../components/widgets/AirAlertStatusCard.jsx";
-import { useAutoScrollToBottom } from "../../hooks/useAutoScrollToBottom.js";
 import { useAssistantChat, useCancelAction, useConfirmAction } from "../../hooks/useAssistantChat.js";
+import { useAssistantFeedback } from "../../hooks/useAssistantFeedback.js";
 import { useCurrentUser } from "../../hooks/useCurrentUser.js";
 import { chatSuggestions } from "../../consts/homeData.js";
 
 export default function AssistantPage() {
   const currentUser = useCurrentUser();
   const assistantChat = useAssistantChat();
+  const assistantFeedback = useAssistantFeedback();
   const confirmAction = useConfirmAction();
   const cancelAction = useCancelAction();
   // A pending confirm/cancel and a pending chat turn both mutate the same conversation's
@@ -34,7 +36,6 @@ export default function AssistantPage() {
   // persisted, so subsequent sends within the same visit continue that same thread. Resuming an
   // older thread is what /chat-history is for, not this screen.
   const [conversationId, setConversationId] = useState(null);
-  const messagesEndRef = useAutoScrollToBottom(messages);
 
   // A fresh confirming card always supersedes whatever was shown before - there is exactly one
   // pendingAction per conversation server-side, so a NEW actionCard means any earlier one is now
@@ -63,11 +64,31 @@ export default function AssistantPage() {
           verified: result.verified === true,
           sourcesUsed: Array.isArray(result.sourcesUsed) ? result.sourcesUsed : [],
           appLinks: Array.isArray(result.appLinks) ? result.appLinks : [],
+          messageId: result.messageId || null,
+          userQuery: text,
+          feedback: null,
         },
       ]);
     } catch {
       setMessages((current) => [...current, { role: "assistant", text: "Щось пішло не так. Спробуйте ще раз.", isError: true }]);
     }
+  };
+
+  const submitFeedback = async (index, feedback) => {
+    const message = messages[index];
+    const result = await assistantFeedback.mutateAsync({
+      messageId: message.messageId,
+      conversationId,
+      vote: feedback.vote,
+      reason: feedback.reason,
+      userQuery: message.userQuery,
+      answer: message.text,
+      answerStatus: message.answerStatus,
+      verified: message.verified,
+      sourcesUsed: message.sourcesUsed,
+      appLinks: message.appLinks,
+    });
+    setMessages((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, feedback: result.feedback } : item));
   };
 
   // Once an action card is resolved, it must stop being interactive - otherwise a later re-click
@@ -85,7 +106,7 @@ export default function AssistantPage() {
   return (
     <Shell className="bg-background pb-28">
       <AppHeader
-        eyebrow="Zhytomyr Assistant"
+        eyebrow="ZhytoMate"
         profile={
           currentUser.data
             ? {
@@ -164,6 +185,9 @@ export default function AssistantPage() {
                           Інформацію не вдалося підтвердити офіційними джерелами.
                         </p>
                       ) : null}
+                      {!isUser && !message.isError && message.messageId ? (
+                        <MessageFeedback message={message} onSubmit={(feedback) => submitFeedback(index, feedback)} />
+                      ) : null}
                     </div>
                   )}
                 </div>
@@ -181,7 +205,6 @@ export default function AssistantPage() {
                 </div>
               </div>
             ) : null}
-            <div ref={messagesEndRef} />
           </div>
           <div className="mb-6 flex flex-wrap gap-2">
             {chatSuggestions.map((label) => (
@@ -189,7 +212,7 @@ export default function AssistantPage() {
             ))}
           </div>
           {listening ? <p className="mb-2 text-xs font-bold text-on-tertiary-fixed-variant">Слухаю запит...</p> : null}
-          <div className="mb-4 flex h-14 items-center rounded-2xl border border-outline-variant/50 bg-surface shadow-sm focus-within:border-primary-container">
+          <div className="mb-4 flex h-14 items-center rounded-2xl bg-surface shadow-sm">
             <input
               className="h-full min-w-0 flex-1 border-0 bg-transparent px-4 text-sm outline-none placeholder:text-outline disabled:cursor-not-allowed"
               disabled={isBusy}

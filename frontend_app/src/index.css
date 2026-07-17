@@ -12,6 +12,19 @@
   border-radius: 4px;
 }
 
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 html {
   background:
     radial-gradient(circle at top left, rgba(254, 183, 33, 0.18), transparent 30rem),
@@ -86,13 +99,12 @@ input {
 
 @media (min-width: 768px) {
   .phone-shell {
-    max-width: 1440px;
-    min-height: calc(100dvh - 32px);
-    margin: 16px auto;
+    min-height: 100dvh;
+    margin: 0;
     overflow: clip;
-    border: 1px solid rgba(196, 198, 207, 0.45);
-    border-radius: 28px;
-    box-shadow: 0 24px 80px rgba(0, 26, 63, 0.14);
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
   }
 }
 

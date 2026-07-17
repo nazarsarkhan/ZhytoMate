@@ -38,12 +38,25 @@ const userSchema = new mongoose.Schema(
     preferences: { type: preferencesSchema, default: () => ({}) },
     avatarUrl: { type: String, trim: true, default: "" },
     role: { type: String, enum: ["user", "admin"], default: "user" },
+    isActive: { type: Boolean, default: true },
     refreshTokenVersion: { type: Number, default: 0 },
   },
   { timestamps: true },
 );
 
-export const User = mongoose.model("User", userSchema);
+const adminUserMutationStateSchema = new mongoose.Schema(
+  {
+    key: { type: String, required: true, unique: true },
+    lockToken: { type: String, default: "" },
+    lockUntil: { type: Date, default: null, index: true },
+  },
+  { timestamps: true },
+);
+
+export const User = mongoose.models.User || mongoose.model("User", userSchema);
+export const AdminUserMutationState =
+  mongoose.models.AdminUserMutationState
+  || mongoose.model("AdminUserMutationState", adminUserMutationStateSchema);
 
 export function toPublicUser(user) {
   return {
@@ -70,6 +83,7 @@ export function toPublicUser(user) {
     },
     avatarUrl: user.avatarUrl || "",
     role: user.role,
+    isActive: user.isActive !== false,
   };
 }
 

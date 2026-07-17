@@ -29,10 +29,10 @@ export default function AppealFormModal({ open, onClose }) {
   };
 
   const canSubmit =
-    Boolean(uploadedImageUrl) &&
     Boolean(category) &&
     address.trim().length > 3 &&
     description.trim().length > 8 &&
+    !uploadPhoto.isPending &&
     !createAppeal.isPending;
 
   const handleFileSelect = async (event) => {
@@ -111,7 +111,7 @@ export default function AppealFormModal({ open, onClose }) {
         ) : null}
 
         <div>
-          <label className="mb-3 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">Фото</label>
+          <label className="mb-3 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">Фото (необов'язково)</label>
           <input ref={fileInputRef} className="sr-only" accept="image/jpeg,image/png,image/webp" type="file" onChange={handleFileSelect} />
           {photoPreviewUrl ? (
             <div className="relative overflow-hidden rounded-xl border border-outline-variant/40 bg-surface-container-low">
@@ -167,7 +167,7 @@ export default function AppealFormModal({ open, onClose }) {
 
         <div>
           <label className="mb-3 block text-xs font-bold uppercase tracking-wider text-on-surface-variant" htmlFor="appeal-address">Адреса проблеми</label>
-          <div className="flex h-12 items-center gap-2 rounded-xl border border-outline-variant bg-surface-container-lowest px-3 focus-within:border-secondary-container focus-within:ring-2 focus-within:ring-secondary-container/30">
+          <div className="flex h-12 items-center gap-2 rounded-xl bg-surface-container-lowest px-3">
             <Icon name="location_on" className="shrink-0 text-lg text-outline" />
             <input
               id="appeal-address"
@@ -184,7 +184,7 @@ export default function AppealFormModal({ open, onClose }) {
         <div>
           <label className="mb-3 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">Опис проблеми</label>
           <textarea
-            className="min-h-32 w-full rounded-xl border border-outline-variant bg-surface-container-lowest p-3 text-sm outline-none focus:border-secondary-container focus:ring-2 focus:ring-secondary-container/30"
+            className="min-h-32 w-full rounded-xl border-0 bg-surface-container-lowest p-3 text-sm outline-none focus:ring-0"
             placeholder="Опишіть проблему..."
             value={description}
             onChange={(event) => setDescription(event.target.value)}

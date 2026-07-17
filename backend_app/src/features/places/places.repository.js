@@ -1,14 +1,15 @@
 import { Place } from './places.model.js';
 
-export function buildPlacesFilter({ q, category }) {
+export function buildPlacesFilter({ q, category, requireAddress = false }) {
   return {
-    ...(category ? { category } : {}),
+    category: category || { $ne: 'other' },
+    ...(requireAddress ? { address: { $nin: [null, ''] } } : {}),
     ...(q ? { $text: { $search: q } } : {}),
   };
 }
 
 export async function searchPlaces({ q, category, lat, lon, radius_m, limit, offset }) {
-  const filter = buildPlacesFilter({ q, category });
+  const filter = buildPlacesFilter({ q, category, requireAddress: true });
   const distanceFilter = Number.isFinite(lat) && Number.isFinite(lon)
     ? { location: { $near: { $geometry: { type: 'Point', coordinates: [lon, lat] }, $maxDistance: radius_m } } }
     : {};

@@ -1,4 +1,36 @@
-import User from "./user.model.js";
+import { AdminUserMutationState, User } from "./user.model.js";
+
+const ADMIN_USER_SAFE_PROJECTION = "-password -refreshTokenVersion -__v";
+const ADMIN_USER_MUTATION_LOCK_KEY = "admin-user-update";
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function buildAdminUserFilter({ q, role, isActive } = {}) {
+  const filter = {};
+
+  if (role) {
+    filter.role = role;
+  }
+
+  if (typeof isActive === "boolean") {
+    filter.isActive = isActive ? { $ne: false } : false;
+  }
+
+  if (q) {
+    const pattern = new RegExp(escapeRegExp(q), "i");
+    filter.$or = [
+      { firstName: pattern },
+      { lastName: pattern },
+      { username: pattern },
+      { email: pattern },
+      { phone: pattern },
+    ];
+  }
+
+  return filter;
+}
 
 export function findUserById(id) {
   return User.findById(id);
@@ -60,6 +92,79 @@ export function findUserByEmailOrUsername(emailOrUsername) {
   });
 }
 
+export function findAdminUsers(filters = {}) {
+  return User.find(buildAdminUserFilter(filters))
+    .select(ADMIN_USER_SAFE_PROJECTION)
+    .sort({ createdAt: -1, _id: 1 });
+}
+
+export function updateAdminUserById(
+  id,
+  updates,
+  { revokeRefreshSessions = false } = {},
+) {
+  return User.findByIdAndUpdate(
+    id,
+    {
+      $set: updates,
+      ...(revokeRefreshSessions ? { $inc: { refreshTokenVersion: 1 } } : {}),
+    },
+    { new: true, runValidators: true },
+  );
+}
+
+export async function acquireAdminUserUpdateLock(token, lockUntil) {
+  const now = new Date();
+
+  try {
+    const state = await AdminUserMutationState.findOneAndUpdate(
+      {
+        key: ADMIN_USER_MUTATION_LOCK_KEY,
+        $or: [{ lockUntil: null }, { lockUntil: { $lte: now } }],
+      },
+      {
+        $set: {
+          lockToken: token,
+          lockUntil,
+        },
+        $setOnInsert: { key: ADMIN_USER_MUTATION_LOCK_KEY },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true },
+    );
+
+    return state?.lockToken === token ? token : null;
+  } catch (error) {
+    if (error?.code === 11000) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+export function releaseAdminUserUpdateLock(token) {
+  return AdminUserMutationState.updateOne(
+    {
+      key: ADMIN_USER_MUTATION_LOCK_KEY,
+      lockToken: token,
+    },
+    {
+      $set: {
+        lockToken: "",
+        lockUntil: null,
+      },
+    },
+  );
+}
+
+export function countActiveAdmins({ excludingUserId } = {}) {
+  return User.countDocuments({
+    role: "admin",
+    isActive: { $ne: false },
+    ...(excludingUserId ? { _id: { $ne: excludingUserId } } : {}),
+  });
+}
+
 export function createUser({
   username,
   firstName,
@@ -87,5 +192,10 @@ export default {
   findUserByIdAndUpdateAvatar,
   findUserByIdAndUpdatePassword,
   findUserByEmailOrUsername,
+  findAdminUsers,
+  updateAdminUserById,
+  acquireAdminUserUpdateLock,
+  releaseAdminUserUpdateLock,
+  countActiveAdmins,
   createUser,
 };

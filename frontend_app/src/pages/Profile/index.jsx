@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import Shell from "../../components/layout/Shell.jsx";
 import AppHeader from "../../components/layout/AppHeader.jsx";
 import BottomNav from "../../components/navigation/BottomNav.jsx";
@@ -46,7 +45,6 @@ function Row({ icon, label, value, onClick }) {
 }
 
 export default function ProfilePage() {
-  const navigate = useNavigate();
   const { logout } = useAuth();
   const currentUser = useCurrentUser();
   const updateName = useUpdateProfileName();
@@ -205,9 +203,8 @@ export default function ProfilePage() {
   };
 
   const handleLogout = () => {
-    logout();
     setLogoutConfirmOpen(false);
-    navigate("/login", { replace: true });
+    logout();
   };
 
   const preferenceRows = [
@@ -233,7 +230,7 @@ export default function ProfilePage() {
   return (
     <Shell className="bg-background pb-28">
       <AppHeader
-        eyebrow="Zhytomyr Assistant"
+        eyebrow="ZhytoMate"
         profile={{
           name: user.firstName,
           location: [user.address.city, user.address.street].filter(Boolean).join(", ") || "Житомир",
@@ -316,15 +313,15 @@ export default function ProfilePage() {
           {passwordError ? <p className="rounded-xl border border-error-container bg-error-container/30 p-3 text-sm text-error">{passwordError}</p> : null}
           <label className="block">
             <span className="mb-1 ml-1 block text-xs text-on-surface-variant">Поточний пароль</span>
-            <input className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-4 outline-none focus:border-on-tertiary-fixed-variant" placeholder="••••••••" type="password" value={passwordForm.currentPassword} onChange={(event) => setPasswordForm((current) => ({ ...current, currentPassword: event.target.value }))} />
+            <input className="h-12 w-full rounded-xl border-0 bg-surface px-4 outline-none focus:ring-0" placeholder="••••••••" type="password" value={passwordForm.currentPassword} onChange={(event) => setPasswordForm((current) => ({ ...current, currentPassword: event.target.value }))} />
           </label>
           <label className="block">
             <span className="mb-1 ml-1 block text-xs text-on-surface-variant">Новий пароль</span>
-            <input className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-4 outline-none focus:border-on-tertiary-fixed-variant" placeholder="••••••••" type="password" value={passwordForm.newPassword} onChange={(event) => setPasswordForm((current) => ({ ...current, newPassword: event.target.value }))} />
+            <input className="h-12 w-full rounded-xl border-0 bg-surface px-4 outline-none focus:ring-0" placeholder="••••••••" type="password" value={passwordForm.newPassword} onChange={(event) => setPasswordForm((current) => ({ ...current, newPassword: event.target.value }))} />
           </label>
           <label className="block">
             <span className="mb-1 ml-1 block text-xs text-on-surface-variant">Підтвердіть новий пароль</span>
-            <input className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-4 outline-none focus:border-on-tertiary-fixed-variant" placeholder="••••••••" type="password" value={passwordForm.confirmNewPassword} onChange={(event) => setPasswordForm((current) => ({ ...current, confirmNewPassword: event.target.value }))} />
+            <input className="h-12 w-full rounded-xl border-0 bg-surface px-4 outline-none focus:ring-0" placeholder="••••••••" type="password" value={passwordForm.confirmNewPassword} onChange={(event) => setPasswordForm((current) => ({ ...current, confirmNewPassword: event.target.value }))} />
           </label>
         </div>
       </Modal>
@@ -358,7 +355,7 @@ export default function ProfilePage() {
           ].map(([key, label]) => (
             <label key={key} className="hidden">
               <span className="mb-1 ml-1 block text-xs text-on-surface-variant">{label}</span>
-              <input className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-4 outline-none focus:border-on-tertiary-fixed-variant" value={addressForm[key]} onChange={(event) => setAddressForm((current) => ({ ...current, [key]: event.target.value }))} />
+              <input className="h-12 w-full rounded-xl border-0 bg-surface px-4 outline-none focus:ring-0" value={addressForm[key]} onChange={(event) => setAddressForm((current) => ({ ...current, [key]: event.target.value }))} />
             </label>
           ))}
         </div>
@@ -373,11 +370,11 @@ export default function ProfilePage() {
         <div className="space-y-4">
           <label className="block">
             <span className="mb-1 ml-1 block text-xs text-on-surface-variant">Ім'я</span>
-            <input className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-4 outline-none focus:border-on-tertiary-fixed-variant" value={nameForm.firstName} onChange={(event) => setNameForm((current) => ({ ...current, firstName: event.target.value }))} />
+            <input className="h-12 w-full rounded-xl border-0 bg-surface px-4 outline-none focus:ring-0" value={nameForm.firstName} onChange={(event) => setNameForm((current) => ({ ...current, firstName: event.target.value }))} />
           </label>
           <label className="block">
             <span className="mb-1 ml-1 block text-xs text-on-surface-variant">Прізвище</span>
-            <input className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-4 outline-none focus:border-on-tertiary-fixed-variant" value={nameForm.lastName} onChange={(event) => setNameForm((current) => ({ ...current, lastName: event.target.value }))} />
+            <input className="h-12 w-full rounded-xl border-0 bg-surface px-4 outline-none focus:ring-0" value={nameForm.lastName} onChange={(event) => setNameForm((current) => ({ ...current, lastName: event.target.value }))} />
           </label>
         </div>
       </Modal>
@@ -390,7 +387,7 @@ export default function ProfilePage() {
       >
         <label className="block">
           <span className="mb-1 ml-1 block text-xs text-on-surface-variant">{editField?.label}</span>
-          <input className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-4 outline-none focus:border-on-tertiary-fixed-variant" value={editField?.value || ""} onChange={(event) => setEditField((current) => ({ ...current, value: event.target.value }))} />
+          <input className="h-12 w-full rounded-xl border-0 bg-surface px-4 outline-none focus:ring-0" value={editField?.value || ""} onChange={(event) => setEditField((current) => ({ ...current, value: event.target.value }))} />
         </label>
       </Modal>
       <Modal

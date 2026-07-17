@@ -5,7 +5,7 @@ const CATEGORY_RULES = [
   ['services', new Set(['bank', 'post_office', 'fuel', 'car_repair', 'beauty', 'hairdresser', 'laundry', 'dry_cleaning', 'travel_agency', 'lawyer'])],
   ['education', new Set(['school', 'college', 'university', 'kindergarten'])],
   ['government', new Set(['townhall', 'courthouse', 'police', 'fire_station', 'government', 'embassy'])],
-  ['culture', new Set(['theatre', 'cinema', 'museum', 'library', 'arts_centre', 'community_centre', 'monument'])],
+  ['culture', new Set(['theatre', 'cinema', 'museum', 'library', 'arts_centre', 'community_centre', 'gallery', 'attraction', 'zoo', 'viewpoint', 'monument', 'memorial', 'park', 'playground'])],
   ['transport', new Set(['bus_station', 'bus_stop', 'platform', 'station', 'stop_position', 'tram_stop', 'taxi'])],
 ];
 
@@ -14,7 +14,7 @@ function firstTag(tags, keys) {
 }
 
 function getSubtype(tags) {
-  return firstTag(tags, ['amenity', 'shop', 'tourism', 'public_transport', 'highway']) ?? 'place';
+  return firstTag(tags, ['amenity', 'shop', 'tourism', 'historic', 'leisure', 'public_transport', 'highway']) ?? 'place';
 }
 
 function getCategory(tags) {
@@ -23,9 +23,11 @@ function getCategory(tags) {
 }
 
 function formatAddress(tags) {
+  const full = firstTag(tags, ['addr:full']);
+  if (full) return full;
   const street = firstTag(tags, ['addr:street', 'addr:place']);
   const house = firstTag(tags, ['addr:housenumber']);
-  const locality = firstTag(tags, ['addr:suburb', 'addr:district']);
+  const locality = firstTag(tags, ['addr:suburb', 'addr:district', 'addr:city_district']);
   return [street && house ? `${street}, ${house}` : street || house, locality]
     .filter(Boolean)
     .join(', ') || null;
@@ -53,11 +55,13 @@ export function normalizeOsmElement(element) {
   const name = firstTag(tags, ['name', 'name:uk', 'name:ru', 'brand']);
   const coordinates = getCoordinates(element);
   if (!name || !coordinates) return null;
+  const category = getCategory(tags);
+  if (category === 'other') return null;
 
   return {
     sourceId: `osm:${element.type}:${element.id}`,
     name,
-    category: getCategory(tags),
+    category,
     subtype: getSubtype(tags),
     address: formatAddress(tags),
     ...coordinates,

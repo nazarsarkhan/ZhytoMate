@@ -7,12 +7,22 @@ export function buildPlacesQuery(bbox) {
   if (typeof bbox !== 'string' || !/^\d+(?:\.\d+)?,\d+(?:\.\d+)?,\d+(?:\.\d+)?,\d+(?:\.\d+)?$/.test(bbox)) {
     throw new Error('PLACES_BBOX must be south,west,north,east');
   }
-  // Restrict the catalog to named POI/transport tags. A blanket name query returns thousands of
-  // unrelated buildings/addresses, times out on public Overpass, and pollutes the `other` bucket.
-  const tagClauses = ['amenity', 'shop', 'tourism', 'public_transport', 'leisure']
-    .map((tag) => `nwr["name"]["${tag}"](${bbox});`)
-    .join('');
-  return `[out:json][timeout:90];(${tagClauses}nwr["name"]["highway"="bus_stop"](${bbox}););out center tags;`;
+  // Query only useful named POIs inside the Zhytomyr administrative area. A blanket name query
+  // returns villages, landmarks without practical details, unrelated buildings and technical
+  // objects from the surrounding oblast.
+  // 3602692156 is the Overpass area for the OSM relation of Zhytomyr city. Using the relation
+  // keeps nearby villages out even though the scheduler still accepts the legacy bbox setting.
+  const area = 'area(3602692156)->.zhytomyr;';
+  const tagClauses = [
+    'nwr["name"]["amenity"~"cafe|restaurant|fast_food|bar|pub|food_court|ice_cream|biergarten|pharmacy|clinic|hospital|dentist|doctors|veterinary|optician|bank|post_office|fuel|car_repair|beauty|hairdresser|laundry|dry_cleaning|travel_agency|lawyer|school|college|university|kindergarten|townhall|courthouse|police|fire_station|government|embassy|theatre|cinema|museum|library|arts_centre|community_centre"]',
+    'nwr["name"]["shop"~"supermarket|convenience|bakery|marketplace|mall|department_store|clothes|kiosk|beverages|drinks|general|water"]',
+    'nwr["name"]["tourism"~"museum|gallery|attraction|zoo|viewpoint"]',
+    'nwr["name"]["historic"~"monument|memorial"]',
+    'nwr["name"]["leisure"~"park|playground"]',
+    'nwr["name"]["public_transport"~"platform|station|stop_position|tram_stop|taxi"]',
+    'nwr["name"]["highway"="bus_stop"]',
+  ].map((clause) => `${clause}(area.zhytomyr);`).join('');
+  return `[out:json][timeout:90];${area}(${tagClauses});out center tags;`;
 }
 
 export async function fetchOsmPlaces({

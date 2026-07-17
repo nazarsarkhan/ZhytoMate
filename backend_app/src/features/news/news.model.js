@@ -45,6 +45,26 @@ newsSchema.index({ publishedAt: -1, createdAt: -1 });
 
 export const News = mongoose.model("News", newsSchema);
 
+export const NEWS_ADMIN_EDITABLE_FIELDS = [
+  "title",
+  "summary",
+  "body",
+  "bodyHtml",
+  "sourceUrl",
+  "coverImageUrl",
+  "images",
+  "category",
+  "district",
+  "importance",
+  "importanceLabel",
+  "isAnnouncement",
+  "eventDate",
+  "publishedAt",
+  "expiresAt",
+  "tags",
+  "lang",
+];
+
 export function toPublicNews(news) {
   return {
     id: news._id.toString(),

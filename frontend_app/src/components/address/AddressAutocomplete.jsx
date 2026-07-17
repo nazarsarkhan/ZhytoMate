@@ -83,7 +83,7 @@ export default function AddressAutocomplete({
       <label className="mb-1 ml-1 block text-xs text-on-surface-variant" htmlFor={id}>
         Адреса
       </label>
-      <div className="flex h-12 items-center gap-2 rounded-xl border border-outline-variant bg-surface px-3 focus-within:border-on-tertiary-fixed-variant focus-within:ring-2 focus-within:ring-on-tertiary-fixed-variant/20">
+      <div className="flex h-12 items-center gap-2 rounded-xl bg-surface px-3">
         <Icon name="location_on" className="shrink-0 text-lg text-outline" />
         <input
           id={id}

@@ -1,10 +1,22 @@
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { apiFetch, clearTokens, isLoggedIn, setTokens } from "../lib/apiClient.js";
+import { performLogout, subscribeToSessionInvalidation } from "../lib/authSession.js";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
+  const queryClient = useQueryClient();
   const [authenticated, setAuthenticated] = useState(isLoggedIn());
+
+  useEffect(
+    () =>
+      subscribeToSessionInvalidation(() => {
+        setAuthenticated(false);
+        queryClient.clear();
+      }),
+    [queryClient],
+  );
 
   const login = useCallback(async ({ login, password }) => {
     const result = await apiFetch("/auth/login", { method: "POST", body: { login, password } });
@@ -23,9 +35,8 @@ export function AuthProvider({ children }) {
     return result.user;
   }, []);
 
-  const logout = useCallback(() => {
-    clearTokens();
-    setAuthenticated(false);
+  const logout = useCallback(({ redirect = true } = {}) => {
+    performLogout({ clearSession: clearTokens, redirect });
   }, []);
 
   const value = useMemo(

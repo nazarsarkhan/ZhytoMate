@@ -8,18 +8,22 @@ import { useAuth } from "../../hooks/useAuth.jsx";
 import { AdminDataProvider, useAdminData } from "./AdminDataContext.jsx";
 
 const sections = [
-  { entity: "users", path: "users", label: "Юзери", singular: "юзера", icon: "group", searchable: ["firstName", "lastName", "username", "email", "phone", "role"] },
-  { entity: "surveys", path: "surveys", label: "Опитування", singular: "опитування", icon: "poll", searchable: ["title", "description", "category", "status"] },
-  { entity: "announcements", path: "announcements", label: "Анонси", singular: "анонс", icon: "campaign", searchable: ["title", "body", "audience", "priority", "status"] },
-  { entity: "news", path: "news", label: "Новини", singular: "новину", icon: "newspaper", searchable: ["title", "body", "source", "category", "status", "tags"] },
-  { entity: "appeals", path: "appeals", label: "Звернення", singular: "звернення", icon: "assignment", searchable: ["user", "category", "address", "description", "status"] },
-  { entity: "contacts", path: "contacts", label: "Контакти", singular: "контакт", icon: "contacts", searchable: ["name", "phone", "group", "kind"] },
-  { entity: "places", path: "places", label: "Місця", singular: "місце", icon: "place", searchable: ["name", "address", "phone", "category", "source"] },
+  { entity: "users", path: "users", label: "Юзери", singular: "юзера", icon: "group", searchable: ["firstName", "lastName", "username", "email", "phone", "role"], canCreate: false, canDelete: false },
+  { entity: "surveys", path: "surveys", label: "Опитування", singular: "опитування", icon: "poll", searchable: ["title", "description", "category", "status"], canCreate: true, canDelete: true },
+  { entity: "announcements", path: "announcements", label: "Анонси", singular: "анонс", icon: "campaign", searchable: ["title", "summary", "body", "category", "tags"], canCreate: false, canDelete: true },
+  { entity: "news", path: "news", label: "Новини", singular: "новину", icon: "newspaper", searchable: ["title", "summary", "body", "category", "tags"], canCreate: false, canDelete: true },
+  { entity: "appeals", path: "appeals", label: "Звернення", singular: "звернення", icon: "assignment", searchable: ["user", "category", "address", "description", "status"], canCreate: false, canDelete: false },
+  { entity: "contacts", path: "contacts", label: "Контакти", singular: "контакт", icon: "contacts", searchable: ["name", "phone", "group", "kind"], canCreate: true, canDelete: true },
+  { entity: "places", path: "places", label: "Місця", singular: "місце", icon: "place", searchable: ["name", "address", "phone", "category", "source"], canCreate: false, canDelete: true },
+  { entity: "settings", path: "settings", label: "Налаштування", singular: "налаштування", icon: "settings", searchable: ["title", "cityHotline"], canCreate: false, canDelete: false },
 ];
 
 const sectionByEntity = Object.fromEntries(sections.map((section) => [section.entity, section]));
+const dateFieldNames = new Set(["startsAt", "endsAt", "publishAt", "date", "createdAt", "publishedAt", "expiresAt", "eventDate"]);
+
 const statusTone = {
   active: "bg-green-100 text-green-700",
+  inactive: "bg-surface-container-high text-on-surface-variant",
   blocked: "bg-error-container text-error",
   draft: "bg-surface-container-high text-on-surface-variant",
   published: "bg-green-100 text-green-700",
@@ -39,6 +43,7 @@ const statusTone = {
 
 const statusLabel = {
   active: "Активне",
+  inactive: "Неактивне",
   blocked: "Заблокований",
   draft: "Чернетка",
   published: "Опубліковано",
@@ -65,7 +70,6 @@ const fieldsByEntity = {
     ["phone", "Телефон"],
     ["role", "Роль", "select", ["user", "admin"]],
     ["status", "Статус", "select", ["active", "blocked"]],
-    ["address", "Адреса"],
   ],
   surveys: [
     ["title", "Назва"],
@@ -77,25 +81,24 @@ const fieldsByEntity = {
   ],
   announcements: [
     ["title", "Назва"],
+    ["summary", "Короткий опис", "textarea"],
     ["body", "Текст", "textarea"],
-    ["audience", "Аудиторія"],
-    ["priority", "Пріоритет", "select", ["low", "medium", "high"]],
-    ["status", "Статус", "select", ["draft", "review", "published"]],
-    ["publishAt", "Дата публікації"],
-    ["author", "Автор"],
+    ["category", "Категорія"],
+    ["importance", "Пріоритет", "number"],
+    ["publishedAt", "Дата публікації"],
+    ["expiresAt", "Показувати до"],
+    ["tags", "Теги"],
   ],
   news: [
     ["title", "Назва"],
+    ["summary", "Короткий опис", "textarea"],
     ["body", "Текст", "textarea"],
-    ["source", "Джерело"],
     ["category", "Категорія"],
-    ["status", "Статус", "select", ["draft", "review", "published"]],
-    ["date", "Дата"],
+    ["importance", "Пріоритет", "number"],
+    ["publishedAt", "Дата публікації"],
+    ["expiresAt", "Показувати до"],
     ["tags", "Теги"],
   ],
-  // Appeals are filed by citizens - admins only set the status and write the reply, so the editor
-  // exposes just those two fields. The reporter/category/address/description show read-only on the
-  // detail page.
   appeals: [
     ["status", "Статус", "select", ["new", "in_progress", "resolved", "rejected"]],
     ["response", "Відповідь мешканцю", "textarea"],
@@ -106,6 +109,8 @@ const fieldsByEntity = {
     ["icon", "Іконка"],
     ["group", "Група"],
     ["kind", "Тип", "select", ["emergency", "utility"]],
+    ["order", "Порядок", "number"],
+    ["status", "Статус", "select", ["active", "inactive"]],
   ],
   places: [
     ["name", "Назва"],
@@ -114,9 +119,8 @@ const fieldsByEntity = {
     ["openingHours", "Години роботи"],
     ["category", "Категорія", "select", ["food", "shopping", "health", "services", "education", "government", "culture", "transport", "other"]],
   ],
+  settings: [["cityHotline", "Гаряча лінія міськради"]],
 };
-
-const dateFieldNames = new Set(["startsAt", "endsAt", "publishAt", "date", "createdAt"]);
 
 function toDateInputValue(value) {
   if (!value) return "";
@@ -133,15 +137,96 @@ function normalizeSurveyForForm(item) {
   };
 }
 
+function emptyItem(entity) {
+  const today = new Date().toISOString().slice(0, 10);
+  const defaults = {
+    users: { firstName: "", lastName: "", username: "", email: "", phone: "", role: "user", status: "active" },
+    surveys: {
+      title: "",
+      description: "",
+      category: "",
+      status: "draft",
+      startsAt: today,
+      endsAt: "",
+      totalVotes: 0,
+      options: [{ id: "opt-1", label: "Так", votes: 0, percent: 0 }, { id: "opt-2", label: "Ні", votes: 0, percent: 0 }],
+    },
+    announcements: { title: "", summary: "", body: "", category: "", importance: 3, publishedAt: today, expiresAt: "", tags: "" },
+    news: { title: "", summary: "", body: "", category: "", importance: 3, publishedAt: today, expiresAt: "", tags: "" },
+    appeals: { status: "new", response: "" },
+    contacts: { name: "", phone: "", icon: "call", group: "", kind: "utility", order: 0, status: "active" },
+    places: { name: "", address: "", phone: "", openingHours: "", category: "other" },
+    settings: { cityHotline: "" },
+  };
+  return defaults[entity];
+}
+
 function normalizeItemForForm(entity, item) {
-  const base = entity === "surveys" ? normalizeSurveyForForm(item) : item ? { ...item } : emptyItem(entity);
+  let base = entity === "surveys"
+    ? normalizeSurveyForForm(item || emptyItem(entity))
+    : item ? { ...item } : emptyItem(entity);
+  if (entity === "news" || entity === "announcements") {
+    base = {
+      ...base,
+      tags: Array.isArray(base.tags) ? base.tags.join(", ") : base.tags || "",
+      _originalPublishedAt: base.publishedAt,
+      _originalExpiresAt: base.expiresAt,
+    };
+  }
   return Object.fromEntries(
     Object.entries(base).map(([key, value]) => [key, dateFieldNames.has(key) ? toDateInputValue(value) : value]),
   );
 }
 
 function normalizeFormForSave(entity, form, options = {}) {
+  if (entity === "users") {
+    return {
+      username: form.username,
+      firstName: form.firstName,
+      lastName: form.lastName,
+      email: form.email,
+      phone: form.phone || "",
+      role: form.role,
+      isActive: form.status !== "blocked",
+    };
+  }
+
+  if (entity === "contacts") {
+    return {
+      name: form.name,
+      phone: form.phone,
+      icon: form.icon || "call",
+      group: form.group || "",
+      kind: form.kind || "utility",
+      order: Number(form.order || 0),
+      isActive: form.status !== "inactive",
+    };
+  }
+
+  if (entity === "news" || entity === "announcements") {
+    return {
+      title: form.title,
+      summary: form.summary || "",
+      body: form.body || "",
+      category: form.category || "",
+      importance: Number(form.importance || 3),
+      publishedAt: form.publishedAt || null,
+      expiresAt: form.expiresAt || null,
+      _originalPublishedAt: form._originalPublishedAt,
+      _originalExpiresAt: form._originalExpiresAt,
+      tags: String(form.tags || "")
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+    };
+  }
+
+  if (entity === "settings") {
+    return { cityHotline: form.cityHotline || "" };
+  }
+
   if (entity !== "surveys") return form;
+
   const surveyOptions = (form.options || [])
     .map((option, index) => ({
       id: option.id || `opt-${Date.now().toString(36)}-${index}`,
@@ -155,41 +240,19 @@ function normalizeFormForSave(entity, form, options = {}) {
   return { ...rest, totalVotes: Number(rest.totalVotes || 0), options: surveyOptions };
 }
 
-function emptyItem(entity) {
-  const today = new Date().toISOString().slice(0, 10);
-  const defaults = {
-    users: { firstName: "", lastName: "", username: "", email: "", phone: "", role: "user", status: "active", address: "", createdAt: today },
-    surveys: {
-      title: "",
-      description: "",
-      category: "",
-      status: "draft",
-      startsAt: today,
-      endsAt: "",
-      totalVotes: 0,
-      options: [{ id: "opt-1", label: "Так", votes: 0, percent: 0 }, { id: "opt-2", label: "Ні", votes: 0, percent: 0 }],
-    },
-    announcements: { title: "", body: "", audience: "Усі мешканці", priority: "medium", status: "draft", publishAt: today, author: "Адміністрація" },
-    news: { title: "", body: "", source: "Житомирська міська рада", category: "Офіційно", status: "draft", date: today, tags: "" },
-    appeals: { user: "", userId: "", category: "", address: "", description: "", status: "new", response: "", imageUrl: "", createdAt: today },
-    contacts: { name: "", phone: "", icon: "call", group: "", kind: "utility" },
-    places: { name: "", address: "", phone: "", openingHours: "", category: "other" },
-  };
-  return defaults[entity];
-}
-
 function Badge({ value }) {
   return <span className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-bold ${statusTone[value] || "bg-surface-container-high text-on-surface-variant"}`}>{statusLabel[value] || value}</span>;
 }
 
-function AdminSelectField({ value, options, onChange }) {
+function AdminSelectField({ ariaLabel, value, options, onChange }) {
   const [open, setOpen] = useState(false);
   const selectedLabel = statusLabel[value] || value || "Оберіть";
 
   return (
     <div className="relative">
       <button
-        className={`flex h-11 w-full items-center justify-between gap-3 rounded-xl border bg-surface px-3 text-left text-sm outline-none transition ${open ? "border-secondary-container ring-2 ring-secondary-container/30" : "border-outline-variant/50"}`}
+        aria-label={ariaLabel}
+        className="flex h-11 w-full items-center justify-between gap-3 rounded-xl bg-surface px-3 text-left text-sm outline-none transition"
         type="button"
         onClick={() => setOpen((current) => !current)}
       >
@@ -221,11 +284,12 @@ function AdminSelectField({ value, options, onChange }) {
   );
 }
 
-function AdminDateField({ value, onChange }) {
+function AdminDateField({ ariaLabel, value, onChange }) {
   return (
-    <label className="flex h-11 items-center gap-2 rounded-xl border border-outline-variant/50 bg-surface px-3 transition focus-within:border-secondary-container focus-within:ring-2 focus-within:ring-secondary-container/30">
+    <label className="flex h-11 items-center gap-2 rounded-xl bg-surface px-3 transition">
       <Icon name="calendar_today" className="text-lg text-on-surface-variant" />
       <input
+        aria-label={ariaLabel}
         className="min-w-0 flex-1 border-0 bg-transparent text-sm outline-none"
         type="date"
         value={toDateInputValue(value)}
@@ -250,7 +314,7 @@ function ConfirmModal({
       open={open}
       title={title}
       onClose={onCancel}
-      footer={
+      footer={(
         <div className="flex gap-3">
           <button className="h-12 flex-1 rounded-full border border-outline-variant text-sm font-bold text-on-surface" type="button" onClick={onCancel}>
             {cancelLabel}
@@ -259,7 +323,7 @@ function ConfirmModal({
             {confirmLabel}
           </button>
         </div>
-      }
+      )}
     >
       <p className="text-sm leading-6 text-on-surface-variant">{description}</p>
     </Modal>
@@ -288,7 +352,7 @@ function AdminActions({ onLogoutClick, onNavigate }) {
   return (
     <div className="space-y-1.5 border-t border-white/10 pt-4">
       <Link className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white" to="/assistant" onClick={onNavigate}>
-        <Icon name="arrow_back" className="text-[22px]" /> Вийти з адмінки
+        <Icon name="arrow_back" className="text-[22px]" /> До застосунку
       </Link>
       <Link className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white" to="/profile" onClick={onNavigate}>
         <Icon name="person" className="text-[22px]" /> Профіль
@@ -331,14 +395,12 @@ function AdminDrawer({ open, onClose, onLogoutClick }) {
 }
 
 function AdminShell({ children }) {
-  const navigate = useNavigate();
   const { logout } = useAuth();
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
   const confirmLogout = () => {
-    logout();
     setLogoutConfirmOpen(false);
-    navigate("/login", { replace: true });
+    logout();
   };
 
   return (
@@ -374,15 +436,13 @@ function AdminShell({ children }) {
 }
 
 function AdminHeader({ section, onCreate }) {
-  const navigate = useNavigate();
   const { logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
 
   const confirmLogout = () => {
-    logout();
     setLogoutConfirmOpen(false);
-    navigate("/login", { replace: true });
+    logout();
   };
 
   return (
@@ -398,7 +458,7 @@ function AdminHeader({ section, onCreate }) {
               <h1 className="truncate text-2xl font-bold text-on-surface">{section.label}</h1>
             </div>
           </div>
-          {!["users", "appeals", "places"].includes(section.entity) ? (
+          {section.canCreate ? (
             <button className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-secondary-container text-on-secondary-container active:scale-[0.98] sm:w-auto sm:px-4" type="button" aria-label={`Додати ${section.singular}`} onClick={onCreate}>
               <Icon name="add" className="text-lg" />
               <span className="hidden text-sm font-bold sm:inline">Додати</span>
@@ -419,12 +479,26 @@ function AdminHeader({ section, onCreate }) {
   );
 }
 
+function LoadingBlock({ children = "Завантаження..." }) {
+  return <p className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-6 text-center text-sm text-on-surface-variant shadow-soft">{children}</p>;
+}
+
+function ErrorBlock({ message, backTo }) {
+  return (
+    <div className="rounded-2xl border border-error-container bg-error-container/20 p-6 text-center shadow-soft">
+      <p className="text-sm font-bold text-error">{message}</p>
+      {backTo ? <Link className="mt-4 inline-flex rounded-full bg-secondary-container px-4 py-2 text-sm font-bold text-on-secondary-container" to={backTo}>Назад до списку</Link> : null}
+    </div>
+  );
+}
+
 function AdminEditorModal({ entity, item, open, onClose }) {
   const { createItem, updateItem } = useAdminData();
-  const [form, setForm] = useState(() => normalizeSurveyForForm(item) || emptyItem(entity));
+  const [form, setForm] = useState(() => normalizeItemForForm(entity, item));
   const [initialSnapshot, setInitialSnapshot] = useState("");
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
   const [formError, setFormError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -433,21 +507,30 @@ function AdminEditorModal({ entity, item, open, onClose }) {
       setInitialSnapshot(JSON.stringify(nextForm));
       setCloseConfirmOpen(false);
       setFormError("");
+      setSaving(false);
     }
   }, [entity, item, open]);
 
-  const fields = fieldsByEntity[entity];
+  const fields = fieldsByEntity[entity] || [];
   const section = sectionByEntity[entity];
 
-  const save = () => {
+  const save = async () => {
     const payload = normalizeFormForSave(entity, form, { requireValid: true });
     if (!payload) {
       setFormError("Додайте мінімум 2 заповнені варіанти відповіді.");
       return;
     }
-    if (item?.id) updateItem(entity, item.id, payload);
-    else createItem(entity, payload);
-    onClose();
+
+    try {
+      setSaving(true);
+      if (item?.id) await updateItem(entity, item.id, payload);
+      else await createItem(entity, payload);
+      onClose();
+    } catch (error) {
+      setFormError(error.message || "Не вдалося зберегти зміни.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const updateSurveyOption = (optionId, label) => {
@@ -483,11 +566,6 @@ function AdminEditorModal({ entity, item, open, onClose }) {
     onClose();
   };
 
-  const confirmClose = () => {
-    setCloseConfirmOpen(false);
-    onClose();
-  };
-
   return (
     <>
       <Modal
@@ -495,16 +573,16 @@ function AdminEditorModal({ entity, item, open, onClose }) {
         title={item?.id ? `Редагувати ${section.singular}` : `Додати ${section.singular}`}
         sheet
         onClose={requestClose}
-        footer={
+        footer={(
           <div className="flex gap-3">
             <button className="h-12 flex-1 rounded-full border border-outline-variant text-sm font-bold text-on-surface" type="button" onClick={requestClose}>
               Скасувати
             </button>
-            <button className="h-12 flex-1 rounded-full bg-secondary-container text-sm font-bold text-on-secondary-container" type="button" onClick={save}>
-              Зберегти
+            <button className="h-12 flex-1 rounded-full bg-secondary-container text-sm font-bold text-on-secondary-container disabled:opacity-60" type="button" disabled={saving} onClick={save}>
+              {saving ? "Збереження..." : "Зберегти"}
             </button>
           </div>
-        }
+        )}
       >
         <div className="space-y-3">
           {formError ? <p className="rounded-xl border border-error-container bg-error-container/30 p-3 text-sm font-bold text-error">{formError}</p> : null}
@@ -512,13 +590,13 @@ function AdminEditorModal({ entity, item, open, onClose }) {
             <label key={name} className="block">
               <span className="mb-1.5 block text-xs font-bold uppercase text-on-surface-variant">{label}</span>
               {type === "textarea" ? (
-                <textarea className="min-h-24 w-full rounded-xl border border-outline-variant/50 bg-surface px-3 py-2 text-sm outline-none focus:border-secondary-container" value={form[name] || ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
+                <textarea aria-label={label} className="min-h-24 w-full rounded-xl border-0 bg-surface px-3 py-2 text-sm outline-none focus:ring-0" value={form[name] || ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
               ) : type === "select" ? (
-                <AdminSelectField value={form[name] || options[0]} options={options} onChange={(nextValue) => setForm((current) => ({ ...current, [name]: nextValue }))} />
+                <AdminSelectField ariaLabel={label} value={form[name] || options[0]} options={options} onChange={(nextValue) => setForm((current) => ({ ...current, [name]: nextValue }))} />
               ) : dateFieldNames.has(name) ? (
-                <AdminDateField value={form[name] || ""} onChange={(nextValue) => setForm((current) => ({ ...current, [name]: nextValue }))} />
+                <AdminDateField ariaLabel={label} value={form[name] || ""} onChange={(nextValue) => setForm((current) => ({ ...current, [name]: nextValue }))} />
               ) : (
-                <input className="h-11 w-full rounded-xl border border-outline-variant/50 bg-surface px-3 text-sm outline-none focus:border-secondary-container" value={form[name] || ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
+                <input aria-label={label} className="h-11 w-full rounded-xl border-0 bg-surface px-3 text-sm outline-none focus:ring-0" type={type === "number" ? "number" : "text"} value={form[name] ?? ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
               )}
             </label>
           ))}
@@ -566,7 +644,7 @@ function AdminEditorModal({ entity, item, open, onClose }) {
         confirmLabel="Закрити"
         cancelLabel="Продовжити редагування"
         onCancel={() => setCloseConfirmOpen(false)}
-        onConfirm={confirmClose}
+        onConfirm={onClose}
       />
     </>
   );
@@ -576,31 +654,36 @@ function itemTitle(entity, item) {
   if (entity === "users") return `${item.firstName} ${item.lastName}`.trim() || item.username;
   if (entity === "appeals") return `${item.category}: ${item.address}`;
   if (entity === "contacts") return item.name;
+  if (entity === "settings") return item.title;
   return item.title;
 }
 
 function itemSubtitle(entity, item) {
   if (entity === "users") return item.email;
   if (entity === "surveys") return item.description;
-  if (entity === "announcements") return item.body;
-  if (entity === "news") return item.body;
+  if (entity === "announcements" || entity === "news") return item.summary || item.body;
   if (entity === "contacts") return [item.phone, item.group].filter(Boolean).join(" · ");
+  if (entity === "settings") return item.cityHotline || "Номер ще не вказано.";
   return item.description;
 }
 
 function filterValue(entity, item) {
   if (entity === "users") return item.role;
   if (entity === "contacts") return item.kind;
-  return item.status || item.priority;
+  if (entity === "announcements" || entity === "news") return item.importance >= 5 ? "high" : item.importance >= 4 ? "medium" : "low";
+  return item.status || item.priority || null;
 }
 
 function AdminListPage({ entity }) {
   const section = sectionByEntity[entity];
-  const { data, removeItem } = useAdminData();
+  const { data, meta, removeItem } = useAdminData();
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState([]);
   const [editorOpen, setEditorOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [actionError, setActionError] = useState("");
+
+  const state = meta[entity] || { isLoading: false, error: null };
   const items = Array.isArray(data[entity]) ? data[entity] : [];
 
   const filterItems = useMemo(() => {
@@ -617,57 +700,68 @@ function AdminListPage({ entity }) {
     });
   }, [entity, filters, items, query, section.searchable]);
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!pendingDelete) return;
-    removeItem(entity, pendingDelete.id);
-    setPendingDelete(null);
+    try {
+      await removeItem(entity, pendingDelete.id);
+      setPendingDelete(null);
+      setActionError("");
+    } catch (error) {
+      setActionError(error.message || "Не вдалося видалити запис.");
+      setPendingDelete(null);
+    }
   };
 
   return (
     <AdminShell>
       <AdminHeader section={section} onCreate={() => setEditorOpen(true)} />
       <main className="space-y-5 px-container-padding py-section-margin sm:px-6 md:px-8">
+        {actionError ? <ErrorBlock message={actionError} /> : null}
         <section className="grid gap-3 lg:grid-cols-[1fr_auto]">
           <SearchInput value={query} onChange={setQuery} placeholder={`Пошук: ${section.label.toLowerCase()}`} />
           <FilterChips items={filterItems} selectedValues={filters} onChange={setFilters} />
         </section>
-        <section className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-soft">
-          <div className="hidden grid-cols-[1.4fr_1fr_160px_120px] gap-4 border-b border-outline-variant/30 px-4 py-3 text-xs font-bold uppercase text-on-surface-variant md:grid">
-            <span>Назва</span>
-            <span>Деталі</span>
-            <span>Статус</span>
-            <span>Дії</span>
-          </div>
-          <div className="divide-y divide-outline-variant/20">
-            {filteredItems.map((item) => (
-              <article key={item.id} className="grid gap-3 p-4 md:grid-cols-[1.4fr_1fr_160px_120px] md:items-center">
-                <Link className="min-w-0" to={`/admin/${section.path}/${item.id}`}>
-                  <h2 className="truncate text-base font-bold text-on-surface">{itemTitle(entity, item)}</h2>
-                  <p className="mt-1 text-xs text-on-surface-variant">{item.id}</p>
-                </Link>
-                <p className="line-clamp-2 text-sm text-on-surface-variant">{itemSubtitle(entity, item)}</p>
-                <Badge value={filterValue(entity, item)} />
-                <div className="flex gap-2">
-                  <Link className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-container text-on-surface-variant" to={`/admin/${section.path}/${item.id}`} aria-label="Відкрити">
-                    <Icon name="visibility" className="text-lg" />
+        {state.error && !items.length ? <ErrorBlock message={state.error.message || "Не вдалося завантажити розділ."} /> : null}
+        {state.isLoading && !items.length ? <LoadingBlock /> : null}
+        {!state.error && !state.isLoading ? (
+          <section className="overflow-hidden rounded-2xl border border-outline-variant/30 bg-surface-container-lowest shadow-soft">
+            <div className="hidden grid-cols-[1.4fr_1fr_160px_120px] gap-4 border-b border-outline-variant/30 px-4 py-3 text-xs font-bold uppercase text-on-surface-variant md:grid">
+              <span>Назва</span>
+              <span>Деталі</span>
+              <span>Статус</span>
+              <span>Дії</span>
+            </div>
+            <div className="divide-y divide-outline-variant/20">
+              {filteredItems.map((item) => (
+                <article key={item.id} className="grid gap-3 p-4 md:grid-cols-[1.4fr_1fr_160px_120px] md:items-center">
+                  <Link className="min-w-0" to={`/admin/${section.path}/${item.id}`}>
+                    <h2 className="truncate text-base font-bold text-on-surface">{itemTitle(entity, item)}</h2>
+                    <p className="mt-1 text-xs text-on-surface-variant">{item.id}</p>
                   </Link>
-                  {entity !== "appeals" ? (
-                    <button className="flex h-9 w-9 items-center justify-center rounded-full bg-error-container text-error" type="button" aria-label="Видалити" onClick={() => setPendingDelete(item)}>
-                      <Icon name="delete" className="text-lg" />
-                    </button>
-                  ) : null}
-                </div>
-              </article>
-            ))}
-            {!filteredItems.length ? <p className="p-6 text-center text-sm text-on-surface-variant">Нічого не знайдено</p> : null}
-          </div>
-        </section>
+                  <p className="line-clamp-2 text-sm text-on-surface-variant">{itemSubtitle(entity, item)}</p>
+                  {filterValue(entity, item) ? <Badge value={filterValue(entity, item)} /> : <span className="text-sm text-on-surface-variant">—</span>}
+                  <div className="flex gap-2">
+                    <Link className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-container text-on-surface-variant" to={`/admin/${section.path}/${item.id}`} aria-label="Відкрити">
+                      <Icon name="visibility" className="text-lg" />
+                    </Link>
+                    {section.canDelete ? (
+                      <button className="flex h-9 w-9 items-center justify-center rounded-full bg-error-container text-error" type="button" aria-label="Видалити" onClick={() => setPendingDelete(item)}>
+                        <Icon name="delete" className="text-lg" />
+                      </button>
+                    ) : null}
+                  </div>
+                </article>
+              ))}
+              {!filteredItems.length ? <p className="p-6 text-center text-sm text-on-surface-variant">{query.trim() || filters.length ? "Нічого не знайдено" : "Записів ще немає."}</p> : null}
+            </div>
+          </section>
+        ) : null}
       </main>
       <AdminEditorModal entity={entity} open={editorOpen} onClose={() => setEditorOpen(false)} />
       <ConfirmModal
         open={Boolean(pendingDelete)}
         title="Видалити запис?"
-        description={pendingDelete ? `Запис "${itemTitle(entity, pendingDelete)}" буде видалено тільки з поточної сесії.` : ""}
+        description={pendingDelete ? `Запис "${itemTitle(entity, pendingDelete)}" буде видалено.` : ""}
         confirmLabel="Видалити"
         onCancel={() => setPendingDelete(null)}
         onConfirm={confirmDelete}
@@ -713,18 +807,51 @@ function AdminDetailPage({ entity }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const { logout } = useAuth();
-  const { data, removeItem } = useAdminData();
+  const { data, meta, removeItem } = useAdminData();
   const [editorOpen, setEditorOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [actionError, setActionError] = useState("");
+
+  const state = meta[entity] || { isLoading: false, error: null };
   const item = (Array.isArray(data[entity]) ? data[entity] : []).find((entry) => entry.id === id);
 
   const confirmLogout = () => {
-    logout();
     setLogoutConfirmOpen(false);
-    navigate("/login", { replace: true });
+    logout();
   };
+
+  const handleDelete = async () => {
+    try {
+      await removeItem(entity, id);
+      setDeleteConfirmOpen(false);
+      navigate(`/admin/${section.path}`, { replace: true });
+    } catch (error) {
+      setActionError(error.message || "Не вдалося видалити запис.");
+      setDeleteConfirmOpen(false);
+    }
+  };
+
+  if (state.error && !item) {
+    return (
+      <AdminShell>
+        <main className="px-container-padding py-section-margin sm:px-6 md:px-8">
+          <ErrorBlock message={state.error.message || "Не вдалося завантажити розділ."} backTo={`/admin/${section.path}`} />
+        </main>
+      </AdminShell>
+    );
+  }
+
+  if (state.isLoading && !item) {
+    return (
+      <AdminShell>
+        <main className="px-container-padding py-section-margin sm:px-6 md:px-8">
+          <LoadingBlock />
+        </main>
+      </AdminShell>
+    );
+  }
 
   if (!item) {
     return (
@@ -738,12 +865,6 @@ function AdminDetailPage({ entity }) {
       </AdminShell>
     );
   }
-
-  const handleDelete = () => {
-    removeItem(entity, item.id);
-    setDeleteConfirmOpen(false);
-    navigate(`/admin/${section.path}`, { replace: true });
-  };
 
   return (
     <AdminShell>
@@ -764,7 +885,7 @@ function AdminDetailPage({ entity }) {
             <button className="flex h-10 items-center gap-2 rounded-full bg-surface-container px-4 text-sm font-bold text-on-surface" type="button" onClick={() => setEditorOpen(true)}>
               <Icon name="edit" className="text-lg" /> {entity === "appeals" ? "Відповісти" : "Редагувати"}
             </button>
-            {entity !== "appeals" ? (
+            {section.canDelete ? (
               <button className="flex h-10 items-center gap-2 rounded-full bg-error-container px-4 text-sm font-bold text-error" type="button" onClick={() => setDeleteConfirmOpen(true)}>
                 <Icon name="delete" className="text-lg" /> Видалити
               </button>
@@ -774,8 +895,9 @@ function AdminDetailPage({ entity }) {
       </header>
       <main className="grid gap-5 px-container-padding py-section-margin sm:px-6 md:px-8 xl:grid-cols-[1fr_320px]">
         <section className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-soft">
+          {actionError ? <p className="mb-5 rounded-xl border border-error-container bg-error-container/20 p-3 text-sm font-bold text-error">{actionError}</p> : null}
           <div className="mb-5 flex flex-wrap items-center gap-2">
-            <Badge value={filterValue(entity, item)} />
+            {filterValue(entity, item) ? <Badge value={filterValue(entity, item)} /> : null}
             <span className="rounded-full bg-surface-container px-2.5 py-1 text-xs font-bold text-on-surface-variant">{item.id}</span>
           </div>
           <p className="whitespace-pre-line text-base leading-7 text-on-surface-variant">{itemSubtitle(entity, item)}</p>
@@ -788,7 +910,7 @@ function AdminDetailPage({ entity }) {
         </section>
         <aside className="space-y-3">
           {Object.entries(item)
-            .filter(([key]) => !["body", "description", "options", "imageUrl"].includes(key))
+            .filter(([key]) => !["body", "description", "options"].includes(key))
             .map(([key, value]) => (
               <DetailRow key={key} label={key}>
                 {Array.isArray(value) ? value.join(", ") : key === "status" || key === "role" || key === "priority" ? <Badge value={value} /> : String(value || "")}
@@ -801,7 +923,7 @@ function AdminDetailPage({ entity }) {
       <ConfirmModal
         open={deleteConfirmOpen}
         title="Видалити запис?"
-        description={`Запис "${itemTitle(entity, item)}" буде видалено тільки з поточної сесії.`}
+        description={`Запис "${itemTitle(entity, item)}" буде видалено.`}
         confirmLabel="Видалити"
         onCancel={() => setDeleteConfirmOpen(false)}
         onConfirm={handleDelete}

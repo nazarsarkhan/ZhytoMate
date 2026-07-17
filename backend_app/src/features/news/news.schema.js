@@ -32,7 +32,54 @@ export const newsIdParamsSchema = Joi.object({
   id: Joi.string().hex().length(24).required(),
 });
 
+export const newsListQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(20).default(20),
+  category: Joi.string().trim().max(64).optional(),
+  source: Joi.string().trim().max(256).optional(),
+  isAnnouncement: Joi.boolean().optional(),
+});
+
+export const adminNewsListQuerySchema = Joi.object({
+  category: Joi.string().trim().max(64).optional(),
+  source: Joi.string().trim().max(256).optional(),
+  isAnnouncement: Joi.boolean().optional(),
+});
+
+const adminEditableImageSchema = Joi.object({
+  url: Joi.string().trim().max(2048).uri().required(),
+  alt: Joi.string().trim().max(512).allow("").default(""),
+  caption: Joi.string().trim().max(1024).allow("").default(""),
+});
+
+export const updateNewsSchema = Joi.object({
+  title: Joi.string().trim().min(1).max(512),
+  summary: Joi.string().trim().max(2000).allow(""),
+  body: Joi.string().max(50000).allow(""),
+  bodyHtml: Joi.string().allow(null, ""),
+  sourceUrl: Joi.string().trim().max(2048).uri().allow(null, ""),
+  coverImageUrl: Joi.string().trim().max(2048).uri().allow(null, ""),
+  images: Joi.array().items(adminEditableImageSchema),
+  category: Joi.string().trim().max(64),
+  district: Joi.string().trim().max(64).allow(null, ""),
+  importance: Joi.number().integer().min(1).max(5),
+  importanceLabel: Joi.string().trim().max(32).allow(""),
+  isAnnouncement: Joi.boolean(),
+  eventDate: Joi.date().iso().allow(null),
+  publishedAt: Joi.date().iso(),
+  expiresAt: Joi.date().iso().allow(null),
+  tags: Joi.array().items(Joi.string().trim().max(64)),
+  lang: Joi.string().trim().max(16),
+  externalId: Joi.forbidden(),
+  source: Joi.forbidden(),
+  createdAt: Joi.forbidden(),
+  updatedAt: Joi.forbidden(),
+}).min(1);
+
 export default {
   ingestNewsSchema,
   newsIdParamsSchema,
+  newsListQuerySchema,
+  adminNewsListQuerySchema,
+  updateNewsSchema,
 };

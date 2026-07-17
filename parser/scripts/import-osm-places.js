@@ -24,6 +24,12 @@ export async function importPlaces({ bbox, fetchPlaces = fetchOsmPlaces, collect
     },
   }));
   await collection.bulkWrite(operations, { ordered: false });
+  // A successful scoped import is authoritative for the OSM catalog. Remove records from older
+  // broad-bbox imports, but keep manually curated/non-OSM places and preserve the catalog when
+  // the fetch itself returns no data or throws before this point.
+  if (typeof collection.deleteMany === 'function') {
+    await collection.deleteMany({ source: 'openstreetmap', sourceId: { $nin: places.map(({ sourceId }) => sourceId) } });
+  }
   return { imported: places.length };
 }
 

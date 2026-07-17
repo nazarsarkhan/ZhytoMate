@@ -38,14 +38,14 @@ export default function LoginPage() {
             <Icon name="location_city" filled className="text-[28px]" />
           </span>
           <h1 className="text-xl font-bold text-on-surface">Увійти</h1>
-          <p className="mt-1 text-sm text-on-surface-variant">Zhytomyr Assistant</p>
+          <p className="mt-1 text-sm text-on-surface-variant">ZhytoMate</p>
         </div>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <label className="block">
             <span className="mb-1.5 ml-1 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">Email або логін</span>
             <input
               autoComplete="username"
-              className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-4 text-sm outline-none focus:border-secondary-container"
+              className="h-12 w-full rounded-xl border-0 bg-surface px-4 text-sm outline-none focus:ring-0"
               placeholder="you@example.com"
               type="text"
               value={login_}
@@ -56,7 +56,7 @@ export default function LoginPage() {
             <span className="mb-1.5 ml-1 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">Пароль</span>
             <input
               autoComplete="current-password"
-              className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-4 text-sm outline-none focus:border-secondary-container"
+              className="h-12 w-full rounded-xl border-0 bg-surface px-4 text-sm outline-none focus:ring-0"
               placeholder="••••••••"
               type="password"
               value={password}

@@ -1,3 +1,5 @@
+import { getSessionGeneration, performLogout } from "./authSession.js";
+
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
 const ACCESS_TOKEN_KEY = "zhytomate.accessToken";
 const REFRESH_TOKEN_KEY = "zhytomate.refreshToken";
@@ -50,6 +52,7 @@ let pendingRefresh = null;
 function refreshAccessToken() {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return Promise.resolve(false);
+  const refreshGeneration = getSessionGeneration();
 
   if (!pendingRefresh) {
     pendingRefresh = fetch(`${API_BASE}/auth/refresh`, {
@@ -58,8 +61,9 @@ function refreshAccessToken() {
       body: JSON.stringify({ refreshToken }),
     })
       .then(async (response) => {
-        if (!response.ok) return false;
+        if (!response.ok || refreshGeneration !== getSessionGeneration()) return false;
         const body = await response.json();
+        if (refreshGeneration !== getSessionGeneration()) return false;
         setTokens({ accessToken: body.accessToken });
         return true;
       })
@@ -72,10 +76,7 @@ function refreshAccessToken() {
 }
 
 function forceLogout() {
-  clearTokens();
-  if (window.location.pathname !== "/login") {
-    window.location.assign("/login");
-  }
+  performLogout({ clearSession: clearTokens });
 }
 
 export async function apiFetch(path, { method = "GET", body, signal, isRetry = false } = {}) {
