@@ -1,6 +1,6 @@
 """
 Purpose:   News-retention policy (§2.5): which news categories are "evergreen" — a permanent civic
-           record that must never expire or be reaped, treated exactly like an instruction
+           record that must never expire or be reaped, treated exactly like a document
            (expires_at = NULL). Single source of truth for the ingest expiry decision, kept in the
            pure domain so the service never hard-codes category strings.
 Layer:     domain

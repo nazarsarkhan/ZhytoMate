@@ -10,6 +10,7 @@ import SearchInput from "../../components/ui/SearchInput.jsx";
 import { newsCategory } from "../../consts/newsCategories.js";
 import { useNews } from "../../hooks/useNews.js";
 import { formatDate } from "../../lib/formatDate.js";
+import { getNewsCoverImage } from "../../lib/newsImages.js";
 
 const SUMMARY_MAX_LENGTH = 100;
 
@@ -67,12 +68,17 @@ export default function NewsPage() {
         {filteredNews.map((item) => {
           const meta = newsCategory(item.category);
           const summary = getSummaryPreview(item.summary);
+          const image = getNewsCoverImage(item);
           return (
-            <Link key={item.id} to={`/news/${item.id}`} className="motion-card interactive-card flex h-full gap-4 rounded-xl border border-surface-variant bg-surface p-4 text-left shadow-soft transition active:scale-[0.98]">
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary-fixed text-primary-container">
-                <Icon name={meta.icon} filled />
-              </span>
-              <span className="min-w-0 flex-1">
+            <Link key={item.id} to={`/news/${item.id}`} className="motion-card interactive-card flex h-full gap-4 overflow-hidden rounded-xl border border-surface-variant bg-surface p-4 text-left shadow-soft transition active:scale-[0.98]">
+              {image ? (
+                <img className="h-28 w-28 shrink-0 rounded-lg object-cover md:h-32 md:w-32" src={image.url} alt={image.alt} loading="lazy" />
+              ) : (
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary-fixed text-primary-container">
+                  <Icon name={meta.icon} filled />
+                </span>
+              )}
+              <span className="min-w-0 flex-1 py-0.5">
                 <span className="mb-2 flex items-center justify-between gap-2 text-xs text-on-surface-variant">
                   <span className="truncate">{item.source}</span>
                   <span className="shrink-0">{formatDate(item.publishedAt)}</span>

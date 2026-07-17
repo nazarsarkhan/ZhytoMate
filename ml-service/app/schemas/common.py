@@ -17,6 +17,8 @@ class DocType(StrEnum):
     """Knowledge-base document kind. Mirrors the `doc_type` CHECK constraint in 0001_init.sql."""
 
     NEWS = "news"
+    DOCUMENT = "document"
+    # Kept for already-ingested rows and older clients; new collector output uses DOCUMENT.
     INSTRUCTION = "instruction"
 
 

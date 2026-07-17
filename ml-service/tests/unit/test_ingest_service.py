@@ -36,7 +36,7 @@ def _request(**overrides: object) -> IngestRequest:
     defaults: dict[str, object] = {
         "document_id": "doc-1",
         "text": "Сміття вивозять щовівторка.",
-        "doc_type": DocType.INSTRUCTION,
+        "doc_type": DocType.DOCUMENT,
         "source": "src",
     }
     defaults.update(overrides)

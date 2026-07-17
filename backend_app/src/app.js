@@ -18,6 +18,7 @@ import outageRoutes from "./features/outage/outage.routes.js";
 import surveyRoutes from "./features/survey/survey.routes.js";
 import userRoutes from "./features/user/user.routes.js";
 import placesRoutes from "./features/places/places.routes.js";
+import notificationRoutes from "./features/notification/notification.routes.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 const FRONTEND_DIST_DIR = path.join(__dirname, "../../frontend_app/dist");
@@ -36,6 +37,7 @@ const API_PREFIXES = [
   "/docs",
   "/openapi.json",
   "/places",
+  "/notifications",
 ];
 
 function isDevCorsOriginAllowed(origin) {
@@ -113,6 +115,7 @@ export function createApp() {
   app.use("/assistant", assistantRoutes);
   app.use("/conversations", conversationRoutes);
   app.use("/places", placesRoutes);
+  app.use("/notifications", notificationRoutes);
   app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
   app.get("/openapi.json", (_req, res) => res.json(openApiSpec));
 

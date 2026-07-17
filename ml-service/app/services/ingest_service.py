@@ -114,7 +114,7 @@ class IngestService:
 
     @staticmethod
     def _expires_at(request: IngestRequest) -> datetime | None:
-        """time-bound news -> published_at (or ingest time when absent) + ttl_days; instructions
+        """time-bound news -> published_at (or ingest time when absent) + ttl_days; documents
         and evergreen-category news (e.g. memorials) -> never expire, i.e. NULL (§2.5). Anchoring
         to publication time rather than now() keeps expiry deterministic across re-ingests/retries
         and correct for backfilled items. ttl_days presence is guaranteed for news by the schema

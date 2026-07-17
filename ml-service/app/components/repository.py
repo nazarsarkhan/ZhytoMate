@@ -54,12 +54,12 @@ class ChunkRecord:
     chunk_index: int
     text: str
     embedding: np.ndarray            # shape (1536,), normalized
-    doc_type: str                    # 'news' | 'instruction'
+    doc_type: str                    # 'news' | 'document' | legacy 'instruction'
     category: str | None
     district: str | None             # canonical slug or None (city-wide)
     source: str
     content_hash: str                # sha256 hex, 64 chars
-    expires_at: datetime | None      # None for instruction
+    expires_at: datetime | None      # None for document/instruction
 
 
 _INSERT_SQL = """

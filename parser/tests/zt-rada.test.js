@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { shouldKeepItem } from '../plugins/web/zt-rada.js';
+import {
+  isNewsArticleUrl,
+  isNewsSectionUrl,
+  shouldKeepItem,
+} from '../plugins/web/zt-rada.js';
 
 test('keeps evergreen zt-rada sections outside the news backfill window', () => {
   assert.equal(
@@ -14,4 +18,21 @@ test('keeps evergreen zt-rada sections outside the news backfill window', () => 
     ),
     true,
   );
+});
+
+test('recognizes only the official zt-rada news section and its articles', () => {
+  assert.equal(isNewsSectionUrl('https://zt-rada.gov.ua/press-center/news'), true);
+  assert.equal(isNewsSectionUrl('https://zt-rada.gov.ua/press-center/news?p=2'), true);
+  assert.equal(
+    isNewsArticleUrl('https://zt-rada.gov.ua/press-center/news/some-article'),
+    true,
+  );
+  assert.equal(isNewsArticleUrl('https://zt-rada.gov.ua/documents/123'), false);
+  assert.equal(isNewsArticleUrl('https://zt-rada.gov.ua/press-center/announce'), false);
+});
+
+test('recognizes an article URL discovered from the news index', () => {
+  const discoveredUrl = 'https://zt-rada.gov.ua/some-news-route?id=42';
+
+  assert.equal(isNewsArticleUrl(discoveredUrl, new Set([discoveredUrl])), true);
 });

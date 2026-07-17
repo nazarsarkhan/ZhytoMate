@@ -21,7 +21,7 @@ services:
       timeout: 3s
       retries: 10
     ports:
-      - "5432:5432"   # expose for local psql / calibration script
+      - "${POSTGRES_HOST_PORT:-5433}:5432"   # expose for local psql / calibration script
 
   ml:
     build:

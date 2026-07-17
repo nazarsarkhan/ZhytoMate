@@ -4,9 +4,28 @@ import { buildCollectorOutputs } from '../core/ai/ai-layer.js';
 import { normalizeItem } from '../core/pipeline/normalizer.js';
 import { toIngestRequest } from '../core/ingest/ingest-mapper.js';
 import { toNewsItem } from '../core/news/news-mapper.js';
-import { extractWebContent } from '../plugins/web/zt-rada.js';
+import { shouldSendToNews } from '../core/delivery/routes.js';
+import { extractWebContent, IMPORTANT_PAGE_SEEDS } from '../plugins/web/zt-rada.js';
 
 const plugin = { id: 'zt-rada' };
+
+test('zt-rada keeps the curated document and reference seed pages', () => {
+  assert.deepEqual(
+    IMPORTANT_PAGE_SEEDS.slice(0, 8),
+    [
+      '/documents',
+      '/perelikdiychuhprogram',
+      '/Strategic_sectoral',
+      '/MonitoringOfAir',
+      '/mistobuddoc',
+      '/?items=42',
+      '/?items=67',
+      '/?items=73',
+    ],
+  );
+  assert.equal(IMPORTANT_PAGE_SEEDS.includes('/miscevybudjet'), true);
+  assert.equal(IMPORTANT_PAGE_SEEDS.includes('/transportzt'), true);
+});
 
 test('normalizer preserves zt-rada metadata fields', () => {
   const item = normalizeItem(
@@ -16,7 +35,7 @@ test('normalizer preserves zt-rada metadata fields', () => {
       body: 'Useful city council document text for indexing.',
       publishedAt: '2026-01-15T00:00:00.000Z',
       category: 'politics',
-      docType: 'instruction',
+      docType: 'document',
       sourceKind: 'document-index',
       bodyHtml: '<p>Useful city council document text for indexing.</p>',
       coverImageUrl: 'https://zt-rada.gov.ua/uploads/cover.jpg',
@@ -34,7 +53,7 @@ test('normalizer preserves zt-rada metadata fields', () => {
   );
 
   assert.equal(item.category, 'politics');
-  assert.equal(item.docType, 'instruction');
+  assert.equal(item.docType, 'document');
   assert.equal(item.sourceKind, 'document-index');
   assert.equal(item.bodyHtml, '<p>Useful city council document text for indexing.</p>');
   assert.equal(item.coverImageUrl, 'https://zt-rada.gov.ua/uploads/cover.jpg');
@@ -48,7 +67,7 @@ test('normalizer preserves zt-rada metadata fields', () => {
   assert.deepEqual(item.attachments, [{ url: 'https://zt-rada.gov.ua/files/example.pdf', ok: true }]);
 });
 
-test('ingest mapper uses explicit zt-rada instruction doc type', () => {
+test('ingest mapper uses explicit zt-rada document doc type', () => {
   const item = normalizeItem(
     {
       url: 'https://zt-rada.gov.ua/documents',
@@ -56,7 +75,7 @@ test('ingest mapper uses explicit zt-rada instruction doc type', () => {
       body: 'Useful city council document text for indexing.',
       publishedAt: '2026-01-15T00:00:00.000Z',
       category: 'politics',
-      docType: 'instruction',
+      docType: 'document',
       sourceKind: 'document-index',
     },
     plugin,
@@ -66,8 +85,24 @@ test('ingest mapper uses explicit zt-rada instruction doc type', () => {
   const output = toIngestRequest(item);
 
   assert.equal(output.skipped, false);
-  assert.equal(output.request.doc_type, 'instruction');
+  assert.equal(output.request.doc_type, 'document');
   assert.equal(output.request.category, 'politics');
+});
+
+test('ingest mapper defaults zt-rada reference pages to document', () => {
+  const output = toIngestRequest(normalizeItem(
+    {
+      url: 'https://zt-rada.gov.ua/miscevybudjet',
+      title: 'Місцевий бюджет',
+      body: 'Офіційна довідкова інформація про місцевий бюджет Житомирської громади.',
+      publishedAt: '2026-01-15T00:00:00.000Z',
+      sourceKind: 'page',
+    },
+    plugin,
+    'web',
+  ));
+
+  assert.equal(output.request.doc_type, 'document');
 });
 
 test('news mapper forwards display html and images without changing RAG text', () => {
@@ -138,14 +173,14 @@ test('zt-rada extractor chooses article content and sanitizes html/images', () =
   ]);
 });
 
-test('ingest mapper treats zt-rada calendar items as news', () => {
+test('ingest mapper keeps zt-rada calendar items in RAG-only document flow', () => {
   const item = normalizeItem(
     {
       url: 'https://zt-rada.gov.ua/var-calendar/get-events#2026-01-15',
       title: 'Calendar event',
       body: 'Public city announcement text relevant to Zhytomyr residents.',
       publishedAt: '2026-01-15T00:00:00.000Z',
-      docType: 'news',
+      docType: 'document',
       sourceKind: 'calendar',
     },
     plugin,
@@ -155,7 +190,31 @@ test('ingest mapper treats zt-rada calendar items as news', () => {
   const output = toIngestRequest(item);
 
   assert.equal(output.skipped, false);
-  assert.equal(output.request.doc_type, 'news');
+  assert.equal(output.request.doc_type, 'document');
+});
+
+test('zt-rada news routing sends only official news articles to the news output', () => {
+  assert.equal(
+    shouldSendToNews(
+      { source: 'zt-rada', sourceKind: 'news' },
+      { doc_type: 'news' },
+    ),
+    true,
+  );
+  assert.equal(
+    shouldSendToNews(
+      { source: 'zt-rada', sourceKind: 'document' },
+      { doc_type: 'document' },
+    ),
+    false,
+  );
+  assert.equal(
+    shouldSendToNews(
+      { source: 'zt-rada', sourceKind: 'calendar' },
+      { doc_type: 'news' },
+    ),
+    false,
+  );
 });
 
 test('collector skips AI for zt-rada when source config disables it', async () => {

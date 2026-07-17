@@ -242,7 +242,7 @@ function capIngestText(text, item) {
 }
 
 function inferDocType(item) {
-  if (item.docType === 'news' || item.docType === 'instruction') {
+  if (item.docType === 'news' || item.docType === 'document' || item.docType === 'instruction') {
     return item.docType;
   }
 
@@ -255,14 +255,14 @@ function inferDocType(item) {
   }
 
   if (item.source?.includes('zt-rada') || item.url?.includes('zt-rada.gov.ua')) {
-    if (item.sourceKind === 'calendar' || item.sourceKind === 'post') {
+    if (item.sourceKind === 'news') {
       return 'news';
     }
 
-    return 'instruction';
+    return 'document';
   }
 
-  return 'news';
+  return 'document';
 }
 
 function inferCategory(text, item) {
