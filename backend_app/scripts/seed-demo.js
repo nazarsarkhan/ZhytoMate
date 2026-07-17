@@ -200,10 +200,6 @@ export async function seedContacts() {
   for (const [index, contact] of demoContacts.entries()) {
     const existing = await Contact.findOne({ name: contact.name });
     if (existing) {
-      Object.assign(existing, { ...contact, order: index, isActive: true });
-      if (typeof existing.save === "function") {
-        await existing.save();
-      }
       continue;
     }
 
@@ -215,20 +211,19 @@ export async function seedContacts() {
 }
 
 export async function seedPublicSettings() {
+  let created = 0;
+
   for (const [key, value] of Object.entries(demoPublicSettings)) {
-    await Setting.findOneAndUpdate(
-      { key },
-      { $set: { key, value } },
-      {
-        new: true,
-        upsert: true,
-        runValidators: true,
-        setDefaultsOnInsert: true,
-      },
-    );
+    const existing = await Setting.findOne({ key });
+    if (existing) {
+      continue;
+    }
+
+    await Setting.create({ key, value });
+    created += 1;
   }
 
-  return Object.keys(demoPublicSettings).length;
+  return created;
 }
 
 export async function main() {

@@ -346,6 +346,20 @@ test("settings routes expose public cityHotline data and keep admin access restr
         },
       });
 
+      const clearResponse = await fetch(`${baseUrl}/settings/admin`, {
+        method: "PATCH",
+        headers: adminHeaders,
+        body: JSON.stringify({
+          cityHotline: "",
+        }),
+      });
+      assert.equal(clearResponse.status, 200);
+      assert.deepEqual(await clearResponse.json(), {
+        settings: {
+          cityHotline: "",
+        },
+      });
+
       const invalidPatchResponse = await fetch(`${baseUrl}/settings/admin`, {
         method: "PATCH",
         headers: adminHeaders,
@@ -368,9 +382,31 @@ test("seed demo upserts contacts and public settings idempotently", async () => 
 
   const { default: Setting } = await import("../src/features/setting/setting.model.js");
   const seedModule = await import("../scripts/seed-demo.js");
-  const { records: contacts, restore: restoreContacts } = installContactModelStub([]);
-  const settingsStore = new Map();
+  const { records: contacts, restore: restoreContacts } = installContactModelStub([
+    {
+      name: "Поліція",
+      phone: "102-custom",
+      icon: "shield",
+      kind: "emergency",
+      group: "",
+      order: 99,
+      isActive: false,
+    },
+    {
+      name: "Водоканал",
+      phone: "0412 custom",
+      icon: "water_drop",
+      kind: "utility",
+      group: "Комунальні служби",
+      order: 77,
+      isActive: false,
+    },
+  ]);
+  const settingsStore = new Map([["cityHotline", { key: "cityHotline", value: "15-99" }]]);
   const restoreSettings = patchModel(Setting, {
+    async findOne(filter) {
+      return settingsStore.get(filter.key) || null;
+    },
     async findOneAndUpdate(filter, update) {
       const current = settingsStore.get(filter.key) || { key: filter.key, value: "" };
       const next = {
@@ -386,25 +422,52 @@ test("seed demo upserts contacts and public settings idempotently", async () => 
     const firstCreatedContacts = await seedModule.seedContacts();
     const secondCreatedContacts = await seedModule.seedContacts();
 
-    assert.equal(firstCreatedContacts, 10);
+    assert.equal(firstCreatedContacts, 8);
     assert.equal(secondCreatedContacts, 0);
+    assert.deepEqual(
+      contacts
+        .filter((contact) => ["Поліція", "Водоканал"].includes(contact.name))
+        .map((contact) => ({
+          name: contact.name,
+          phone: contact.phone,
+          order: contact.order,
+          isActive: contact.isActive,
+        }))
+        .sort((left, right) => left.name.localeCompare(right.name)),
+      [
+        {
+          name: "Водоканал",
+          phone: "0412 custom",
+          order: 77,
+          isActive: false,
+        },
+        {
+          name: "Поліція",
+          phone: "102-custom",
+          order: 99,
+          isActive: false,
+        },
+      ],
+    );
     assert.deepEqual(
       contacts
         .filter((contact) => contact.kind === "utility" && contact.group === "Комунальні служби")
         .map((contact) => ({ name: contact.name, order: contact.order })),
       [
-        { name: "Водоканал", order: 4 },
+        { name: "Водоканал", order: 77 },
         { name: "Обленерго", order: 5 },
         { name: "Теплокомуненерго", order: 6 },
         { name: "Ліфтсервіс", order: 7 },
       ],
     );
 
-    await seedModule.seedPublicSettings();
-    await seedModule.seedPublicSettings();
+    const firstEnsuredSettings = await seedModule.seedPublicSettings();
+    const secondEnsuredSettings = await seedModule.seedPublicSettings();
+    assert.equal(firstEnsuredSettings, 0);
+    assert.equal(secondEnsuredSettings, 0);
     assert.deepEqual(settingsStore.get("cityHotline"), {
       key: "cityHotline",
-      value: "15-80",
+      value: "15-99",
     });
   } finally {
     restoreSettings();

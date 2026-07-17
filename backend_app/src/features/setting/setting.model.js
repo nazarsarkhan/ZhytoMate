@@ -17,9 +17,12 @@ const settingSchema = new mongoose.Schema(
     },
     value: {
       type: String,
-      required: true,
       trim: true,
       default: "",
+      validate: {
+        validator: (value) => typeof value === "string" && value.length <= 64,
+        message: "Setting value must be 64 characters or fewer",
+      },
     },
   },
   { timestamps: true },
