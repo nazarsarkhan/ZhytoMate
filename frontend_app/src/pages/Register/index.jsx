@@ -60,7 +60,7 @@ export default function RegisterPage() {
             <Icon name="person_add" filled className="text-[28px]" />
           </span>
           <h1 className="text-xl font-bold text-on-surface">Створити акаунт</h1>
-          <p className="mt-1 text-sm text-on-surface-variant">Zhytomyr Assistant</p>
+          <p className="mt-1 text-sm text-on-surface-variant">ZhytoMate</p>
         </div>
         <form className="space-y-4" onSubmit={handleSubmit}>
           {fields.map((field) => (
@@ -68,7 +68,7 @@ export default function RegisterPage() {
               <span className="mb-1.5 ml-1 block text-xs font-bold uppercase tracking-wider text-on-surface-variant">{field.label}</span>
               <input
                 autoComplete={field.autoComplete}
-                className="h-12 w-full rounded-xl border border-outline-variant bg-surface px-4 text-sm outline-none focus:border-secondary-container"
+                className="h-12 w-full rounded-xl border-0 bg-surface px-4 text-sm outline-none focus:ring-0"
                 type={field.type}
                 value={form[field.key]}
                 onChange={updateField(field.key)}

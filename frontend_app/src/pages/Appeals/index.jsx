@@ -27,7 +27,7 @@ export default function AppealsPage() {
     <Shell className="bg-background pb-28">
       <header className="sticky top-0 z-40 flex items-center justify-between bg-primary-container px-container-padding pb-4 pt-[calc(16px+var(--safe-top))] text-on-primary shadow-sm sm:px-6 md:px-8">
         <Icon name="account_balance" className="text-primary-fixed-dim" />
-        <h1 className="text-lg font-bold md:text-2xl">Zhytomyr Assistant</h1>
+        <h1 className="text-lg font-bold md:text-2xl">ZhytoMate</h1>
         <Icon name="notifications" className="text-primary-fixed-dim" />
       </header>
       <main className="mx-auto w-full max-w-5xl">

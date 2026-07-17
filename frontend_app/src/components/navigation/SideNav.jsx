@@ -17,7 +17,7 @@ export default function SideNav() {
           <Icon name="location_city" filled className="text-[24px]" />
         </span>
         <span className="min-w-0">
-          <span className="block text-sm font-bold leading-tight">Zhytomyr Assistant</span>
+          <span className="block text-sm font-bold leading-tight">ZhytoMate</span>
           <span className="block truncate text-xs text-white/50">Портал міських сервісів</span>
         </span>
       </div>

@@ -189,7 +189,7 @@ function AdminSelectField({ value, options, onChange }) {
   return (
     <div className="relative">
       <button
-        className={`flex h-11 w-full items-center justify-between gap-3 rounded-xl border bg-surface px-3 text-left text-sm outline-none transition ${open ? "border-secondary-container ring-2 ring-secondary-container/30" : "border-outline-variant/50"}`}
+        className="flex h-11 w-full items-center justify-between gap-3 rounded-xl bg-surface px-3 text-left text-sm outline-none transition"
         type="button"
         onClick={() => setOpen((current) => !current)}
       >
@@ -223,7 +223,7 @@ function AdminSelectField({ value, options, onChange }) {
 
 function AdminDateField({ value, onChange }) {
   return (
-    <label className="flex h-11 items-center gap-2 rounded-xl border border-outline-variant/50 bg-surface px-3 transition focus-within:border-secondary-container focus-within:ring-2 focus-within:ring-secondary-container/30">
+    <label className="flex h-11 items-center gap-2 rounded-xl bg-surface px-3 transition">
       <Icon name="calendar_today" className="text-lg text-on-surface-variant" />
       <input
         className="min-w-0 flex-1 border-0 bg-transparent text-sm outline-none"
@@ -512,13 +512,13 @@ function AdminEditorModal({ entity, item, open, onClose }) {
             <label key={name} className="block">
               <span className="mb-1.5 block text-xs font-bold uppercase text-on-surface-variant">{label}</span>
               {type === "textarea" ? (
-                <textarea className="min-h-24 w-full rounded-xl border border-outline-variant/50 bg-surface px-3 py-2 text-sm outline-none focus:border-secondary-container" value={form[name] || ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
+                <textarea className="min-h-24 w-full rounded-xl border-0 bg-surface px-3 py-2 text-sm outline-none focus:ring-0" value={form[name] || ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
               ) : type === "select" ? (
                 <AdminSelectField value={form[name] || options[0]} options={options} onChange={(nextValue) => setForm((current) => ({ ...current, [name]: nextValue }))} />
               ) : dateFieldNames.has(name) ? (
                 <AdminDateField value={form[name] || ""} onChange={(nextValue) => setForm((current) => ({ ...current, [name]: nextValue }))} />
               ) : (
-                <input className="h-11 w-full rounded-xl border border-outline-variant/50 bg-surface px-3 text-sm outline-none focus:border-secondary-container" value={form[name] || ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
+                <input className="h-11 w-full rounded-xl border-0 bg-surface px-3 text-sm outline-none focus:ring-0" value={form[name] || ""} onChange={(event) => setForm((current) => ({ ...current, [name]: event.target.value }))} />
               )}
             </label>
           ))}

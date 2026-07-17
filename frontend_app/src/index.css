@@ -12,6 +12,19 @@
   border-radius: 4px;
 }
 
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 html {
   background:
     radial-gradient(circle at top left, rgba(254, 183, 33, 0.18), transparent 30rem),

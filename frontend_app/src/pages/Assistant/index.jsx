@@ -108,7 +108,7 @@ export default function AssistantPage() {
   return (
     <Shell className="bg-background pb-28">
       <AppHeader
-        eyebrow="Zhytomyr Assistant"
+        eyebrow="ZhytoMate"
         profile={
           currentUser.data
             ? {
@@ -215,7 +215,7 @@ export default function AssistantPage() {
             ))}
           </div>
           {listening ? <p className="mb-2 text-xs font-bold text-on-tertiary-fixed-variant">Слухаю запит...</p> : null}
-          <div className="mb-4 flex h-14 items-center rounded-2xl border border-outline-variant/50 bg-surface shadow-sm focus-within:border-primary-container">
+          <div className="mb-4 flex h-14 items-center rounded-2xl bg-surface shadow-sm">
             <input
               className="h-full min-w-0 flex-1 border-0 bg-transparent px-4 text-sm outline-none placeholder:text-outline disabled:cursor-not-allowed"
               disabled={isBusy}

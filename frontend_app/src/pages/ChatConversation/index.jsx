@@ -162,7 +162,7 @@ export default function ChatConversationPage() {
       </main>
       <div className="fixed inset-x-0 bottom-[calc(72px+var(--safe-bottom))] z-40 mx-auto w-full max-w-[1180px] border-t border-outline-variant/20 bg-surface/95 px-container-padding py-3 backdrop-blur-md sm:px-6 md:px-8">
         {listening ? <p className="mx-auto mb-2 max-w-3xl text-xs font-bold text-on-tertiary-fixed-variant">Слухаю запит...</p> : null}
-        <div className="mx-auto flex h-14 max-w-3xl items-center rounded-2xl border border-outline-variant/50 bg-surface-container-lowest shadow-sm focus-within:border-primary-container">
+        <div className="mx-auto flex h-14 max-w-3xl items-center rounded-2xl bg-surface-container-lowest shadow-sm">
           <input
             className="h-full min-w-0 flex-1 border-0 bg-transparent px-4 text-sm outline-none placeholder:text-outline disabled:cursor-not-allowed"
             disabled={isBusy}

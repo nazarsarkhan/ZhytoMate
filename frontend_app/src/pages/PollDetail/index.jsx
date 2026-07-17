@@ -120,7 +120,7 @@ export default function PollDetailPage() {
             <form className="space-y-stack-gap">
               {poll.options.map((option) => (
                 <label key={option.id} className="flex cursor-pointer items-start rounded-xl border border-outline-variant/50 bg-surface-container-lowest p-4 transition has-[:checked]:border-secondary-container has-[:checked]:bg-secondary-container/10">
-                  <input className="mt-1 h-5 w-5 text-secondary-container focus:ring-secondary-container" checked={selectedOptionId === option.id} name="voting_option" type="radio" onChange={() => setSelectedOptionId(option.id)} />
+                  <input className="mt-1 h-5 w-5 text-primary" checked={selectedOptionId === option.id} name="voting_option" type="radio" onChange={() => setSelectedOptionId(option.id)} />
                   <span className="ml-3 block font-bold text-on-surface">{option.label}</span>
                 </label>
               ))}
