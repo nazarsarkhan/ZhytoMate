@@ -31,7 +31,11 @@ from app.components.repository import KnowledgeRepository
 from app.config import Settings
 from app.domain.app_capabilities import match_app_capabilities
 from app.domain.civic_intent import classify_civic_intent
-from app.domain.civic_verification import is_civic_information_query, is_trusted_civic_source
+from app.domain.civic_verification import (
+    is_civic_information_query,
+    is_trusted_civic_source,
+    trusted_civic_fallback_answer,
+)
 from app.domain.classifier import QueryRoute, classify_query
 from app.domain.districts import canonicalize_district
 from app.errors import RateLimitedError
@@ -40,7 +44,7 @@ from app.pipeline.agent import AgentRAGPipeline
 from app.pipeline.base import RagContext, RAGPipeline
 from app.pipeline.simple import SimpleRAGPipeline
 from app.protocols import Generator
-from app.schemas.query import QueryRequest, QueryResponse
+from app.schemas.query import QueryRequest, QueryResponse, SourceUsed
 
 logger = structlog.get_logger(__name__)
 
@@ -176,6 +180,34 @@ class RagService:
         if cached is not None:
             logger.info("query_cache_hit", user=user_hash, route=route.value)
             return cached.model_copy(update={"route": route})
+
+        civic_fallback = trusted_civic_fallback_answer(request.user_query)
+        if civic_fallback is not None:
+            answer, source = civic_fallback
+            response = QueryResponse(
+                answer=answer,
+                sources_used=[
+                    SourceUsed(
+                        source=source,
+                        doc_type="manual-curated",
+                        district=None,
+                        similarity=1.0,
+                    )
+                ],
+                confidence=1.0,
+                route=route,
+                grounded=True,
+                verified=True,
+                answer_status="grounded",
+                app_links=match_app_capabilities(request.user_query),
+            )
+            self._cache.put(
+                request.user_query,
+                district_slug,
+                response,
+                self._settings.knowledge_base_version,
+            )
+            return response
 
         # 5. Run the selected pipeline — embedding, retrieval, and the shared confidence-gate ->
         #    generate -> extractive-fallback tail all live behind this call.

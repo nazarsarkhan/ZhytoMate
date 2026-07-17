@@ -1,12 +1,15 @@
+import pytest
+
 from app.domain.civic_verification import (
+    extract_trusted_civic_answer,
     extract_trusted_civic_title_answer,
     is_civic_information_query,
     is_civic_title_query,
     is_no_information_answer,
+    is_trusted_civic_source,
+    is_trusted_title_source,
     normalize_civic_information_query,
     normalize_civic_title_query,
-    is_trusted_title_source,
-    is_trusted_civic_source,
     verify_civic_context,
 )
 
@@ -151,6 +154,111 @@ def test_normalizes_russian_current_mayor_question_to_stable_title_anchor() -> N
     assert normalize_civic_title_query("Кто сейчас мэр Житомира?") == "Хто мер Житомира?"
 
 
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        ("де зареєструвати ФОП?", "Де зареєструвати ФОП у Житомирі?"),
+        ("как оплатить коммуналку?", "Як оплатити комунальні послуги в Житомирі?"),
+        ("дай адрес мэрии", "Контакти Житомирської міської ради адреса телефони"),
+        ("хто виконує обов'язки мера?", "Хто виконує обов'язки міського голови Житомира?"),
+    ],
+)
+def test_normalizes_high_value_short_civic_questions(question: str, expected: str) -> None:
+    assert is_civic_information_query(question) is True
+    assert normalize_civic_information_query(normalize_civic_title_query(question)) == expected
+
+
+@pytest.mark.parametrize(
+    ("question", "required"),
+    [
+        ("де зареєструвати ФОП?", "вул. Бориса Лятошинського, 15-Б"),
+        ("дай адрес мэрии", "майдан ім. С. П. Корольова, 4/2"),
+        ("скажи номер телефона мэрии", "48-11-87"),
+        ("как оплатить коммуналку?", "кабінет постачальника"),
+        ("хто виконує обов'язки мера?", "Галина Степанівна Шиманська"),
+    ],
+)
+def test_extracts_high_value_curated_civic_facts(question: str, required: str) -> None:
+    answer = extract_trusted_civic_answer(
+        question,
+        [
+            (
+                "Контакти Житомирської міської ради: телефон (0412) 48-12-32.",
+                "https://zt-rada.gov.ua/?departments=86",
+            ),
+            (
+                "Частину цифрових послуг можна також отримати без відвідування ЦНАП через "
+                "застосунок «Дія». Загальні контакти: майдан ім. С. П. Корольова, 4/2; "
+                "телефон (0412) 48-11-87.",
+                "manual-curated",
+            ),
+            (
+                "Міська рада Житомира: адреса майдан ім. С. П. Корольова, 4/2; "
+                "телефон (0412) 48-11-87.",
+                "manual-curated",
+            ),
+            (
+                "Де зареєструвати ФОП у Житомирі: вул. Бориса Лятошинського, 15-Б; "
+                "телефон (0412) 42-01-82; кабінет постачальника або банківський застосунок.",
+                "manual-curated",
+            ),
+            (
+                "Як оплатити комунальні послуги: через кабінет постачальника, банківський "
+                "застосунок або платіжний сервіс за реквізитами з рахунку.",
+                "manual-curated",
+            ),
+            (
+                "Мер Житомира наразі офіційно не обраний. Обов'язки міського голови виконує "
+                "секретар міської ради Галина Степанівна Шиманська.",
+                "manual-curated",
+            ),
+        ],
+    )
+    assert answer is not None
+    assert required in answer
+
+
+def test_city_contact_extraction_prefers_the_dedicated_fact_over_cnap_tail() -> None:
+    answer = extract_trusted_civic_answer(
+        "дай адрес мэрии",
+        [
+            (
+                "Частину цифрових послуг можна також отримати без відвідування ЦНАП через "
+                "застосунок «Дія». Загальні контакти: майдан ім. С. П. Корольова, 4/2; "
+                "телефон (0412) 48-11-87.",
+                "manual-curated",
+            ),
+            (
+                "Контакти Житомирської міської ради: адреса — майдан ім. С. П. Корольова, 4/2. "
+                "Телефон: (0412) 48-11-87.",
+                "manual-curated",
+            ),
+        ],
+    )
+    assert answer is not None
+    assert "Частину цифрових послуг" not in answer
+
+
+def test_fop_extraction_prefers_curated_fact_over_short_official_chunk() -> None:
+    answer = extract_trusted_civic_answer(
+        "де зареєструвати ФОП?",
+        [
+            (
+                "1 Місцезнаходження Відділ державної реєстрації ФОП Адреса: "
+                "вул. Бориса Лятошинського, 15-Б.",
+                "https://zt-rada.gov.ua/?pages=12521",
+            ),
+            (
+                "Де зареєструвати ФОП у Житомирі: вул. Бориса Лятошинського, 15-Б; "
+                "телефон (0412) 42-01-82; онлайн через «е-Підприємець» у «Дії».",
+                "manual-curated",
+            ),
+        ],
+    )
+    assert answer is not None
+    assert "42-01-82" in answer
+
+
 def test_title_sources_are_limited_to_official_or_curated_facts() -> None:
     assert is_trusted_title_source("manual-curated")
     assert is_trusted_title_source("https://zt-rada.gov.ua/page")
@@ -175,8 +283,9 @@ def test_normalizes_numbered_transport_query_to_route_anchor() -> None:
 
 def test_recognizes_and_normalizes_city_council_queries() -> None:
     assert is_civic_information_query("Де міська рада Житомира?") is True
-    assert normalize_civic_information_query("где находится горсовет Житомира") == (
-        "Контакти"
+    assert (
+        normalize_civic_information_query("где находится горсовет Житомира")
+        == "Контакти"
     )
 
 

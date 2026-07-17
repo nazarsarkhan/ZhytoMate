@@ -24,12 +24,14 @@ import time
 
 from app.domain.civic_verification import (
     TITLE_NOT_SUPPORTED_ANSWER,
-    extract_trusted_civic_title_answer,
+    extract_trusted_civic_answer,
     is_civic_information_query,
     normalize_civic_information_query,
     normalize_civic_title_query,
     verify_civic_context,
 )
+from app.metrics import classification_cache_hits_total, classification_cache_lookups_total
+from app.domain.language import is_ukrainian
 from app.pipeline.base import (
     RETRIEVE_LIMIT,
     RagContext,
@@ -38,7 +40,6 @@ from app.pipeline.base import (
     check_query_safety_and_translate,
     run_shared_tail,
 )
-from app.metrics import classification_cache_hits_total, classification_cache_lookups_total
 from app.protocols import Embedder, Generator, Retriever
 
 
@@ -107,14 +108,12 @@ class SimpleRAGPipeline(RAGPipeline):
         # classifier may paraphrase even Ukrainian input (especially short questions such as
         # "Які телефони ЦНАП?"), which can erase the service anchor before lexical retrieval sees
         # it. Non-civic foreign-language input still uses the classifier's translated query.
-        if is_civic_information_query(ctx.user_query):
+        if is_ukrainian(ctx.user_query) and is_civic_information_query(ctx.user_query):
             retrieval_query = normalize_civic_information_query(
                 normalize_civic_title_query(ctx.user_query)
             )
         else:
-            retrieval_query = normalize_civic_information_query(
-                normalize_civic_title_query(retrieval_query)
-            )
+            retrieval_query = normalize_civic_title_query(retrieval_query)
         query_vec = await self._embedder.encode_query(retrieval_query)
         outcome = await self._retriever.retrieve(
             retrieval_query, query_vec, ctx.district_slug, k=RETRIEVE_LIMIT, category=ctx.category
@@ -148,8 +147,9 @@ class SimpleRAGPipeline(RAGPipeline):
             answer_lang=answer_lang,
             force_ungrounded=conversational and not is_civic_information_query(ctx.user_query),
             strong_lexical_match=strong_lexical_match,
-            deterministic_answer=extract_trusted_civic_title_answer(
-                ctx.user_query, [(item.text, item.source) for item in outcome.fused]
+            deterministic_answer=extract_trusted_civic_answer(
+                normalize_civic_information_query(ctx.user_query),
+                [(item.text, item.source) for item in outcome.fused],
             ),
         )
         return result.model_copy(update={"action_intent": action_intent})

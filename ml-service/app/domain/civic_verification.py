@@ -35,6 +35,38 @@ _TITLE_QUERY_RE = re.compile(
     re.IGNORECASE,
 )
 _TITLE_VARIANT_RE = re.compile(r"\b(?:мерчик|мэрчик|мерито|мэрито)\b", re.IGNORECASE)
+_ACTING_QUERY_RE = re.compile(
+    r"\b(?:виконує\s+обов['’]?язки|виконує\s+обовязки|і\.?\s*о\.?\s*мера|"
+    r"исполняет\s+обязанности|кто\s+исполняет)\b",
+    re.IGNORECASE,
+)
+UTILITY_PAYMENT_SOURCE = "https://zt-rada.gov.ua/?items=56"
+UTILITY_PAYMENT_ANSWER = (
+    "Як оплатити комунальні послуги у Житомирі: спосіб залежить від постачальника. "
+    "Скористайтеся особистим кабінетом відповідного постачальника, банківським застосунком "
+    "або касою/платіжним сервісом за реквізитами з актуальної квитанції. Перевірте назву "
+    "постачальника, особовий рахунок і реквізити перед оплатою. Перелік міських "
+    "житлово-комунальних сервісів: https://zt-rada.gov.ua/?items=56. "
+    "Для консультації: міська довідкова служба 15-80 або гаряча лінія (0412) 481-481."
+)
+_FOP_QUERY_RE = re.compile(
+    r"\b(?:фоп|фізичн\w*[- ]підприєм\w*|физическ\w*[- ]предпринимател\w*|"
+    r"підприємець|предпринимател\w*|відкрити\s+бізнес|открыть\s+бизнес)\b",
+    re.IGNORECASE,
+)
+_UTILITY_PAYMENT_QUERY_RE = re.compile(
+    r"\b(?:комунал\w*|коммунал\w*|квартплат\w*|рахунк\w*|квитанц\w*)\b.*"
+    r"\b(?:оплат\w*|заплат\w*|плат\w*)\b|\b(?:оплат\w*|заплат\w*|плат\w*)\b.*"
+    r"\b(?:комунал\w*|коммунал\w*|квартплат\w*|рахунк\w*|квитанц\w*)\b",
+    re.IGNORECASE,
+)
+_CITY_CONTACT_QUERY_RE = re.compile(
+    r"\b(?:мері\w*|мэр\w*|горсовет\w*|міськ\w*\s+рад\w*|міської\s+ради|"
+    r"городск\w*\s+администрац\w*)\b.*"
+    r"\b(?:адрес\w*|телефон\w*|номер\w*|контакт\w*)\b|\b(?:адрес\w*|телефон\w*|"
+    r"номер\w*|контакт\w*)\b.*\b(?:мері\w*|мэр\w*|горсовет\w*|міськ\w*\s+рад\w*)\b",
+    re.IGNORECASE,
+)
 _CIVIC_INFORMATION_RE = re.compile(
     r"\b(?:паспорт\w*|суд\w*|цнап\w*|прозор\w*|вод\w*|кафе\w*|"
     r"ресторан\w*|їст\w*|по[їі]ст\w*|поест\w*|есть|аптек\w*|лікар\w*|лікарн\w*|"
@@ -90,7 +122,11 @@ _NO_INFO_ANSWER_PATTERNS = (
 
 def is_civic_title_query(question: str) -> bool:
     """Return whether a query asks for a civic office-holder/title fact."""
-    return bool(_TITLE_QUERY_RE.search(question) or _TITLE_VARIANT_RE.search(question))
+    return bool(
+        _TITLE_QUERY_RE.search(question)
+        or _TITLE_VARIANT_RE.search(question)
+        or _ACTING_QUERY_RE.search(question)
+    )
 
 
 def is_trusted_title_source(source: str) -> bool:
@@ -115,16 +151,29 @@ def is_civic_information_query(question: str) -> bool:
     """Recognize factual city-service questions before an LLM small-talk classifier can suppress
     retrieval. This is deliberately a narrow topic allowlist, not a general language classifier.
     """
-    return (
+    return bool(
         is_civic_title_query(question)
-        or bool(_CIVIC_INFORMATION_RE.search(question))
+        or _CIVIC_INFORMATION_RE.search(question)
         or is_glossary_civic_question(question)
+        or _FOP_QUERY_RE.search(question)
+        or _UTILITY_PAYMENT_QUERY_RE.search(question)
+        or _CITY_CONTACT_QUERY_RE.search(question)
     )
 
 
 def normalize_civic_information_query(question: str) -> str:
     """Canonicalize short city-service questions for stable hybrid retrieval."""
     lowered = question.lower()
+    if lowered.strip() == "цнап":
+        return "ЦНАП"
+    if _ACTING_QUERY_RE.search(lowered):
+        return "Хто виконує обов'язки міського голови Житомира?"
+    if _FOP_QUERY_RE.search(lowered):
+        return "Де зареєструвати ФОП у Житомирі?"
+    if _UTILITY_PAYMENT_QUERY_RE.search(lowered):
+        return "Як оплатити комунальні послуги в Житомирі?"
+    if _CITY_CONTACT_QUERY_RE.search(lowered):
+        return "Контакти Житомирської міської ради адреса телефони"
     route_match = re.search(
         r"\b(?:маршрут\w*|маршрутка\w*|тролейбус\w*|автобус\w*)[^0-9]{0,40}(\d+[а-яa-z]?)\b",
         lowered,
@@ -160,7 +209,7 @@ def normalize_civic_information_query(question: str) -> str:
         r"\b(?:карт\w*|де|знайт\w*|подив\w*|розташован\w*)\b", lowered
     ):
         return "Інтерактивна карта укриттів"
-    if re.search(r"\b(?:садоч\w*|садк\w*|дошкільн\w*|школ\w*)\b", lowered) and re.search(
+    if re.search(r"\b(?:садоч\w*|садк\w*|садок\w*|дошкільн\w*|школ\w*)\b", lowered) and re.search(
         r"\b(?:реєстр\w*|зареєстр\w*|запис\w*|електрон\w*|оформ\w*)\b", lowered
     ):
         return "Електронна реєстрація в заклади дошкільної та загальної середньої освіти"
@@ -199,22 +248,30 @@ def normalize_civic_information_query(question: str) -> str:
     return question
 
 
+def trusted_civic_fallback_answer(question: str) -> tuple[str, str] | None:
+    """Return a curated answer when a multilingual typo misses lexical retrieval."""
+    if _UTILITY_PAYMENT_QUERY_RE.search(question):
+        return UTILITY_PAYMENT_ANSWER, UTILITY_PAYMENT_SOURCE
+    return None
+
+
 def normalize_civic_title_query(question: str) -> str:
     """Canonicalize colloquial/typo title forms before retrieval and translation."""
     had_colloquial_variant = bool(_TITLE_VARIANT_RE.search(question))
     normalized = _TITLE_VARIANT_RE.sub("мер", question)
     if had_colloquial_variant and not re.search(r"житомир", normalized, re.IGNORECASE):
         return "Хто мер?" if re.search(r"\bхто\b", normalized, re.IGNORECASE) else "Кто мер?"
-    if _TITLE_QUERY_RE.search(normalized):
+    if _TITLE_QUERY_RE.search(normalized) and re.search(
+        r"\b(?:кто|мэр|мэром|мэрчик)\b", normalized, re.IGNORECASE
+    ) and not re.search(
+        r"\b(?:глава\s+города|голова\s+міста|голова\s+міста|руководит|очолює|керує)\b",
+        normalized,
+        re.IGNORECASE,
+    ):
         # Keep all direct mayor variants (including Russian "кто сейчас мэр") on one stable
         # retrieval anchor. This prevents language/word-order variants from missing the curated
         # official fact and falling through to an ungrounded answer.
-        if re.search(r"\b(?:кто|мэр|мэром|мэрчик)\b", normalized, re.IGNORECASE) and not re.search(
-            r"\b(?:глава\s+города|голова\s+міста|голова\s+міста|руководит|очолює|керує)\b",
-            normalized,
-            re.IGNORECASE,
-        ):
-            return "Хто мер Житомира?"
+        return "Хто мер Житомира?"
     if re.search(
         r"\b(?:глава\s+города|кто\s+руководит|керує\s+містом|очолює\s+місто|"
         r"голова\s+міста|голови\s+міста|глава\s+міста)\b",
@@ -290,3 +347,64 @@ def extract_trusted_civic_title_answer(
     # selecting an older direct-name statement from a neighbouring chunk.
     candidates.sort(key=lambda sentence: 0 if _TITLE_STATUS_RE.search(sentence) else 1)
     return f"За підтвердженою інформацією: {candidates[0]}."
+
+
+def extract_trusted_civic_answer(
+    question: str, context: list[tuple[str, str]]
+) -> str | None:
+    """Return an exact curated answer for high-value civic facts.
+
+    Addresses, phone numbers, payment routes, and office-holder names must not be paraphrased
+    from a mixed retrieval tail. This helper selects a trusted curated chunk by intent and returns
+    it verbatim; ordinary civic questions continue through the normal LLM path.
+    """
+    if not any(is_trusted_civic_source(question, source) for _, source in context):
+        return None
+
+    if is_civic_title_query(question) and not _ACTING_QUERY_RE.search(question):
+        return extract_trusted_civic_title_answer(question, context)
+
+    markers: tuple[str, ...]
+    if _ACTING_QUERY_RE.search(question):
+        markers = ("обов'язки міського голови", "обов’язки міського голови", "Шиманська")
+    elif _FOP_QUERY_RE.search(question):
+        markers = ("ФОП", "підприємця", "Лятошинського")
+    elif _UTILITY_PAYMENT_QUERY_RE.search(question):
+        markers = ("оплатити комунальні", "кабінет постачальника", "банківський застосунок")
+    elif _CITY_CONTACT_QUERY_RE.search(question):
+        if re.search(r"\b(?:адрес\w*)\b", question, re.IGNORECASE):
+            markers = ("адрес", "Корольова")
+        elif re.search(r"\b(?:телефон\w*|номер\w*)\b", question, re.IGNORECASE):
+            markers = ("48-11-87",)
+        else:
+            markers = ("Корольова", "48-11-87")
+    else:
+        return None
+
+    trusted_context = sorted(
+        context,
+        key=lambda item: 0 if item[1].strip().casefold() == "manual-curated" else 1,
+    )
+    require_all_markers = _CITY_CONTACT_QUERY_RE.search(question) is not None
+    candidates = [
+        (text, source)
+        for text, source in trusted_context
+        if is_trusted_civic_source(question, source)
+        and (
+            all(marker.casefold() in text.casefold() for marker in markers)
+            if require_all_markers
+            else any(marker.casefold() in text.casefold() for marker in markers)
+        )
+    ]
+    candidates.sort(
+        key=lambda item: (
+            0 if item[1].strip().casefold() == "manual-curated" else 1,
+            0
+            if "контакти житомирської міської ради" in item[0].casefold()
+            else 1,
+            len(item[0]),
+        )
+    )
+    for text, _source in candidates:
+        return f"За підтвердженою інформацією: {text.strip()}"
+    return None
