@@ -6,7 +6,7 @@ const CATEGORY_RULES = [
   ['education', new Set(['school', 'college', 'university', 'kindergarten'])],
   ['government', new Set(['townhall', 'courthouse', 'police', 'fire_station', 'government', 'embassy'])],
   ['culture', new Set(['theatre', 'cinema', 'museum', 'library', 'arts_centre', 'community_centre', 'monument'])],
-  ['transport', new Set(['bus_station', 'platform', 'station', 'stop_position', 'tram_stop', 'taxi'])],
+  ['transport', new Set(['bus_station', 'bus_stop', 'platform', 'station', 'stop_position', 'tram_stop', 'taxi'])],
 ];
 
 function firstTag(tags, keys) {

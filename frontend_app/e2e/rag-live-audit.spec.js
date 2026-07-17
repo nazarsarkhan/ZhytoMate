@@ -37,6 +37,10 @@ const queries = [
   { kind: 'live', query: 'Яка погода сьогодні в Житомирі?' },
 ];
 
+const auditStart = Math.max(0, Number(process.env.RAG_AUDIT_START) || 0);
+const auditLimit = Math.max(1, Number(process.env.RAG_AUDIT_LIMIT) || queries.length);
+const auditQueries = queries.slice(auditStart, auditStart + auditLimit);
+
 test.setTimeout(15 * 60 * 1000);
 
 function escapeRegex(value) {
@@ -61,17 +65,25 @@ test('live RAG understands app capabilities and civic queries through the UI', a
   await page.waitForURL('**/assistant', { timeout: 30_000 });
 
   const input = page.getByRole('textbox', { name: 'Запитай асистента...' });
-  for (const [index, item] of queries.entries()) {
+  for (const [index, item] of auditQueries.entries()) {
     const started = Date.now();
     let response;
     let body;
     let error = '';
     try {
       const responsePromise = page.waitForResponse(
-        (candidate) => candidate.url().includes('/api/assistant/query') && candidate.request().method() === 'POST',
+        (candidate) => {
+          if (!candidate.url().includes('/api/assistant/query') || candidate.request().method() !== 'POST') return false;
+          try {
+            return candidate.request().postDataJSON()?.userQuery === item.query;
+          } catch {
+            return false;
+          }
+        },
         { timeout: 45_000 },
       );
       await input.fill(item.query);
+      await expect(input).toHaveValue(item.query);
       await page.getByRole('button', { name: /Запитати AI/ }).last().click();
       response = await responsePromise;
       body = await response.json();
@@ -110,7 +122,7 @@ test('live RAG understands app capabilities and civic queries through the UI', a
     body: JSON.stringify(rows, null, 2),
     contentType: 'application/json',
   });
-  console.log(`RAG_AUDIT_SUMMARY ${JSON.stringify({ total: rows.length, failures: rows.filter((row) => row.status === 'FAIL').length, pageErrors })}`);
+  console.log(`RAG_AUDIT_SUMMARY ${JSON.stringify({ start: auditStart, total: rows.length, failures: rows.filter((row) => row.status === 'FAIL').length, pageErrors })}`);
   expect(pageErrors).toEqual([]);
   expect(rows.filter((row) => row.status === 'FAIL')).toEqual([]);
 });

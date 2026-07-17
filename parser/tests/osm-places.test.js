@@ -36,6 +36,18 @@ test('maps common city catalog subtypes into user-facing categories', () => {
   assert.deepEqual(places.map((place) => place.category), ['shopping', 'services', 'transport']);
 });
 
+test('classifies highway bus stops as transport places', () => {
+  const place = normalizeOsmElement({
+    type: 'node',
+    id: 23,
+    lat: 50.2,
+    lon: 28.6,
+    tags: { highway: 'bus_stop', name: 'Зупинка Центральна' },
+  });
+
+  assert.equal(place.category, 'transport');
+});
+
 test('uses center coordinates for ways and deduplicates unnamed/duplicate elements', () => {
   const places = normalizeOsmElements([
     { type: 'way', id: 7, center: { lat: 50.2, lon: 28.6 }, tags: { shop: 'supermarket', name: 'Market' } },

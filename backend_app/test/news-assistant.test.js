@@ -5,6 +5,8 @@ import { detectLatestNewsQuery, formatLatestNewsAnswer } from '../src/features/n
 test('detects latest-news questions', () => {
   assert.equal(detectLatestNewsQuery('Останні новини'), true);
   assert.equal(detectLatestNewsQuery('Последние новости Житомира'), true);
+  assert.equal(detectLatestNewsQuery('новости Житомир инфо'), true);
+  assert.equal(detectLatestNewsQuery('покажи свежие новости'), true);
   assert.equal(detectLatestNewsQuery('Де ЦНАП?'), false);
 });
 

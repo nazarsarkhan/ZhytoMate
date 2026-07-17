@@ -1,4 +1,5 @@
 from app.domain.civic_verification import (
+    extract_trusted_civic_title_answer,
     is_civic_information_query,
     is_civic_title_query,
     is_no_information_answer,
@@ -81,6 +82,30 @@ def test_accepts_explicit_unfilled_mayor_status_and_acting_official() -> None:
     assert result.blocked is False
 
 
+def test_extracts_title_answer_from_trusted_context_without_llm_paraphrase() -> None:
+    answer = extract_trusted_civic_title_answer(
+        "мерчик Житомира",
+        [
+            (
+                "Мер (міський голова) Житомира наразі офіційно не обраний. "
+                "Обов'язки міського голови виконує секретар міської ради Галина Шиманська.",
+                "manual-curated",
+            )
+        ],
+    )
+
+    assert answer == (
+        "За підтвердженою інформацією: Мер (міський голова) Житомира наразі офіційно не обраний."
+    )
+
+
+def test_does_not_extract_title_answer_from_untrusted_context() -> None:
+    assert extract_trusted_civic_title_answer(
+        "Хто мер Житомира?",
+        [("Міський голова Житомира — Ім'я Прізвище", "https://example.com")],
+    ) is None
+
+
 def test_rejects_title_question_without_explicit_title_evidence() -> None:
     result = verify_civic_context(
         "Хто мер Житомира?",
@@ -112,6 +137,10 @@ def test_normalizes_colloquial_and_typo_title_forms_for_retrieval() -> None:
     assert normalize_civic_title_query("Кто мэрито?") == "Кто мер?"
     assert normalize_civic_title_query("кто глава города Житомир") == "Хто мер Житомира?"
     assert normalize_civic_title_query("Хто голова міста Житомир?") == "Хто мер Житомира?"
+
+
+def test_normalizes_russian_current_mayor_question_to_stable_title_anchor() -> None:
+    assert normalize_civic_title_query("Кто сейчас мэр Житомира?") == "Хто мер Житомира?"
 
 
 def test_title_sources_are_limited_to_official_or_curated_facts() -> None:
