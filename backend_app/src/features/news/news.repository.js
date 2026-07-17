@@ -15,21 +15,45 @@ export function upsertNewsByExternalId(fields) {
   );
 }
 
-export function findNews({ category, source, skip = 0, limit }) {
-  const filter = { ...(category ? { category } : {}), ...(source ? { source } : {}) };
-  return News.find(filter)
-    .sort({ publishedAt: -1, createdAt: -1 })
-    .skip(skip)
-    .limit(limit);
+function buildNewsFilter({ category, source, isAnnouncement }) {
+  return {
+    ...(category ? { category } : {}),
+    ...(source ? { source } : {}),
+    ...(typeof isAnnouncement === "boolean" ? { isAnnouncement } : {}),
+  };
 }
 
-export function countNews({ category, source }) {
-  const filter = { ...(category ? { category } : {}), ...(source ? { source } : {}) };
-  return News.countDocuments(filter);
+export function findNews({ category, source, isAnnouncement, skip = 0, limit }) {
+  const query = News.find(buildNewsFilter({ category, source, isAnnouncement })).sort({
+    publishedAt: -1,
+    createdAt: -1,
+  });
+
+  if (skip > 0) {
+    query.skip(skip);
+  }
+
+  if (typeof limit === "number") {
+    query.limit(limit);
+  }
+
+  return query;
+}
+
+export function countNews({ category, source, isAnnouncement }) {
+  return News.countDocuments(buildNewsFilter({ category, source, isAnnouncement }));
 }
 
 export function findNewsById(id) {
   return News.findById(id);
+}
+
+export function updateNewsById(id, updates) {
+  return News.findByIdAndUpdate(id, { $set: updates }, { new: true });
+}
+
+export function deleteNewsById(id) {
+  return News.findByIdAndDelete(id);
 }
 
 function getParserNewsCollection() {
@@ -57,6 +81,8 @@ export default {
   findNews,
   countNews,
   findNewsById,
+  updateNewsById,
+  deleteNewsById,
   findParserNews,
   findParserNewsById,
 };

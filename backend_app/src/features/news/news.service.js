@@ -1,13 +1,19 @@
 import { ApiError } from "../../shared/ApiError.js";
 import {
+  deleteNewsById,
   findNews,
   findNewsById,
   findParserNews,
   findParserNewsById,
   countNews,
+  updateNewsById,
   upsertNewsByExternalId,
 } from "./news.repository.js";
-import { toPublicNews, toPublicParserNews } from "./news.model.js";
+import {
+  NEWS_ADMIN_EDITABLE_FIELDS,
+  toPublicNews,
+  toPublicParserNews,
+} from "./news.model.js";
 
 // The parser (parser/core/news/news-mapper.js) emits snake_case; the model is camelCase. This is
 // the single place that bridges the two shapes on ingest.
@@ -46,11 +52,11 @@ export async function listNews({ category, source, limit }) {
   return items.map(toPublicNews);
 }
 
-export async function listNewsPage({ category, source, page, limit }) {
+export async function listNewsPage({ category, source, isAnnouncement, page, limit }) {
   const skip = (page - 1) * limit;
   const [items, total] = await Promise.all([
-    findNews({ category, source, skip, limit }),
-    countNews({ category, source }),
+    findNews({ category, source, isAnnouncement, skip, limit }),
+    countNews({ category, source, isAnnouncement }),
   ]);
   const news = items.map(toPublicNews);
 
@@ -79,9 +85,43 @@ export async function getNewsById(id) {
   return toPublicParserNews(parserNews);
 }
 
+export async function listAdminNews({ category, source, isAnnouncement }) {
+  const items = await findNews({ category, source, isAnnouncement });
+  return items.map(toPublicNews);
+}
+
+function pickEditableNewsUpdates(updates) {
+  return NEWS_ADMIN_EDITABLE_FIELDS.reduce((acc, field) => {
+    if (Object.prototype.hasOwnProperty.call(updates, field)) {
+      acc[field] = updates[field];
+    }
+    return acc;
+  }, {});
+}
+
+export async function updateNewsEntry({ newsId, updates }) {
+  const editableUpdates = pickEditableNewsUpdates(updates);
+  const news = await updateNewsById(newsId, editableUpdates);
+  if (!news) {
+    throw ApiError.notFound("News not found");
+  }
+  return toPublicNews(news);
+}
+
+export async function deleteNewsEntry(newsId) {
+  const deleted = await deleteNewsById(newsId);
+  if (!deleted) {
+    throw ApiError.notFound("News not found");
+  }
+  return { id: newsId };
+}
+
 export default {
   ingestNewsItem,
   listNews,
   listNewsPage,
   getNewsById,
+  listAdminNews,
+  updateNewsEntry,
+  deleteNewsEntry,
 };
