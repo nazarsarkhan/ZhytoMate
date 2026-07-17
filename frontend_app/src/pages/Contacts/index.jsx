@@ -2,14 +2,15 @@ import Shell from "../../components/layout/Shell.jsx";
 import AppHeader from "../../components/layout/AppHeader.jsx";
 import BottomNav from "../../components/navigation/BottomNav.jsx";
 import Icon from "../../components/ui/Icon.jsx";
-import { emergencyServices, utilityContacts } from "../../consts/serviceData.js";
 import { useContacts } from "../../hooks/useContacts.js";
+import { usePublicSettings } from "../../hooks/usePublicSettings.js";
 
 export default function ContactsPage() {
   const { data } = useContacts();
-  // Fall back to the bundled static list while loading or if the API returns nothing.
-  const emergency = data?.emergency?.length ? data.emergency : emergencyServices;
-  const groups = data?.groups?.length ? data.groups : utilityContacts;
+  const settings = usePublicSettings();
+  const emergency = Array.isArray(data?.emergency) ? data.emergency : [];
+  const groups = Array.isArray(data?.groups) ? data.groups : [];
+  const cityHotline = settings.data?.cityHotline || "";
 
   return (
     <Shell className="bg-background pb-28">
@@ -26,10 +27,10 @@ export default function ContactsPage() {
             </div>
           </div>
           <div className="mt-4 flex items-center justify-between rounded-lg bg-white/20 p-3">
-            <span className="text-2xl font-bold">15-80</span>
-            <a className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-primary active:scale-95" href="tel:1580">
+            <span className="text-2xl font-bold">{cityHotline || "—"}</span>
+            {cityHotline ? <a className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-xs font-bold text-on-primary active:scale-95" href={`tel:${cityHotline.replaceAll(" ", "")}`}>
               <Icon name="call" className="text-lg" /> Телефонувати
-            </a>
+            </a> : null}
           </div>
         </section>
         <div className="space-y-section-margin">
