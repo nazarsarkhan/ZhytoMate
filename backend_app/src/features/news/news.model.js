@@ -16,8 +16,8 @@ const newsImageSchema = new mongoose.Schema(
 
 const newsSchema = new mongoose.Schema(
   {
-    // Dedupe key from the parser (`${item.source}_${item.id}`). Upserted on ingest so re-runs
-    // update in place instead of creating duplicates.
+    // Stable dedupe key from the parser, derived from the source URL. Upserted on ingest so
+    // re-runs update in place instead of creating duplicates.
     externalId: { type: String, required: true, unique: true, trim: true },
     source: { type: String, trim: true },
     sourceUrl: { type: String, trim: true, default: null },

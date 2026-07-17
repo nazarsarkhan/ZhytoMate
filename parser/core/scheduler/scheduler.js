@@ -2,6 +2,8 @@ import cron from 'node-cron';
 import { normalizeItems } from '../pipeline/normalizer.js';
 import { enqueueItems } from '../delivery/sender.js';
 
+const runningPlugins = new Set();
+
 export async function runWebPlugin(plugin, { throwOnError = false } = {}) {
   try {
     console.log(`Running web plugin: ${plugin.id}`);
@@ -47,6 +49,21 @@ export async function runWebPlugin(plugin, { throwOnError = false } = {}) {
  * }
  */
 export function startScheduler(webPlugins) {
+  const runScheduledPlugin = async (plugin) => {
+    if (runningPlugins.has(plugin.id)) {
+      console.warn(`Skipping overlapping web plugin run: ${plugin.id}`);
+      return;
+    }
+
+    runningPlugins.add(plugin.id);
+
+    try {
+      await runWebPlugin(plugin);
+    } finally {
+      runningPlugins.delete(plugin.id);
+    }
+  };
+
   for (const plugin of webPlugins) {
     if (!cron.validate(plugin.schedule)) {
       console.error(`Skipping ${plugin.id}: invalid cron schedule "${plugin.schedule}"`);
@@ -54,10 +71,10 @@ export function startScheduler(webPlugins) {
     }
 
     cron.schedule(plugin.schedule, () => {
-      void runWebPlugin(plugin);
-    });
+      void runScheduledPlugin(plugin);
+    }, { name: `web-${plugin.id}`, noOverlap: true });
 
     // Run once at startup so ingestion begins without waiting for the first tick.
-    void runWebPlugin(plugin);
+    void runScheduledPlugin(plugin);
   }
 }

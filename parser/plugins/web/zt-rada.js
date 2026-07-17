@@ -7,11 +7,11 @@ const CONFIG = {
   enabled: true,
   schedule: "*/30 * * * *",
   useAi: false,
-  backfillDays: 365,
-  maxPages: 1500,
-  maxItems: 2000,
-  attachmentLimitPerPage: 5,
-  documentAttachmentLimitPerPage: 20,
+  backfillDays: 1095,
+  maxPages: 0,
+  maxItems: 0,
+  attachmentLimitPerPage: 0,
+  documentAttachmentLimitPerPage: 0,
   concurrency: 8,
   attachmentConcurrency: 4,
   searchSeedPages: 3,
@@ -157,6 +157,20 @@ const searchSeedTerms = [
 function getNumberEnv(name, fallback) {
   const value = Number(process.env[name]);
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function getLimitEnv(name, fallback) {
+  const value = Number(process.env[name]);
+
+  if (value === 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  if (Number.isFinite(value) && value > 0) {
+    return value;
+  }
+
+  return fallback === 0 ? Number.POSITIVE_INFINITY : fallback;
 }
 
 function getBackfillCutoff() {
@@ -883,6 +897,7 @@ async function parsePage(
         : undefined,
     docType: inferDocType(sourceKind),
     sourceKind,
+    ttlDays: sourceKind === "news" ? backfillNewsTtlDays : undefined,
     attachments: attachments.map((attachment) => ({
       url: attachment.url,
       title: attachment.title,
@@ -945,13 +960,13 @@ export default {
 
   async fetch({ onItems } = {}) {
     const cutoff = getBackfillCutoff();
-    const maxPages = getNumberEnv("ZT_RADA_MAX_PAGES", CONFIG.maxPages);
-    const maxItems = getNumberEnv("ZT_RADA_MAX_ITEMS", CONFIG.maxItems);
-    const attachmentLimit = getNumberEnv(
+    const maxPages = getLimitEnv("ZT_RADA_MAX_PAGES", CONFIG.maxPages);
+    const maxItems = getLimitEnv("ZT_RADA_MAX_ITEMS", CONFIG.maxItems);
+    const attachmentLimit = getLimitEnv(
       "ZT_RADA_ATTACHMENT_LIMIT_PER_PAGE",
       CONFIG.attachmentLimitPerPage,
     );
-    const documentAttachmentLimit = getNumberEnv(
+    const documentAttachmentLimit = getLimitEnv(
       "ZT_RADA_DOCUMENT_ATTACHMENT_LIMIT_PER_PAGE",
       CONFIG.documentAttachmentLimitPerPage,
     );
@@ -959,6 +974,10 @@ export default {
     const attachmentConcurrency = getNumberEnv(
       "ZT_RADA_ATTACHMENT_CONCURRENCY",
       CONFIG.attachmentConcurrency,
+    );
+    const backfillNewsTtlDays = getNumberEnv(
+      "RAG_BACKFILL_NEWS_TTL_DAYS",
+      120,
     );
     const documentsOnly = process.env.ZT_RADA_DOCUMENTS_ONLY === "true";
     const knowledgeOnly = process.env.ZT_RADA_KNOWLEDGE_ONLY === "true";

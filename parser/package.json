@@ -6,6 +6,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "reset:delivery-state": "node scripts/reset-delivery-state.js",
     "dev": "node --watch index.js",
     "parse:zhytomir-info": "node scripts/parse-zhytomir-info.js",
     "parse:zt-rada": "node scripts/parse-zt-rada.js",

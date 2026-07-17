@@ -41,11 +41,12 @@ backfills the configured Telegram history.
 
 ## Full clean parse
 
-To remove only the old PostgreSQL/pgvector data and start the parser against an empty knowledge
-base, run:
+To remove the old PostgreSQL/pgvector data, reset the parser delivery registry, and start the
+parser against an empty knowledge base, run:
 
 ```bash
 ./deploy/reseed.sh
 ```
 
-MongoDB and `backend_uploads` are preserved. The script does not delete images or source files.
+Application/parser MongoDB data and `backend_uploads` are preserved. The script does not delete
+images or source files.

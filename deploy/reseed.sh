@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# This resets only the PostgreSQL/pgvector volume. MongoDB is external and uploads are preserved.
+# This resets PostgreSQL/pgvector and parser delivery state. App/parser MongoDB data and uploads
+# are preserved.
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 if [[ "${1:-}" != "--yes" ]]; then
@@ -25,6 +26,12 @@ if [[ -z "$postgres_volume" ]]; then
   exit 1
 fi
 docker volume rm "$postgres_volume"
+
+# The RAG database and parser delivery registry are separate deduplication layers. Clear the
+# parser registry before restarting, otherwise it will treat previously scraped URLs as delivered
+# and a fresh PostgreSQL volume will stay mostly empty.
+docker compose build parser
+docker compose run --rm --no-deps parser npm run reset:delivery-state
 
 docker compose up -d --build
 

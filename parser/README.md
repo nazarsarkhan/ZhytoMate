@@ -148,9 +148,8 @@ node --check index.js   # syntax-only check, no execution
 
 ## Notes
 
-- A full re-seed of `ml-service`'s knowledge base requires resetting **both** dedup layers (the
-  RAG's own `knowledge_base` table AND this service's Mongo delivery-state) or the re-run will
-  silently ingest nothing — see the root [`CLAUDE.md`](../CLAUDE.md)'s Demo Runbook for the exact
-  steps.
+- A full re-seed of `ml-service`'s knowledge base requires resetting both dedup layers. The
+  production [`deploy/reseed.sh`](../deploy/reseed.sh) does this by resetting the RAG volume and
+  this service's Mongo delivery-state before starting the parser again.
 - `RAG_SEND_ENABLED`/`NEWS_SEND_ENABLED` default to `false` specifically so this service is safe to
   run and iterate on without accidentally pushing test data into a real knowledge base.
