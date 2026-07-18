@@ -133,14 +133,14 @@ export default function AssistantPage() {
           </div>
         </section>
 
-        <section className="motion-card interactive-card mx-4 rounded-3xl border border-outline-variant/30 bg-surface-container-lowest p-5 shadow-sm sm:mx-6 md:mx-0 md:p-6">
+        <section className="motion-card interactive-card mx-2 flex min-h-[calc(100dvh-7rem)] flex-col rounded-3xl border border-outline-variant/30 bg-surface-container-lowest p-4 shadow-sm sm:mx-6 sm:p-5 md:mx-0 md:min-h-0 md:p-6">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-bold text-on-surface">AI Асистент</h2>
             <Link to="/chat-history" className="flex items-center gap-1 text-xs font-medium text-on-primary-container">
               <Icon name="history" className="text-base" /> Історія чатів
             </Link>
           </div>
-          <div className="mb-6 max-h-64 space-y-3 overflow-y-auto pr-1">
+          <div className="mb-6 min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
             {/* Keyed by role+index, not a stable id - relies on messages staying strictly
                 append-only. An action-card message now carries meaningful local state inside
                 ActionCard (its own isPending/error), so reordering or removing a message would
