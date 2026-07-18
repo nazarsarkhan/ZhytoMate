@@ -30,6 +30,7 @@ from app.domain.civic_verification import (
     normalize_civic_title_query,
     verify_civic_context,
 )
+from app.domain.civic_glossary import glossary_retrieval_query
 from app.metrics import classification_cache_hits_total, classification_cache_lookups_total
 from app.domain.language import is_ukrainian
 from app.pipeline.base import (
@@ -108,7 +109,12 @@ class SimpleRAGPipeline(RAGPipeline):
         # classifier may paraphrase even Ukrainian input (especially short questions such as
         # "Які телефони ЦНАП?"), which can erase the service anchor before lexical retrieval sees
         # it. Non-civic foreign-language input still uses the classifier's translated query.
-        if is_ukrainian(ctx.user_query) and is_civic_information_query(ctx.user_query):
+        glossary_query = glossary_retrieval_query(ctx.user_query)
+        if glossary_query:
+            # Glossary anchors must win for every input language. Otherwise Russian VPO queries
+            # rely on an LLM translation that can lose the local service vocabulary entirely.
+            retrieval_query = glossary_query
+        elif is_ukrainian(ctx.user_query) and is_civic_information_query(ctx.user_query):
             retrieval_query = normalize_civic_information_query(
                 normalize_civic_title_query(ctx.user_query)
             )

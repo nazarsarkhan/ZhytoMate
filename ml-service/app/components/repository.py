@@ -148,7 +148,26 @@ _LEXICAL_STOPWORD_RE = re.compile(
 
 def _lexical_query(query: str) -> str:
     """Remove interrogative filler before PostgreSQL's AND lexical search."""
-    return _LEXICAL_STOPWORD_RE.sub(" ", query).strip()
+    normalized = _LEXICAL_STOPWORD_RE.sub(" ", query)
+    # Keep PostgreSQL's safe AND semantics, but normalize high-confidence civic anchors whose
+    # inflected forms differ between resident questions and official source pages.
+    for pattern, replacement in (
+        (r"\bмаршрут\w*\b", "маршрут"),
+        (r"\bтранспорт\w*\b", "транспорт"),
+        (r"\bсадоч\w*\b|\bсадк\w*\b|\bсадок\w*\b", "садок"),
+        (r"\bквартир\w*\b", "квартирний"),
+    ):
+        normalized = re.sub(pattern, replacement, normalized, flags=re.IGNORECASE)
+    # These three intents are commonly phrased with procedural filler that is absent from the
+    # official directory pages. Keep their canonical anchors so the AND query remains precise.
+    lowered = normalized.lower()
+    if re.search(r"\b(?:садок|школ)\w*\b", lowered):
+        return "садок"
+    if re.search(r"\bквартирний\b", lowered):
+        return "квартирний"
+    if "маршрут" in lowered and "транспорт" in lowered:
+        return "маршрут транспорт"
+    return normalized.strip()
 
 
 def _significant_terms(query: str) -> list[str]:

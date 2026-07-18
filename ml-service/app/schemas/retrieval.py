@@ -36,6 +36,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
+# Dense ranking can place a directly matching civic fact just below the first few fused rows,
+# especially for short Ukrainian queries. Keep the lexical agreement requirement, but allow a
+# small bounded window so an exact AND-tier official match is not discarded by RRF noise.
+_LEXICAL_AGREEMENT_WINDOW = 10
+
+
 @dataclass
 class RetrievalResult:
     """One retrieved chunk (internal transfer)."""
@@ -90,7 +96,7 @@ class RetrievalOutcome:
         absolute minimum count can't tell these two coverage=1 cases apart)."""
         if not self.fused or self.lexical_top1_id is None:
             return False
-        if self.lexical_top1_id not in {result.id for result in self.fused[:3]}:
+        if self.lexical_top1_id not in {result.id for result in self.fused[:_LEXICAL_AGREEMENT_WINDOW]}:
             return False
         top = self.lexical[0]
         return top.lexical_coverage is None or top.lexical_coverage == top.lexical_terms_total

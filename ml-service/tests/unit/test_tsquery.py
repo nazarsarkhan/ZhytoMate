@@ -40,3 +40,13 @@ def test_drops_question_words_so_short_title_queries_match_the_evidence_term() -
 def test_removes_question_words_before_the_and_lexical_query() -> None:
     assert _lexical_query("Хто мер?") == "мер?"
     assert _lexical_query("Кто сейчас мэр?") == "сейчас мэр?"
+
+
+def test_canonicalizes_civic_anchor_inflections_before_search() -> None:
+    assert _lexical_query("Де подивитися маршрути громадського транспорту?") == (
+        "маршрут транспорт"
+    )
+    assert _lexical_query("Як зареєструвати дитину в садочку?") == (
+        "садок"
+    )
+    assert _lexical_query("Де знайти квартирний облік?") == "квартирний"

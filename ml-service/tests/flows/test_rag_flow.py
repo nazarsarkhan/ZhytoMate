@@ -532,6 +532,29 @@ async def test_strong_lexical_match_grounds_a_low_dense_similarity_cnap_style_qu
     assert result.answer == "ЦНАП знаходиться на вул. Ватутіна, 2/1."
 
 
+async def test_russian_vpo_query_uses_glossary_anchor_before_translation() -> None:
+    vpo_query = "Можно ли оформить ВПО в Житомире?"
+    retrieval_query = "Прозорий офіс отримати паспорт внутрішньо переміщеним особам"
+    hit = _hit(
+        2, similarity=0.35,
+        text="У Прозорому офісі мешканці громади можуть отримати соціальні та адміністративні послуги, зокрема отримати паспорт; внутрішньо переміщеним особам надаються послуги підтримки.",
+    )
+    outcome = RetrievalOutcome(dense=[hit], fused=[hit], lexical=[hit])
+    retriever = FakeRetriever({retrieval_query: outcome})
+    generator = FakeGenerator(
+        results=[
+            (_SAFE_JSON, 0),
+            (json.dumps({"lang": "ru", "uk": "Як оформити ВПО?"}), 0),
+            ("Оформити послугу можна у Прозорому офісі. [джерело]", 0),
+        ]
+    )
+
+    result = await _pipeline(retriever, generator).run(_ctx(vpo_query))
+
+    assert result.debug["grounded"] is True
+    assert result.sources_used[0].source == "src"
+
+
 async def test_cnap_grounds_via_a_fully_covered_single_term_or_fallback_hit() -> None:
     """The exact real shape confirmed live against the production DB: "де" is filtered out of
     "Де ЦНАП?" as a < 3-letter word (see components.repository._significant_terms), leaving "цнап"
